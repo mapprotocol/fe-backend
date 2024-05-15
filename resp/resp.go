@@ -1,6 +1,7 @@
 package resp
 
 import (
+	"github.com/mapprotocol/ceffu-fe-backend/utils"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
