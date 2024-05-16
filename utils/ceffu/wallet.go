@@ -3,7 +3,9 @@ package ceffu
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/mapprotocol/ceffu-fe-backend/utils/reqerror"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -30,6 +32,12 @@ type WithdrawalRequest struct {
 	Timestamp          int64  `json:"timestamp"`                    // Current Timestamp in millisecond
 }
 
+type WithdrawalDetailRequest struct {
+	OrderViewID string `json:"orderViewId,omitempty"` // Withdrawal Transaction Id
+	RequestID   string `json:"requestId,omitempty"`   // Client request identifier: Universal Unique identifier provided by the client side.
+	Timestamp   int64  `json:"timestamp"`             // Current Timestamp in millisecond
+}
+
 type CreatePrimeWalletRequestResponse struct {
 	Data struct {
 		WalletId    int64  `json:"walletId"`
@@ -51,6 +59,31 @@ type WithdrawalResponse struct {
 	Data    WithdrawalResponseData `json:"data"`
 	Code    string                 `json:"code"`
 	Message string                 `json:"message"`
+}
+
+type WithdrawalDetailResponse struct {
+	Code    string                        `json:"code"`    // response code, '000000' when successed, others represent there some error occured
+	Data    *WithdrawalDetailResponseData `json:"data"`    // response data, maybe null
+	Message string                        `json:"message"` // detail of response, when code != '000000', it's detail of error
+}
+
+type WithdrawalDetailResponseData struct {
+	OrderViewID  string  `json:"orderViewId"`
+	TxID         string  `json:"txId"` // transaction id (Only Applicable to on-chain transfer)
+	TransferType int64   `json:"transferType"`
+	Direction    int64   `json:"direction"`
+	FromAddress  string  `json:"fromAddress"`
+	ToAddress    string  `json:"toAddress"`
+	Network      string  `json:"network"`
+	CoinSymbol   string  `json:"coinSymbol"`
+	Amount       string  `json:"amount"`
+	FeeSymbol    string  `json:"feeSymbol"`
+	FeeAmount    string  `json:"feeAmount"`
+	Status       int64   `json:"status"`
+	Memo         *string `json:"memo"`
+	TxTime       string  `json:"txTime"`
+	WalletStr    string  `json:"walletStr"`
+	RequestID    *string `json:"requestId"` // universal unique identifier provided by the client side.
 }
 
 func CreatePrimeWallet() {
@@ -94,7 +127,7 @@ func CreatePrimeWallet() {
 // Please use Get Withdrawal History v2 and Get Withdrawal Detail (v2) together with Withdrawal (v2).
 //
 // reference: https://apidoc.ceffu.io/apidoc/shared-c9ece2c6-3ab4-4667-bb7d-c527fb3dbf78/api-3471332
-func Withdrawal(request WithdrawalRequest) (*WithdrawalResponseData, error) {
+func Withdrawal(request *WithdrawalRequest) (*WithdrawalResponseData, error) {
 	// todo padding
 	headers := http.Header{
 		"open-apikey": []string{""},
@@ -110,7 +143,7 @@ func Withdrawal(request WithdrawalRequest) (*WithdrawalResponseData, error) {
 	}
 	body := strings.NewReader(string(data))
 
-	ret, err := uhttp.Get(getURL(PathWithdrawal), headers, body)
+	ret, err := uhttp.Post(getURL(PathWithdrawal), headers, body)
 	if err != nil {
 		return &WithdrawalResponseData{}, err
 	}
@@ -123,4 +156,40 @@ func Withdrawal(request WithdrawalRequest) (*WithdrawalResponseData, error) {
 		return &WithdrawalResponseData{}, fmt.Errorf("code: %s, message: %s", response.Code, response.Message)
 	}
 	return &response.Data, nil
+}
+
+func WithdrawalDetail(orderViewId string) (*WithdrawalDetailResponseData, error) {
+	// todo padding
+	headers := http.Header{
+		"open-apikey": []string{""},
+		"signature":   []string{""},
+	}
+
+	timestamp := time.Now().Unix() * 1000
+	requestID := strconv.FormatInt(timestamp, 10)
+	params := fmt.Sprintf("?orderViewId=%s&requestId=%s&timestamp=%d", orderViewId, requestID, timestamp)
+	url := getURL(PathWithdrawalDetail) + params
+
+	ret, err := uhttp.Get(url, headers, nil)
+	if err != nil {
+		return &WithdrawalDetailResponseData{},
+			reqerror.NewExternalRequestError(
+				url,
+				reqerror.WithMethod(http.MethodGet),
+				reqerror.WithError(err),
+			)
+	}
+	response := WithdrawalDetailResponse{}
+	if err := json.Unmarshal(ret, &response); err != nil {
+		return &WithdrawalDetailResponseData{}, err
+	}
+	if response.Code != SuccessCode {
+		return &WithdrawalDetailResponseData{},
+			reqerror.NewExternalRequestError(
+				getURL(PathWithdrawal),
+				reqerror.WithCode(response.Code),
+				reqerror.WithMessage(response.Message),
+			)
+	}
+	return response.Data, nil
 }

@@ -11,7 +11,7 @@ import (
 )
 
 type CreatSubWalletRequest struct {
-	ParentWalletID int64  `json:"parentWalletId"`           // parent wallet id
+	ParentWalletID string `json:"parentWalletId"`           // parent wallet id
 	WalletName     string `json:"walletName,omitempty"`     // Sub Wallet name (Max 20 characters)
 	AutoCollection int64  `json:"autoCollection,omitempty"` // Enable auto sweeping to parent wallet; ; 0: Not enable (Default Value), Suitable for API user who required Custody to maintain; asset ledger of each subaccount; ; 1: Enable, Suitable for API user who will maintain asset ledger of each subaccount at; their end.
 	RequestID      int64  `json:"requestId"`                // Request identity
@@ -72,18 +72,18 @@ func getURL(path string) string {
 	return fmt.Sprintf("%s%s", Domain, path)
 }
 
-func CreateSubWallet(parentWalletID int64, walletName string) (walletId int64, walletType uint32, err error) {
+func CreateSubWallet(parentWalletID, walletName string) (walletId int64, walletType uint32, err error) {
 	headers := http.Header{
 		"open-apikey":  []string{""},
 		"signature":    []string{""},
 		"Content-Type": []string{"application/json"},
 	}
 	request := CreatSubWalletRequest{
-		AutoCollection: 1,
 		ParentWalletID: parentWalletID,
+		WalletName:     walletName,
+		AutoCollection: 1,
 		RequestID:      time.Now().Unix() * 1000,
 		Timestamp:      time.Now().Unix() * 1000,
-		WalletName:     walletName,
 	}
 	data, err := json.Marshal(request)
 	if err != nil {
@@ -163,7 +163,7 @@ func Transfer(symbol string, amount float64, fromWalletID, toWalletID int64) (*T
 	}
 	body := strings.NewReader(string(data))
 
-	ret, err := uhttp.Get(getURL(PathTransfer), headers, body)
+	ret, err := uhttp.Post(getURL(PathTransfer), headers, body)
 	if err != nil {
 		return &TransferResponseData{}, err
 	}
