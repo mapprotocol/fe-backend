@@ -22,5 +22,5 @@ func SupportedChains(c *gin.Context) {
 		resp.Error(c, code)
 		return
 	}
-	resp.SuccessList(c, page, count, list)
+	resp.SuccessList(c, count, list)
 }

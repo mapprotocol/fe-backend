@@ -8,14 +8,39 @@ import (
 
 const TableNameDepositSwap = "deposit_swap"
 
+const (
+	DepositSwapActionDeposit = iota + 1
+	DepositSwapActionSwap
+)
+
+const (
+	DepositSwapStatusPending = iota + 1
+)
+
 type DepositSwap struct {
-	ID        uint64    `gorm:"column:id;type:bigint(20);primaryKey;autoIncrement:true" json:"id"`
-	CreatedAt time.Time `gorm:"column:created_at;type:datetime" json:"created_at"`
-	UpdatedAt time.Time `gorm:"column:updated_at;type:datetime" json:"updated_at"`
+	ID             uint64    `gorm:"column:id;type:bigint(20);primaryKey;autoIncrement:true" json:"id"`
+	SrcChain       uint64    `gorm:"column:src_chain;type:bigint(20)" json:"src_chain"`
+	SrcToken       string    `gorm:"column:src_token;type:varchar(255)" json:"src_token"`
+	Amount         string    `gorm:"column:amount;type:varchar(255)" json:"amount"`
+	Sender         string    `gorm:"column:sender;type:varchar(255)" json:"sender"`
+	DstChain       uint64    `gorm:"column:dst_chain;type:bigint(20)" json:"dst_chain"`
+	DstToken       string    `gorm:"column:dst_token;type:varchar(255)" json:"dst_token"`
+	Receiver       string    `gorm:"column:receiver;type:varchar(255)" json:"receiver"`
+	DepositAddress string    `gorm:"column:deposit_address;type:varchar(255)" json:"deposit_address"`
+	Mask           uint32    `gorm:"column:mask;type:int(11)" json:"mask"`
+	TxHash         string    `gorm:"column:tx_hash;type:varchar(255)" json:"tx_hash"`
+	Action         uint8     `gorm:"column:action;type:tinyint(4)" json:"action"`
+	Status         uint8     `gorm:"column:status;type:tinyint(4)" json:"status"`
+	CreatedAt      time.Time `gorm:"column:created_at;type:datetime" json:"created_at"`
+	UpdatedAt      time.Time `gorm:"column:updated_at;type:datetime" json:"updated_at"`
 }
 
-func NewDepositSwap() *DepositSwap {
-	return &DepositSwap{}
+func NewDepositSwap(id uint64) *DepositSwap {
+	return &DepositSwap{ID: id}
+}
+
+func NewDepositSwapWithSender(sender string) *DepositSwap {
+	return &DepositSwap{Sender: sender}
 }
 
 func (ds *DepositSwap) TableName() string {

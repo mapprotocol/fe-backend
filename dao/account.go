@@ -10,16 +10,16 @@ const TableNameAccount = "account"
 type Account struct {
 	ID          uint64    `gorm:"column:id;type:bigint(20);primaryKey;autoIncrement:true" json:"id"`
 	SubWalletID int64     `gorm:"column:sub_wallet_id;type:bigint(20)" json:"sub_wallet_id"`
-	Network     string    `gorm:"column:wallet_name;type:varchar(255)" json:"wallet_name"`
+	ChainID     uint64    `gorm:"column:chain_id;type:bigint(20)" json:"chain_id"`
+	ChainName   string    `gorm:"column:chain_name;type:varchar(255)" json:"chain_name"`
 	Address     string    `gorm:"column:address;type:varchar(255)" json:"address"`
 	CreatedAt   time.Time `gorm:"column:created_at;type:datetime" json:"created_at"`
 	UpdatedAt   time.Time `gorm:"column:updated_at;type:datetime" json:"updated_at"`
 }
 
-func NewAccount(subWalletID int64, network string) *Account {
+func NewAccount(chainID uint64) *Account {
 	return &Account{
-		SubWalletID: subWalletID,
-		Network:     network,
+		ChainID: chainID,
 	}
 }
 

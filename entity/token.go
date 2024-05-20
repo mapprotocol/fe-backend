@@ -7,12 +7,18 @@ type SupportedTokensRequest struct {
 	Size    int    `form:"size"`
 }
 
-type DepositAddressRequest struct {
-	ChainID     uint64 `json:"chain_id"`
-	TokenSymbol string `json:"token_symbol"`
+type CreateOrderRequest struct {
+	SrcChain uint64 `json:"src_chain"`
+	SrcToken string `json:"src_token"`
+	Sender   string `json:"sender"`
+	Amount   string `json:"amount"`
+	DstChain uint64 `json:"dst_chain"`
+	DstToken string `json:"dst_token"`
+	Receiver string `json:"receiver"`
 }
 
 // response
+
 type SupportedTokensResponse struct {
 	ChainID  uint64 `json:"chain_id"`
 	Name     string `json:"name"`
@@ -21,6 +27,7 @@ type SupportedTokensResponse struct {
 	Icon     string `json:"icon"`
 }
 
-type DepositAddressResponse struct {
-	Address string `json:"address"`
+type CreateOrderResponse struct {
+	OrderID        uint64 `json:"order_id"`
+	DepositAddress string `json:"deposit_address"`
 }
