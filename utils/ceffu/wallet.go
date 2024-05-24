@@ -128,28 +128,31 @@ func CreatePrimeWallet() {
 //
 // reference: https://apidoc.ceffu.io/apidoc/shared-c9ece2c6-3ab4-4667-bb7d-c527fb3dbf78/api-3471332
 func Withdrawal(request *WithdrawalRequest) (*WithdrawalResponseData, error) {
-	// todo padding
-	headers := http.Header{
-		"open-apikey": []string{""},
-		"signature":   []string{""},
-	}
-
 	request.RequestID = time.Now().Unix() * 1000
-	request.Timestamp = time.Now().Unix() * 1000
+	request.Timestamp = request.RequestID
 
 	data, err := json.Marshal(request)
 	if err != nil {
-		return &WithdrawalResponseData{}, err
+		return nil, err
 	}
-	body := strings.NewReader(string(data))
+	dataStr := string(data)
 
-	ret, err := uhttp.Post(getURL(PathWithdrawal), headers, body)
+	signature, err := Sign(dataStr, "")
 	if err != nil {
-		return &WithdrawalResponseData{}, err
+		return nil, err
+	}
+	headers := http.Header{
+		"open-apikey": []string{""},
+		"signature":   []string{signature},
+	}
+
+	ret, err := uhttp.Post(getURL(PathWithdrawal), headers, strings.NewReader(dataStr))
+	if err != nil {
+		return nil, err
 	}
 	response := WithdrawalResponse{}
 	if err := json.Unmarshal(ret, &response); err != nil {
-		return &WithdrawalResponseData{}, err
+		return nil, err
 	}
 	if response.Code != SuccessCode {
 		// todo encapsulated external error type
@@ -159,30 +162,40 @@ func Withdrawal(request *WithdrawalRequest) (*WithdrawalResponseData, error) {
 }
 
 func WithdrawalDetail(orderViewId string) (*Transaction, error) {
-	// todo padding
+	timestamp := time.Now().Unix() * 1000
+	request := WithdrawalDetailRequest{
+		OrderViewID: orderViewId,
+		RequestID:   strconv.FormatInt(timestamp, 10),
+		Timestamp:   timestamp,
+	}
+	params, err := uhttp.URLEncode(request)
+	if err != nil {
+		return nil, err
+	}
+	url := getURLWithParams(PathWithdrawalDetail, params)
+
+	signature, err := Sign(params, "")
+	if err != nil {
+		return nil, err
+	}
 	headers := http.Header{
 		"open-apikey": []string{""},
-		"signature":   []string{""},
+		"signature":   []string{signature},
 	}
-
-	timestamp := time.Now().Unix() * 1000
-	requestID := strconv.FormatInt(timestamp, 10)
-	params := fmt.Sprintf("?orderViewId=%s&requestId=%s&timestamp=%d", orderViewId, requestID, timestamp)
-	url := getURL(PathWithdrawalDetail) + params
 
 	ret, err := uhttp.Get(url, headers, nil)
 	if err != nil {
-		return &Transaction{}, reqerror.NewExternalRequestError(
+		return nil, reqerror.NewExternalRequestError(
 			url,
 			reqerror.WithError(err),
 		)
 	}
 	response := WithdrawalDetailResponse{}
 	if err := json.Unmarshal(ret, &response); err != nil {
-		return &Transaction{}, err
+		return nil, err
 	}
 	if response.Code != SuccessCode {
-		return &Transaction{}, reqerror.NewExternalRequestError(
+		return nil, reqerror.NewExternalRequestError(
 			url,
 			reqerror.WithCode(response.Code),
 			reqerror.WithMessage(response.Message),

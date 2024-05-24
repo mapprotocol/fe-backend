@@ -100,25 +100,30 @@ func getURLWithParams(path, params string) string {
 }
 
 func CreateSubWallet(parentWalletID, walletName string) (walletId int64, walletType uint32, err error) {
-	headers := http.Header{
-		"open-apikey":  []string{""},
-		"signature":    []string{""},
-		"Content-Type": []string{"application/json"},
-	}
+	ts := time.Now().Unix()
 	request := CreatSubWalletRequest{
 		ParentWalletID: parentWalletID,
 		WalletName:     walletName,
 		AutoCollection: 1,
-		RequestID:      time.Now().Unix() * 1000,
-		Timestamp:      time.Now().Unix() * 1000,
+		RequestID:      ts,
+		Timestamp:      ts,
 	}
 	data, err := json.Marshal(request)
 	if err != nil {
 		return 0, 0, err
 	}
-	body := strings.NewReader(string(data))
+	dataStr := string(data)
 
-	ret, err := uhttp.Post(getURL(PathCreateSubWallet), headers, body)
+	signature, err := Sign(dataStr, "")
+	if err != nil {
+		return 0, 0, err
+	}
+	headers := http.Header{
+		"open-apikey": []string{""},
+		"signature":   []string{signature},
+	}
+
+	ret, err := uhttp.Post(getURL(PathCreateSubWallet), headers, strings.NewReader(dataStr))
 	if err != nil {
 		return 0, 0, err
 	}
@@ -134,11 +139,6 @@ func CreateSubWallet(parentWalletID, walletName string) (walletId int64, walletT
 }
 
 func GetDepositAddress(network, symbol string, walletID int64) (string, error) {
-	headers := http.Header{
-		"open-apikey": []string{""},
-		"signature":   []string{""},
-	}
-
 	request := DepositAddressRequest{
 		CoinSymbol: symbol,
 		Network:    network,
@@ -150,6 +150,15 @@ func GetDepositAddress(network, symbol string, walletID int64) (string, error) {
 		return "", err
 	}
 	url := getURLWithParams(PathGetDepositAddress, params)
+
+	signature, err := Sign(params, "")
+	if err != nil {
+		return "", err
+	}
+	headers := http.Header{
+		"open-apikey": []string{""},
+		"signature":   []string{signature},
+	}
 
 	ret, err := uhttp.Get(url, headers, nil)
 	if err != nil {
@@ -182,11 +191,6 @@ func GetDepositAddress(network, symbol string, walletID int64) (string, error) {
 //
 // reference: https://apidoc.ceffu.io/apidoc/shared-c9ece2c6-3ab4-4667-bb7d-c527fb3dbf78/api-3471585
 func DepositHistory(walletID int64, symbol, network string, startTime, endTime int64, pageNo, pageLimit int64) ([]*Transaction, error) {
-	headers := http.Header{
-		"open-apikey": []string{""},
-		"signature":   []string{""},
-	}
-
 	request := DepositHistoryRequest{
 		WalletID:   walletID,
 		CoinSymbol: symbol,
@@ -202,6 +206,15 @@ func DepositHistory(walletID int64, symbol, network string, startTime, endTime i
 		return nil, err
 	}
 	url := getURLWithParams(PathDepositHistory, params)
+
+	signature, err := Sign(params, "")
+	if err != nil {
+		return nil, err
+	}
+	headers := http.Header{
+		"open-apikey": []string{""},
+		"signature":   []string{signature},
+	}
 
 	ret, err := uhttp.Get(url, headers, nil)
 	if err != nil {
@@ -230,36 +243,41 @@ func DepositHistory(walletID int64, symbol, network string, startTime, endTime i
 //
 // reference: https://apidoc.ceffu.io/apidoc/shared-c9ece2c6-3ab4-4667-bb7d-c527fb3dbf78/api-3471348
 func Transfer(symbol string, amount float64, fromWalletID, toWalletID int64) (*TransferResponseData, error) {
-	headers := http.Header{
-		"open-apikey": []string{""},
-		"signature":   []string{""},
-	}
-
+	timestamp := time.Now().Unix() * 1000
 	request := TransferRequest{
 		CoinSymbol:   symbol,
 		Amount:       amount,
 		FromWalletID: fromWalletID,
 		ToWalletID:   toWalletID,
-		RequestID:    time.Now().Unix() * 1000,
-		Timestamp:    time.Now().Unix() * 1000,
+		RequestID:    timestamp,
+		Timestamp:    timestamp,
 	}
 	data, err := json.Marshal(request)
 	if err != nil {
-		return &TransferResponseData{}, err
+		return nil, err
 	}
-	body := strings.NewReader(string(data))
+	dataStr := string(data)
 
-	ret, err := uhttp.Post(getURL(PathTransfer), headers, body)
+	signature, err := Sign(dataStr, "")
 	if err != nil {
-		return &TransferResponseData{}, err
+		return nil, err
+	}
+	headers := http.Header{
+		"open-apikey": []string{""},
+		"signature":   []string{signature},
+	}
+
+	ret, err := uhttp.Post(getURL(PathTransfer), headers, strings.NewReader(dataStr))
+	if err != nil {
+		return nil, err
 	}
 	response := TransferResponse{}
 	if err := json.Unmarshal(ret, &response); err != nil {
-		return &TransferResponseData{}, err
+		return nil, err
 	}
 	if response.Code != SuccessCode {
 		// todo encapsulated external error type
-		return &TransferResponseData{}, fmt.Errorf("code: %s, message: %s", response.Code, response.Message)
+		return nil, fmt.Errorf("code: %s, message: %s", response.Code, response.Message)
 	}
 	return &response.Data, nil
 }

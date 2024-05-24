@@ -2,8 +2,10 @@ package http
 
 import (
 	"fmt"
+	"github.com/mapprotocol/ceffu-fe-backend/utils/reqerror"
 	"io"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/pkg/errors"
@@ -28,17 +30,27 @@ func Request(url, method string, headers http.Header, body io.Reader) ([]byte, e
 	if err != nil {
 		return nil, err
 	}
-	if resp != nil && resp.Body != nil {
+	if resp == nil {
+		return nil, fmt.Errorf("response is nil")
+	}
+	if resp.Body != nil {
 		defer resp.Body.Close()
 	}
 
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("response status code is not 200, code: %d", resp.StatusCode)
-	}
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, err
 	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, reqerror.NewExternalRequestError(
+			url,
+			reqerror.WithCode(strconv.Itoa(resp.StatusCode)),
+			reqerror.WithMessage(string(data)),
+			reqerror.WithError(errors.New("response status code is not 200")),
+		)
+	}
+
 	return data, nil
 }
 
