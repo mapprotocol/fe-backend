@@ -62,12 +62,12 @@ type WithdrawalResponse struct {
 }
 
 type WithdrawalDetailResponse struct {
-	Code    string                        `json:"code"`    // response code, '000000' when successed, others represent there some error occured
-	Data    *WithdrawalDetailResponseData `json:"data"`    // response data, maybe null
-	Message string                        `json:"message"` // detail of response, when code != '000000', it's detail of error
+	Code    string       `json:"code"`    // response code, '000000' when successed, others represent there some error occured
+	Data    *Transaction `json:"data"`    // response data, maybe null
+	Message string       `json:"message"` // detail of response, when code != '000000', it's detail of error
 }
 
-type WithdrawalDetailResponseData struct {
+type Transaction struct {
 	OrderViewID  string  `json:"orderViewId"`
 	TxID         string  `json:"txId"` // transaction id (Only Applicable to on-chain transfer)
 	TransferType int64   `json:"transferType"`
@@ -158,7 +158,7 @@ func Withdrawal(request *WithdrawalRequest) (*WithdrawalResponseData, error) {
 	return &response.Data, nil
 }
 
-func WithdrawalDetail(orderViewId string) (*WithdrawalDetailResponseData, error) {
+func WithdrawalDetail(orderViewId string) (*Transaction, error) {
 	// todo padding
 	headers := http.Header{
 		"open-apikey": []string{""},
@@ -172,24 +172,21 @@ func WithdrawalDetail(orderViewId string) (*WithdrawalDetailResponseData, error)
 
 	ret, err := uhttp.Get(url, headers, nil)
 	if err != nil {
-		return &WithdrawalDetailResponseData{},
-			reqerror.NewExternalRequestError(
-				url,
-				reqerror.WithMethod(http.MethodGet),
-				reqerror.WithError(err),
-			)
+		return &Transaction{}, reqerror.NewExternalRequestError(
+			url,
+			reqerror.WithError(err),
+		)
 	}
 	response := WithdrawalDetailResponse{}
 	if err := json.Unmarshal(ret, &response); err != nil {
-		return &WithdrawalDetailResponseData{}, err
+		return &Transaction{}, err
 	}
 	if response.Code != SuccessCode {
-		return &WithdrawalDetailResponseData{},
-			reqerror.NewExternalRequestError(
-				getURL(PathWithdrawal),
-				reqerror.WithCode(response.Code),
-				reqerror.WithMessage(response.Message),
-			)
+		return &Transaction{}, reqerror.NewExternalRequestError(
+			url,
+			reqerror.WithCode(response.Code),
+			reqerror.WithMessage(response.Message),
+		)
 	}
 	return response.Data, nil
 }

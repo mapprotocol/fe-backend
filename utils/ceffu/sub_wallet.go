@@ -3,6 +3,7 @@ package ceffu
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/mapprotocol/ceffu-fe-backend/utils/reqerror"
 	"net/http"
 	"strings"
 	"time"
@@ -23,6 +24,17 @@ type DepositAddressRequest struct {
 	Network    string `json:"network"`    // Network symbol
 	Timestamp  int64  `json:"timestamp"`  // Current Timestamp in millisecond
 	WalletID   int64  `json:"walletId"`   // Sub Wallet id
+}
+
+type DepositHistoryRequest struct {
+	WalletID   int64  `json:"walletId"`             // Prime wallet id or sub wallet id
+	CoinSymbol string `json:"coinSymbol,omitempty"` // Coin symbol (in capital letters); All symbols if not specific
+	Network    string `json:"network,omitempty"`    // Network symbol; All networks if not specific
+	StartTime  int64  `json:"startTime"`            // Start time(timestamp in milliseconds)
+	EndTime    int64  `json:"endTime"`              // End time(timestamp in milliseconds)
+	PageLimit  int64  `json:"pageLimit"`            // Page limit
+	PageNo     int64  `json:"pageNo"`               // Page no
+	Timestamp  int64  `json:"timestamp"`            // Current Timestamp in millisecond
 }
 
 type TransferRequest struct {
@@ -56,6 +68,17 @@ type DepositAddressResponse struct {
 	Message string `json:"message"`
 }
 
+type DepositHistoryResponse struct {
+	Data struct {
+		Data      []*Transaction `json:"data"`
+		TotalPage int            `json:"totalPage"`
+		PageNo    int            `json:"pageNo"`
+		PageLimit int            `json:"pageLimit"`
+	} `json:"data"`
+	Code    string `json:"code"`
+	Message string `json:"message"`
+}
+
 type TransferResponseData struct {
 	OrderViewId string `json:"orderViewId"` // Transfer transaction Id
 	Status      int32  `json:"status"`      // Status: 10: Pending, 20: Processing, 30: Send success, 99: Failed
@@ -70,6 +93,10 @@ type TransferResponse struct {
 
 func getURL(path string) string {
 	return fmt.Sprintf("%s%s", Domain, path)
+}
+
+func getURLWithParams(path, params string) string {
+	return fmt.Sprintf("%s%s?%s", Domain, path, params)
 }
 
 func CreateSubWallet(parentWalletID, walletName string) (walletId int64, walletType uint32, err error) {
@@ -118,25 +145,84 @@ func GetDepositAddress(network, symbol string, walletID int64) (string, error) {
 		Timestamp:  time.Now().Unix() * 1000,
 		WalletID:   walletID,
 	}
-	data, err := json.Marshal(request)
+	params, err := uhttp.URLEncode(request)
 	if err != nil {
 		return "", err
 	}
-	body := strings.NewReader(string(data))
+	url := getURLWithParams(PathGetDepositAddress, params)
 
-	ret, err := uhttp.Get(getURL(PathGetDepositAddress), headers, body)
+	ret, err := uhttp.Get(url, headers, nil)
 	if err != nil {
-		return "", err
+		return "", reqerror.NewExternalRequestError(
+			url,
+			reqerror.WithError(err),
+		)
 	}
 	response := DepositAddressResponse{}
 	if err := json.Unmarshal(ret, &response); err != nil {
 		return "", err
 	}
 	if response.Code != SuccessCode {
-		// todo encapsulated external error type
-		return "", fmt.Errorf("code: %s, message: %s", response.Code, response.Message)
+		return "", reqerror.NewExternalRequestError(
+			url,
+			reqerror.WithCode(response.Code),
+			reqerror.WithMessage(response.Message),
+		)
 	}
 	return response.Data.WalletAddress, nil
+}
+
+// DepositHistory This method allows to get deposit history of the requested Wallet Id, coinSymbol and network.
+// If PrimeWallet ID provided, returns sub wallet deposit history under the Prime Wallet.
+// If SubWallet ID provided, returns specified sub wallet deposit history.
+//
+// Notes:
+// walletId must be provided.
+// Please notice the default startTime and endTime to make sure that time interval is within 0-30 days.
+//
+// reference: https://apidoc.ceffu.io/apidoc/shared-c9ece2c6-3ab4-4667-bb7d-c527fb3dbf78/api-3471585
+func DepositHistory(walletID int64, symbol, network string, startTime, endTime int64, pageNo, pageLimit int64) ([]*Transaction, error) {
+	headers := http.Header{
+		"open-apikey": []string{""},
+		"signature":   []string{""},
+	}
+
+	request := DepositHistoryRequest{
+		WalletID:   walletID,
+		CoinSymbol: symbol,
+		Network:    network,
+		StartTime:  startTime,
+		EndTime:    endTime,
+		PageLimit:  pageLimit,
+		PageNo:     pageNo,
+		Timestamp:  time.Now().Unix() * 1000,
+	}
+	params, err := uhttp.URLEncode(request)
+	if err != nil {
+		return nil, err
+	}
+	url := getURLWithParams(PathDepositHistory, params)
+
+	ret, err := uhttp.Get(url, headers, nil)
+	if err != nil {
+		return nil, reqerror.NewExternalRequestError(
+			url,
+			reqerror.WithError(err),
+		)
+	}
+	response := DepositHistoryResponse{}
+	if err := json.Unmarshal(ret, &response); err != nil {
+		return nil, err
+	}
+	if response.Code != SuccessCode {
+		return nil, reqerror.NewExternalRequestError(
+			url,
+			reqerror.WithCode(response.Code),
+			reqerror.WithMessage(response.Message),
+		)
+	}
+
+	return response.Data.Data, nil
 }
 
 // Transfer This method allows to transfer asset between Sub Wallet and Prime Wallet Restriction:
