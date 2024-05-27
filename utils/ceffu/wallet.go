@@ -38,6 +38,18 @@ type WithdrawalDetailRequest struct {
 	Timestamp   int64  `json:"timestamp"`             // Current Timestamp in millisecond
 }
 
+type ExchangeRequest struct {
+	Amount         string `json:"amount"`               // Transfer Amount
+	CoinSymbol     string `json:"coinSymbol,omitempty"` // Coin symbol
+	Direction      int64  `json:"direction,omitempty"`  // Transfer direction,; 10: custody->exchange; 20: exchange->custody
+	ExchangeCode   int64  `json:"exchangeCode"`         // Exchange code, 10: binance
+	ExchangeUserID string `json:"exchangeUserId"`       // Binance UID
+	ParentWalletID int64  `json:"parentWalletId"`       // Parent Wallet Id; (Only applicable to Parent Shared Wallet)
+	Status         int64  `json:"status,omitempty"`     // Status
+	RequestID      int64  `json:"requestId"`            // Unique Identifier
+	Timestamp      int64  `json:"timestamp"`            // Current Timestamp in millisecond
+}
+
 type CreatePrimeWalletRequestResponse struct {
 	Data struct {
 		WalletId    int64  `json:"walletId"`
@@ -86,6 +98,18 @@ type Transaction struct {
 	RequestID    *string `json:"requestId"` // universal unique identifier provided by the client side.
 }
 
+type ExchangeResponseData struct {
+	OrderViewId string      `json:"orderViewId"`
+	Status      int         `json:"status"`
+	Direction   interface{} `json:"direction"`
+}
+
+type ExchangeResponse struct {
+	Data    *ExchangeResponseData `json:"data"`
+	Code    string                `json:"code"`
+	Message string                `json:"message"`
+}
+
 func CreatePrimeWallet() {
 	url := Domain + "/open-api/v1/wallet/create"
 
@@ -95,8 +119,8 @@ func CreatePrimeWallet() {
 		"Content-Type": []string{"application/json"},
 	}
 	request := CreatePrimeWalletRequest{
-		RequestID:  time.Now().Unix() * 1000,
-		Timestamp:  time.Now().Unix() * 1000,
+		RequestID:  time.Now().UnixMilli(),
+		Timestamp:  time.Now().UnixMilli(),
 		WalletName: "neoiss-test",
 		WalletType: 1,
 	}
@@ -128,7 +152,7 @@ func CreatePrimeWallet() {
 //
 // reference: https://apidoc.ceffu.io/apidoc/shared-c9ece2c6-3ab4-4667-bb7d-c527fb3dbf78/api-3471332
 func Withdrawal(request *WithdrawalRequest) (*WithdrawalResponseData, error) {
-	request.RequestID = time.Now().Unix() * 1000
+	request.RequestID = time.Now().UnixMilli()
 	request.Timestamp = request.RequestID
 
 	data, err := json.Marshal(request)
@@ -162,7 +186,7 @@ func Withdrawal(request *WithdrawalRequest) (*WithdrawalResponseData, error) {
 }
 
 func WithdrawalDetail(orderViewId string) (*Transaction, error) {
-	timestamp := time.Now().Unix() * 1000
+	timestamp := time.Now().UnixMilli()
 	request := WithdrawalDetailRequest{
 		OrderViewID: orderViewId,
 		RequestID:   strconv.FormatInt(timestamp, 10),
@@ -191,6 +215,52 @@ func WithdrawalDetail(orderViewId string) (*Transaction, error) {
 		)
 	}
 	response := WithdrawalDetailResponse{}
+	if err := json.Unmarshal(ret, &response); err != nil {
+		return nil, err
+	}
+	if response.Code != SuccessCode {
+		return nil, reqerror.NewExternalRequestError(
+			url,
+			reqerror.WithCode(response.Code),
+			reqerror.WithMessage(response.Message),
+		)
+	}
+	return response.Data, nil
+}
+
+// Exchange This method allows to transfer assets from Ceffu Prime Wallet to a bound
+// Binance Account (To be bound in Web Portal [Wallets > Binance Transfer].
+//
+// Notes: Currently support from Ceffu to Exchange direction only.
+//
+// reference: https://apidoc.ceffu.io/apidoc/shared-c9ece2c6-3ab4-4667-bb7d-c527fb3dbf78/api-3471337
+func Exchange(request *ExchangeRequest) (*ExchangeResponseData, error) {
+	request.RequestID = time.Now().UnixMilli()
+	request.Timestamp = request.RequestID
+	data, err := json.Marshal(request)
+	if err != nil {
+		return nil, err
+	}
+	dataStr := string(data)
+	url := getURL(PathExchange)
+
+	signature, err := Sign(dataStr, "")
+	if err != nil {
+		return nil, err
+	}
+	headers := http.Header{
+		"open-apikey": []string{""},
+		"signature":   []string{signature},
+	}
+
+	ret, err := uhttp.Post(url, headers, strings.NewReader(dataStr))
+	if err != nil {
+		return nil, reqerror.NewExternalRequestError(
+			url,
+			reqerror.WithError(err),
+		)
+	}
+	response := ExchangeResponse{}
 	if err := json.Unmarshal(ret, &response); err != nil {
 		return nil, err
 	}

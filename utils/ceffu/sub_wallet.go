@@ -100,7 +100,7 @@ func getURLWithParams(path, params string) string {
 }
 
 func CreateSubWallet(parentWalletID, walletName string) (walletId int64, walletType uint32, err error) {
-	ts := time.Now().Unix()
+	ts := time.Now().UnixMilli()
 	request := CreatSubWalletRequest{
 		ParentWalletID: parentWalletID,
 		WalletName:     walletName,
@@ -142,7 +142,7 @@ func GetDepositAddress(network, symbol string, walletID int64) (string, error) {
 	request := DepositAddressRequest{
 		CoinSymbol: symbol,
 		Network:    network,
-		Timestamp:  time.Now().Unix() * 1000,
+		Timestamp:  time.Now().UnixMilli(),
 		WalletID:   walletID,
 	}
 	params, err := uhttp.URLEncode(request)
@@ -199,7 +199,7 @@ func DepositHistory(walletID int64, symbol, network string, startTime, endTime i
 		EndTime:    endTime,
 		PageLimit:  pageLimit,
 		PageNo:     pageNo,
-		Timestamp:  time.Now().Unix() * 1000,
+		Timestamp:  time.Now().UnixMilli(),
 	}
 	params, err := uhttp.URLEncode(request)
 	if err != nil {
@@ -243,7 +243,7 @@ func DepositHistory(walletID int64, symbol, network string, startTime, endTime i
 //
 // reference: https://apidoc.ceffu.io/apidoc/shared-c9ece2c6-3ab4-4667-bb7d-c527fb3dbf78/api-3471348
 func Transfer(symbol string, amount float64, fromWalletID, toWalletID int64) (*TransferResponseData, error) {
-	timestamp := time.Now().Unix() * 1000
+	timestamp := time.Now().UnixMilli()
 	request := TransferRequest{
 		CoinSymbol:   symbol,
 		Amount:       amount,

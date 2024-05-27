@@ -10,4 +10,5 @@ const (
 	PathTransfer          = "/open-api/v1/subwallet/transfer"
 	PathWithdrawal        = "/open-api/v2/wallet/withdrawal"
 	PathWithdrawalDetail  = "/open-api/v2/wallet/withdrawal/detail"
+	PathExchange          = "/open-api/v1/wallet/transfer/exchange"
 )
