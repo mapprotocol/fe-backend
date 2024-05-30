@@ -14,7 +14,21 @@ const (
 )
 
 const (
-	DepositSwapStatusPending = iota + 1
+	DepositStatusPending = iota + 1
+	DepositStatusConfirmed
+)
+
+const (
+	MirrorAndSellStatusPending    = 10
+	MirrorAndSellStatusProcessing = 20
+	MirrorAndSellStatusSent       = 30
+	MirrorAndSellStatusConfirmed  = 40
+	MirrorAndSellStatusFailed     = 99
+)
+
+const (
+	SwapStageDeposit = iota + 1
+	SwapStageMirrorAndSell
 )
 
 type DepositSwap struct {
@@ -30,6 +44,7 @@ type DepositSwap struct {
 	Mask           uint32    `gorm:"column:mask;type:int(11)" json:"mask"`
 	TxHash         string    `gorm:"column:tx_hash;type:varchar(255)" json:"tx_hash"`
 	Action         uint8     `gorm:"column:action;type:tinyint(4)" json:"action"`
+	Stage          uint8     `gorm:"column:stage;type:tinyint(4)" json:"stage"`
 	Status         uint8     `gorm:"column:status;type:tinyint(4)" json:"status"`
 	CreatedAt      time.Time `gorm:"column:created_at;type:datetime" json:"created_at"`
 	UpdatedAt      time.Time `gorm:"column:updated_at;type:datetime" json:"updated_at"`

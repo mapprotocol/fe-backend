@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-var ceffuClient *client.Client
+var ceffuClient client.Client
 
 func Init(domain, apiKey, apiKeySecret string) {
 	opts := client.Options{
@@ -19,9 +19,9 @@ func Init(domain, apiKey, apiKeySecret string) {
 	if err != nil {
 		panic(err)
 	}
-	ceffuClient = &cli
+	ceffuClient = cli
 }
 
-func GetClient() *client.Client {
+func GetClient() client.Client {
 	return ceffuClient
 }

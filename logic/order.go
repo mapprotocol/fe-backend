@@ -1,11 +1,14 @@
 package logic
 
 import (
+	"context"
 	"errors"
 	"github.com/mapprotocol/ceffu-fe-backend/dao"
 	"github.com/mapprotocol/ceffu-fe-backend/entity"
+	"github.com/mapprotocol/ceffu-fe-backend/resource/ceffu"
 	"github.com/mapprotocol/ceffu-fe-backend/resource/log"
 	"github.com/mapprotocol/ceffu-fe-backend/resp"
+	"github.com/mapprotocol/ceffu-fe-backend/utils"
 	"gorm.io/gorm"
 )
 
@@ -15,6 +18,68 @@ func choiceSubWalletID() int64 {
 
 func getChainNameByChainID(chainID uint64) string {
 	return "ETH"
+}
+
+func CreateOrder(srcChain uint64, srcToken, sender, amount string, dstChain uint64, dstToken, receiver string) (ret *entity.CreateOrderResponse, code int) {
+	account, err := dao.NewAccount(dstChain).First()
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		log.Logger().WithField("dstChain", dstChain).WithField("error", err).Error("failed to get account")
+		return nil, resp.CodeInternalServerError
+	}
+
+	// create account if not exist
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		subWalletID := choiceSubWalletID()           // TODO: choice sub wallet id
+		chainName := getChainNameByChainID(dstChain) // TODO: get chain name by chain id
+		// create deposit address
+		var depositAddress, err = ceffu.GetClient().GetDepositAddress(context.Background(), chainName, dstToken, subWalletID)
+		if err != nil {
+			params := map[string]interface{}{
+				"chainName":   chainName,
+				"token":       dstToken,
+				"subWalletID": subWalletID,
+				"error":       err,
+			}
+			log.Logger().WithFields(params).Error("failed to get deposit address")
+			return nil, resp.CodeInternalServerError
+		}
+
+		account = &dao.Account{
+			SubWalletID: subWalletID,
+			ChainID:     dstChain,
+			ChainName:   chainName,
+			Address:     depositAddress,
+		}
+		if err := account.Create(); err != nil {
+			log.Logger().WithField("account", utils.JSON(account)).WithField("error", err).Error("failed to create account")
+			return nil, resp.CodeInternalServerError
+		}
+	}
+
+	// create order
+	order := &dao.DepositSwap{
+		SrcChain:       srcChain,
+		SrcToken:       srcToken,
+		Sender:         sender,
+		Amount:         amount,
+		DstChain:       dstChain,
+		DstToken:       dstToken,
+		Receiver:       receiver,
+		DepositAddress: account.Address,
+		//Mask:     1, // TODO: set mask
+		//Action:   1, // TODO: set action
+		Stage:  dao.SwapStageDeposit,
+		Status: dao.DepositStatusPending,
+	}
+	if err := order.Create(); err != nil {
+		log.Logger().WithField("order", utils.JSON(order)).WithField("error", err).Error("failed to create order")
+		return nil, resp.CodeInternalServerError
+	}
+
+	return &entity.CreateOrderResponse{
+		OrderID:        order.ID,
+		DepositAddress: account.Address,
+	}, resp.CodeSuccess
 }
 
 func OrderList(sender string, page, size int) (ret []*entity.OrderListResponse, count int64, code int) {
