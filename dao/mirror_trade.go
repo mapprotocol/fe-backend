@@ -9,9 +9,18 @@ import (
 const TableNameMirrorTrade = "mirror_trade"
 
 type MirrorTrade struct {
-	ID        uint64    `gorm:"column:id;type:bigint(20);primaryKey;autoIncrement:true" json:"id"`
-	CreatedAt time.Time `gorm:"column:created_at;type:datetime" json:"created_at"`
-	UpdatedAt time.Time `gorm:"column:updated_at;type:datetime" json:"updated_at"`
+	ID            uint64    `gorm:"column:id;type:bigint(20);primaryKey;autoIncrement:true" json:"id"`
+	DepositSwapID uint64    `gorm:"column:deposit_swap_id;type:bigint(20)" json:"deposit_swap_id"`
+	OrderViewId   string    `gorm:"column:order_view_id;type:varchar(255)" json:"order_view_id"`
+	SrcChain      uint64    `gorm:"column:src_chain;type:bigint(20)" json:"src_chain"`
+	SrcToken      string    `gorm:"column:src_token;type:varchar(255)" json:"src_token"`
+	InAmount      string    `gorm:"column:in_amount;type:varchar(255)" json:"in_amount"`
+	DstChain      uint64    `gorm:"column:dst_chain;type:bigint(20)" json:"dst_chain"`
+	DstToken      string    `gorm:"column:dst_token;type:varchar(255)" json:"dst_token"`
+	OutAmount     string    `gorm:"column:out_amount;type:varchar(255)" json:"out_amount"`
+	Status        uint8     `gorm:"column:status;type:tinyint(4)" json:"status"`
+	CreatedAt     time.Time `gorm:"column:created_at;type:datetime" json:"created_at"`
+	UpdatedAt     time.Time `gorm:"column:updated_at;type:datetime" json:"updated_at"`
 }
 
 func NewMirrorTrade() *MirrorTrade {
