@@ -46,6 +46,8 @@ type DepositSwap struct {
 	Action         uint8     `gorm:"column:action;type:tinyint(4)" json:"action"`
 	Stage          uint8     `gorm:"column:stage;type:tinyint(4)" json:"stage"`
 	Status         uint8     `gorm:"column:status;type:tinyint(4)" json:"status"`
+	OrderViewId    string    `gorm:"column:order_view_id;type:varchar(255)" json:"order_view_id"`
+	OutAmount      string    `gorm:"column:out_amount;type:varchar(255)" json:"out_amount"`
 	CreatedAt      time.Time `gorm:"column:created_at;type:datetime" json:"created_at"`
 	UpdatedAt      time.Time `gorm:"column:updated_at;type:datetime" json:"updated_at"`
 }

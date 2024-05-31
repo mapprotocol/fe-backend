@@ -9,6 +9,7 @@ import (
 	"github.com/mapprotocol/ceffu-fe-backend/resource/log"
 	"github.com/mapprotocol/ceffu-fe-backend/resp"
 	"github.com/mapprotocol/ceffu-fe-backend/utils"
+	"github.com/mapprotocol/ceffu-go/types"
 	"gorm.io/gorm"
 )
 
@@ -145,4 +146,40 @@ func OrderDetail(orderID uint64) (ret *entity.OrderDetailResponse, code int) {
 		Status:         order.Status,
 		CreatedAt:      order.CreatedAt.Unix(),
 	}, resp.CodeSuccess
+}
+
+func Mirror(orderID uint64) (code int) {
+	order, err := dao.NewDepositSwap(orderID).First()
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		log.Logger().WithField("orderID", orderID).WithField("error", err).Error("failed to get deposit swap")
+		return resp.CodeInternalServerError
+	}
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return resp.CodeOrderNotFound
+	}
+
+	request := &types.TransferWithExchangeRequest{
+		Amount:         order.Amount,
+		CoinSymbol:     order.DstToken,
+		Direction:      10,
+		ExchangeCode:   10,
+		ExchangeUserID: "", // TODO: set exchange user id
+		ParentWalletID: 0,  // TODO: set parent wallet id
+		Status:         0,  // TODO: set status
+	}
+	transfer, err := ceffu.GetClient().TransferWithExchange(context.Background(), request)
+	if err != nil {
+		log.Logger().WithField("request", utils.JSON(request)).WithField("error", err).Error("failed to exchange")
+		return resp.CodeInternalServerError
+	}
+
+	update := &dao.DepositSwap{
+		Status:      dao.MirrorAndSellStatusPending,
+		OrderViewId: transfer.OrderViewId,
+	}
+	if err := dao.NewDepositSwap(orderID).Updates(update); err != nil {
+		log.Logger().WithField("orderID", orderID).WithField("update", utils.JSON(update)).WithField("error", err).Error("failed to update deposit swap")
+		return resp.CodeInternalServerError
+	}
+	return resp.CodeSuccess
 }
