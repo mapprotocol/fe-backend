@@ -24,7 +24,7 @@ type OrderListResponse struct {
 	DepositAddress string `json:"deposit_address"`
 	TxHash         string `json:"tx_hash"`
 	Action         uint8  `json:"action"`
-	Status         uint8  `json:"status"`
+	Status         int32  `json:"status"`
 	CreatedAt      int64  `json:"created_at"`
 }
 
@@ -40,6 +40,6 @@ type OrderDetailResponse struct {
 	DepositAddress string `json:"deposit_address"`
 	TxHash         string `json:"tx_hash"`
 	Action         uint8  `json:"action"`
-	Status         uint8  `json:"status"`
+	Status         int32  `json:"status"`
 	CreatedAt      int64  `json:"created_at"`
 }

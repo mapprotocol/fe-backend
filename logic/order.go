@@ -122,7 +122,7 @@ func OrderList(sender string, page, size int) (ret []*entity.OrderListResponse, 
 }
 
 func OrderDetail(orderID uint64) (ret *entity.OrderDetailResponse, code int) {
-	order, err := dao.NewDepositSwap(orderID).First()
+	order, err := dao.NewDepositSwapWithID(orderID).First()
 	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 		log.Logger().WithField("orderID", orderID).WithField("error", err).Error("failed to get deposit swap")
 		return nil, resp.CodeInternalServerError
@@ -149,7 +149,7 @@ func OrderDetail(orderID uint64) (ret *entity.OrderDetailResponse, code int) {
 }
 
 func Mirror(orderID uint64) (code int) {
-	order, err := dao.NewDepositSwap(orderID).First()
+	order, err := dao.NewDepositSwapWithID(orderID).First()
 	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 		log.Logger().WithField("orderID", orderID).WithField("error", err).Error("failed to get deposit swap")
 		return resp.CodeInternalServerError
@@ -175,9 +175,9 @@ func Mirror(orderID uint64) (code int) {
 
 	update := &dao.DepositSwap{
 		Status:      dao.MirrorAndSellStatusPending,
-		OrderViewId: transfer.OrderViewId,
+		OrderViewID: transfer.OrderViewId,
 	}
-	if err := dao.NewDepositSwap(orderID).Updates(update); err != nil {
+	if err := dao.NewDepositSwapWithID(orderID).Updates(update); err != nil {
 		log.Logger().WithField("orderID", orderID).WithField("update", utils.JSON(update)).WithField("error", err).Error("failed to update deposit swap")
 		return resp.CodeInternalServerError
 	}

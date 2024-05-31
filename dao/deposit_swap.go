@@ -31,6 +31,8 @@ const (
 	SwapStageMirrorAndSell
 )
 
+const OldestLimit = 10
+
 type DepositSwap struct {
 	ID             uint64    `gorm:"column:id;type:bigint(20);primaryKey;autoIncrement:true" json:"id"`
 	SrcChain       uint64    `gorm:"column:src_chain;type:bigint(20)" json:"src_chain"`
@@ -45,14 +47,18 @@ type DepositSwap struct {
 	TxHash         string    `gorm:"column:tx_hash;type:varchar(255)" json:"tx_hash"`
 	Action         uint8     `gorm:"column:action;type:tinyint(4)" json:"action"`
 	Stage          uint8     `gorm:"column:stage;type:tinyint(4)" json:"stage"`
-	Status         uint8     `gorm:"column:status;type:tinyint(4)" json:"status"`
-	OrderViewId    string    `gorm:"column:order_view_id;type:varchar(255)" json:"order_view_id"`
+	Status         int32     `gorm:"column:status;type:int(11)" json:"status"`
+	OrderViewID    string    `gorm:"column:order_view_id;type:varchar(255)" json:"order_view_id"`
 	OutAmount      string    `gorm:"column:out_amount;type:varchar(255)" json:"out_amount"`
 	CreatedAt      time.Time `gorm:"column:created_at;type:datetime" json:"created_at"`
 	UpdatedAt      time.Time `gorm:"column:updated_at;type:datetime" json:"updated_at"`
 }
 
-func NewDepositSwap(id uint64) *DepositSwap {
+func NewDepositSwap() *DepositSwap {
+	return &DepositSwap{}
+}
+
+func NewDepositSwapWithID(id uint64) *DepositSwap {
 	return &DepositSwap{ID: id}
 }
 
@@ -111,4 +117,9 @@ func (ds *DepositSwap) Find(ext *QueryExtra, pager Pager) (list []*DepositSwap, 
 	}
 	err = tx.Find(&list).Error
 	return list, count, err
+}
+
+func (ds *DepositSwap) GetOldest10ByStatus(id uint64, status uint8) (list []*DepositSwap, err error) {
+	err = db.GetDB().Where(ds).Where("id >= ?", id).Where("status = ?", status).Limit(OldestLimit).Find(&list).Error
+	return list, err
 }
