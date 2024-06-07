@@ -3,8 +3,10 @@ package logic
 import (
 	"context"
 	"errors"
+	connector "github.com/binance/binance-connector-go"
 	"github.com/mapprotocol/ceffu-fe-backend/dao"
 	"github.com/mapprotocol/ceffu-fe-backend/entity"
+	"github.com/mapprotocol/ceffu-fe-backend/resource/binance"
 	"github.com/mapprotocol/ceffu-fe-backend/resource/ceffu"
 	"github.com/mapprotocol/ceffu-fe-backend/resource/log"
 	"github.com/mapprotocol/ceffu-fe-backend/resp"
@@ -174,8 +176,41 @@ func Mirror(orderID uint64) (code int) {
 	}
 
 	update := &dao.DepositSwap{
-		Status:      dao.MirrorAndSellStatusPending,
+		Stage:       dao.SwapStageMirror,
+		Status:      dao.MirrorStatusPending,
 		OrderViewID: transfer.OrderViewId,
+	}
+	if err := dao.NewDepositSwapWithID(orderID).Updates(update); err != nil {
+		log.Logger().WithField("orderID", orderID).WithField("update", utils.JSON(update)).WithField("error", err).Error("failed to update deposit swap")
+		return resp.CodeInternalServerError
+	}
+	return resp.CodeSuccess
+}
+
+func Sell(orderID uint64, currencyPairs string, quantity float64) (code int) {
+	order, err := binance.GetClient().NewCreateOrderService().Symbol(currencyPairs).Side(BinanceOrderSideSELL).
+		Type(BinanceOrderTypeMarket).Quantity(quantity).NewOrderRespType(BinanceOrderRespTypeAck).Do(context.Background())
+	if err != nil {
+		params := map[string]interface{}{
+			"currencyPairs": currencyPairs,
+			"quantity":      quantity,
+			"error":         err,
+		}
+		log.Logger().WithFields(params).Error("failed to create sell order")
+		return resp.CodeInternalServerError
+	}
+	// todo failed to create order update failed status ？
+
+	result, ok := order.(connector.CreateOrderResponseACK)
+	if !ok {
+		// todo
+		return resp.CodeInternalServerError
+	}
+
+	update := &dao.DepositSwap{
+		Stage:           dao.SwapStageSell,
+		Status:          dao.SellStatusSent,
+		ExchangeOrderID: result.OrderId,
 	}
 	if err := dao.NewDepositSwapWithID(orderID).Updates(update); err != nil {
 		log.Logger().WithField("orderID", orderID).WithField("update", utils.JSON(update)).WithField("error", err).Error("failed to update deposit swap")

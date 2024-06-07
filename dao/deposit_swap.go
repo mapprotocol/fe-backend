@@ -19,39 +19,47 @@ const (
 )
 
 const (
-	MirrorAndSellStatusPending    = 10
-	MirrorAndSellStatusProcessing = 20
-	MirrorAndSellStatusSent       = 30
-	MirrorAndSellStatusConfirmed  = 40
-	MirrorAndSellStatusFailed     = 99
+	MirrorStatusPending    = 10
+	MirrorStatusProcessing = 20
+	MirrorStatusSent       = 30
+	MirrorStatusConfirmed  = 40
+	MirrorStatusFailed     = 99
+)
+
+const (
+	SellStatusSent = iota + 1
+	SellStatusConfirmed
+	SellStatusFailed
 )
 
 const (
 	SwapStageDeposit = iota + 1
-	SwapStageMirrorAndSell
+	SwapStageMirror
+	SwapStageSell
 )
 
 const OldestLimit = 10
 
 type DepositSwap struct {
-	ID             uint64    `gorm:"column:id;type:bigint(20);primaryKey;autoIncrement:true" json:"id"`
-	SrcChain       uint64    `gorm:"column:src_chain;type:bigint(20)" json:"src_chain"`
-	SrcToken       string    `gorm:"column:src_token;type:varchar(255)" json:"src_token"`
-	Amount         string    `gorm:"column:amount;type:varchar(255)" json:"amount"`
-	Sender         string    `gorm:"column:sender;type:varchar(255)" json:"sender"`
-	DstChain       uint64    `gorm:"column:dst_chain;type:bigint(20)" json:"dst_chain"`
-	DstToken       string    `gorm:"column:dst_token;type:varchar(255)" json:"dst_token"`
-	Receiver       string    `gorm:"column:receiver;type:varchar(255)" json:"receiver"`
-	DepositAddress string    `gorm:"column:deposit_address;type:varchar(255)" json:"deposit_address"`
-	Mask           uint32    `gorm:"column:mask;type:int(11)" json:"mask"`
-	TxHash         string    `gorm:"column:tx_hash;type:varchar(255)" json:"tx_hash"`
-	Action         uint8     `gorm:"column:action;type:tinyint(4)" json:"action"`
-	Stage          uint8     `gorm:"column:stage;type:tinyint(4)" json:"stage"`
-	Status         int32     `gorm:"column:status;type:int(11)" json:"status"`
-	OrderViewID    string    `gorm:"column:order_view_id;type:varchar(255)" json:"order_view_id"`
-	OutAmount      string    `gorm:"column:out_amount;type:varchar(255)" json:"out_amount"`
-	CreatedAt      time.Time `gorm:"column:created_at;type:datetime" json:"created_at"`
-	UpdatedAt      time.Time `gorm:"column:updated_at;type:datetime" json:"updated_at"`
+	ID              uint64    `gorm:"column:id;type:bigint(20);primaryKey;autoIncrement:true" json:"id"`
+	SrcChain        uint64    `gorm:"column:src_chain;type:bigint(20)" json:"src_chain"`
+	SrcToken        string    `gorm:"column:src_token;type:varchar(255)" json:"src_token"`
+	Amount          string    `gorm:"column:amount;type:varchar(255)" json:"amount"`
+	Sender          string    `gorm:"column:sender;type:varchar(255)" json:"sender"`
+	DstChain        uint64    `gorm:"column:dst_chain;type:bigint(20)" json:"dst_chain"`
+	DstToken        string    `gorm:"column:dst_token;type:varchar(255)" json:"dst_token"`
+	Receiver        string    `gorm:"column:receiver;type:varchar(255)" json:"receiver"`
+	DepositAddress  string    `gorm:"column:deposit_address;type:varchar(255)" json:"deposit_address"`
+	Mask            uint32    `gorm:"column:mask;type:int(11)" json:"mask"`
+	TxHash          string    `gorm:"column:tx_hash;type:varchar(255)" json:"tx_hash"`
+	Action          uint8     `gorm:"column:action;type:tinyint(4)" json:"action"`
+	Stage           uint8     `gorm:"column:stage;type:tinyint(4)" json:"stage"`
+	Status          int32     `gorm:"column:status;type:int(11)" json:"status"`
+	OrderViewID     string    `gorm:"column:order_view_id;type:varchar(255)" json:"order_view_id"`
+	ExchangeOrderID int64     `gorm:"column:exchange_order_id;type:bigint(20)" json:"exchange_order_id"`
+	OutAmount       string    `gorm:"column:out_amount;type:varchar(255)" json:"out_amount"`
+	CreatedAt       time.Time `gorm:"column:created_at;type:datetime" json:"created_at"`
+	UpdatedAt       time.Time `gorm:"column:updated_at;type:datetime" json:"updated_at"`
 }
 
 func NewDepositSwap() *DepositSwap {
@@ -119,7 +127,7 @@ func (ds *DepositSwap) Find(ext *QueryExtra, pager Pager) (list []*DepositSwap, 
 	return list, count, err
 }
 
-func (ds *DepositSwap) GetOldest10ByStatus(id uint64, status uint8) (list []*DepositSwap, err error) {
+func (ds *DepositSwap) GetOldest10ByStatus(id uint64, status uint8) (list []*DepositSwap, err error) { // todo add stage to query params
 	err = db.GetDB().Where(ds).Where("id >= ?", id).Where("status = ?", status).Limit(OldestLimit).Find(&list).Error
 	return list, err
 }
