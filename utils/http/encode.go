@@ -42,3 +42,28 @@ func URLEncode(s interface{}) (string, error) {
 	}
 	return urls.Encode(), nil
 }
+
+//func URLEncode(params map[string]interface{}) (string, error) {
+//	if params == nil {
+//		return "", errors.New("provided value is nil")
+//	}
+//
+//	urls := url.Values{}
+//	for k, v := range params {
+//		switch v := v.(type) {
+//		case string:
+//			urls.Set(k, v)
+//		case int, int8, int16, int32, int64:
+//			urls.Set(k, strconv.FormatInt(reflect.ValueOf(v).Int(), 10))
+//		case uint, uint8, uint16, uint32, uint64:
+//			urls.Set(k, strconv.FormatUint(reflect.ValueOf(v).Uint(), 10))
+//		case float32, float64:
+//			urls.Set(k, strconv.FormatFloat(reflect.ValueOf(v).Float(), 'f', -1, 64))
+//		case bool:
+//			urls.Set(k, strconv.FormatBool(v))
+//		default:
+//			return "", errors.New("unsupported type")
+//		}
+//	}
+//	return urls.Encode(), nil
+//}

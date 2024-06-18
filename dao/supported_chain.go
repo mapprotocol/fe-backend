@@ -9,12 +9,14 @@ import (
 const TableNameSupportedChain = "supported_chain"
 
 type SupportedChain struct {
-	ID        uint64    `gorm:"column:id;type:bigint(20);primaryKey;autoIncrement:true" json:"id"`
-	ChainID   uint64    `gorm:"column:chain_id;type:bigint(20)" json:"chain_id"`
-	ChainName string    `gorm:"column:chain_name;type:varchar(255)" json:"chain_name"`
-	ChainIcon string    `gorm:"column:chain_icon;type:varchar(255)" json:"chain_icon"`
-	CreatedAt time.Time `gorm:"column:created_at;type:datetime" json:"created_at"`
-	UpdatedAt time.Time `gorm:"column:updated_at;type:datetime" json:"updated_at"`
+	ID                 uint64    `gorm:"column:id;type:bigint(20);primaryKey;autoIncrement:true" json:"id"`
+	ChainID            uint64    `gorm:"column:chain_id;type:bigint(20)" json:"chain_id"`
+	ChainName          string    `gorm:"column:chain_name;type:varchar(255)" json:"chain_name"`
+	ChainIcon          string    `gorm:"column:chain_icon;type:varchar(255)" json:"chain_icon"`
+	ChainRPC           string    `gorm:"column:chain_rpc;type:varchar(255)" json:"chain_rpc"`
+	GasLimitMultiplier string    `gorm:"column:gas_limit_multiplier;type:varchar(255)" json:"gas_limit_multiplier"`
+	CreatedAt          time.Time `gorm:"column:created_at;type:datetime" json:"created_at"`
+	UpdatedAt          time.Time `gorm:"column:updated_at;type:datetime" json:"updated_at"`
 }
 
 func (*SupportedChain) TableName() string {
@@ -23,6 +25,15 @@ func (*SupportedChain) TableName() string {
 
 func NewSupportedChain() *SupportedChain {
 	return &SupportedChain{}
+}
+
+func NewSupportedChainWithChainID(chainID uint64) *SupportedChain {
+	return &SupportedChain{ChainID: chainID}
+}
+
+func (sc *SupportedChain) First() (get *SupportedChain, err error) {
+	err = db.GetDB().Where(sc).First(&get).Error
+	return get, err
 }
 
 func (sc *SupportedChain) Find(ext *QueryExtra, pager Pager) (list []*SupportedChain, count int64, err error) {

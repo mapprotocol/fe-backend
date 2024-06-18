@@ -33,6 +33,12 @@ const (
 )
 
 const (
+	ButterSwapStatusSent = iota + 1
+	ButterSwapStatusConfirmed
+	ButterSwapStatusFailed
+)
+
+const (
 	SwapStageDeposit = iota + 1
 	SwapStageMirror
 	SwapStageSell
@@ -58,6 +64,8 @@ type DepositSwap struct {
 	OrderViewID     string    `gorm:"column:order_view_id;type:varchar(255)" json:"order_view_id"`
 	ExchangeOrderID int64     `gorm:"column:exchange_order_id;type:bigint(20)" json:"exchange_order_id"`
 	OutAmount       string    `gorm:"column:out_amount;type:varchar(255)" json:"out_amount"`
+	SwapTxHash      string    `gorm:"column:swap_tx_hash;type:varchar(255)" json:"swap_tx_hash"`
+	SwapChainID     string    `gorm:"column:swap_chain_id;type:varchar(255)" json:"swap_chain_id"`
 	CreatedAt       time.Time `gorm:"column:created_at;type:datetime" json:"created_at"`
 	UpdatedAt       time.Time `gorm:"column:updated_at;type:datetime" json:"updated_at"`
 }
