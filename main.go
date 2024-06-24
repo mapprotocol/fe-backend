@@ -5,11 +5,11 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/spf13/viper"
 
-	"github.com/mapprotocol/ceffu-fe-backend/config"
-	"github.com/mapprotocol/ceffu-fe-backend/resource/ceffu"
-	"github.com/mapprotocol/ceffu-fe-backend/resource/db"
-	"github.com/mapprotocol/ceffu-fe-backend/resource/log"
-	"github.com/mapprotocol/ceffu-fe-backend/router"
+	"github.com/mapprotocol/fe-backend/config"
+	"github.com/mapprotocol/fe-backend/resource/ceffu"
+	"github.com/mapprotocol/fe-backend/resource/db"
+	"github.com/mapprotocol/fe-backend/resource/log"
+	"github.com/mapprotocol/fe-backend/router"
 )
 
 func main() {

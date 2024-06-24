@@ -1,10 +1,10 @@
 package logic
 
 import (
-	"github.com/mapprotocol/ceffu-fe-backend/dao"
-	"github.com/mapprotocol/ceffu-fe-backend/entity"
-	"github.com/mapprotocol/ceffu-fe-backend/resource/log"
-	"github.com/mapprotocol/ceffu-fe-backend/resp"
+	"github.com/mapprotocol/fe-backend/dao"
+	"github.com/mapprotocol/fe-backend/entity"
+	"github.com/mapprotocol/fe-backend/resource/log"
+	"github.com/mapprotocol/fe-backend/resp"
 )
 
 func SupportedTokens(chainID uint64, symbol string, page, size int) (ret []*entity.SupportedTokensResponse, count int64, code int) {

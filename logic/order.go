@@ -1,17 +1,12 @@
 package logic
 
 import (
-	"context"
 	"errors"
-	connector "github.com/binance/binance-connector-go"
-	"github.com/mapprotocol/ceffu-fe-backend/dao"
-	"github.com/mapprotocol/ceffu-fe-backend/entity"
-	"github.com/mapprotocol/ceffu-fe-backend/resource/binance"
-	"github.com/mapprotocol/ceffu-fe-backend/resource/ceffu"
-	"github.com/mapprotocol/ceffu-fe-backend/resource/log"
-	"github.com/mapprotocol/ceffu-fe-backend/resp"
-	"github.com/mapprotocol/ceffu-fe-backend/utils"
-	"github.com/mapprotocol/ceffu-go/types"
+	"github.com/mapprotocol/fe-backend/dao"
+	"github.com/mapprotocol/fe-backend/entity"
+	"github.com/mapprotocol/fe-backend/resource/log"
+	"github.com/mapprotocol/fe-backend/resp"
+	"github.com/mapprotocol/fe-backend/utils"
 	"gorm.io/gorm"
 )
 
@@ -35,28 +30,28 @@ func CreateOrder(srcChain uint64, srcToken, sender, amount string, dstChain uint
 		subWalletID := choiceSubWalletID()           // TODO: choice sub wallet id
 		chainName := getChainNameByChainID(dstChain) // TODO: get chain name by chain id
 		// create deposit address
-		var depositAddress, err = ceffu.GetClient().GetDepositAddress(context.Background(), chainName, dstToken, subWalletID)
-		if err != nil {
-			params := map[string]interface{}{
-				"chainName":   chainName,
-				"token":       dstToken,
-				"subWalletID": subWalletID,
-				"error":       err,
-			}
-			log.Logger().WithFields(params).Error("failed to get deposit address")
-			return nil, resp.CodeInternalServerError
-		}
+		//var depositAddress, err = ceffu.GetClient().GetDepositAddress(context.Background(), chainName, dstToken, subWalletID)
+		//if err != nil {
+		//	params := map[string]interface{}{
+		//		"chainName":   chainName,
+		//		"token":       dstToken,
+		//		"subWalletID": subWalletID,
+		//		"error":       err,
+		//	}
+		//	log.Logger().WithFields(params).Error("failed to get deposit address")
+		//	return nil, resp.CodeInternalServerError
+		//}
 
-		account = &dao.Account{
-			SubWalletID: subWalletID,
-			ChainID:     dstChain,
-			ChainName:   chainName,
-			Address:     depositAddress,
-		}
-		if err := account.Create(); err != nil {
-			log.Logger().WithField("account", utils.JSON(account)).WithField("error", err).Error("failed to create account")
-			return nil, resp.CodeInternalServerError
-		}
+		//account = &dao.Account{
+		//	SubWalletID: subWalletID,
+		//	ChainID:     dstChain,
+		//	ChainName:   chainName,
+		//	//Address:     depositAddress,
+		//}
+		//if err := account.Create(); err != nil {
+		//	log.Logger().WithField("account", utils.JSON(account)).WithField("error", err).Error("failed to create account")
+		//	return nil, resp.CodeInternalServerError
+		//}
 	}
 
 	// create order
@@ -148,73 +143,4 @@ func OrderDetail(orderID uint64) (ret *entity.OrderDetailResponse, code int) {
 		Status:         order.Status,
 		CreatedAt:      order.CreatedAt.Unix(),
 	}, resp.CodeSuccess
-}
-
-func Mirror(orderID uint64) (code int) {
-	order, err := dao.NewDepositSwapWithID(orderID).First()
-	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
-		log.Logger().WithField("orderID", orderID).WithField("error", err).Error("failed to get deposit swap")
-		return resp.CodeInternalServerError
-	}
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return resp.CodeOrderNotFound
-	}
-
-	request := &types.TransferWithExchangeRequest{
-		Amount:         order.Amount,
-		CoinSymbol:     order.DstToken,
-		Direction:      10,
-		ExchangeCode:   10,
-		ExchangeUserID: "", // TODO: set exchange user id
-		ParentWalletID: 0,  // TODO: set parent wallet id
-		Status:         0,  // TODO: set status
-	}
-	transfer, err := ceffu.GetClient().TransferWithExchange(context.Background(), request)
-	if err != nil {
-		log.Logger().WithField("request", utils.JSON(request)).WithField("error", err).Error("failed to exchange")
-		return resp.CodeInternalServerError
-	}
-
-	update := &dao.DepositSwap{
-		Stage:       dao.SwapStageMirror,
-		Status:      dao.MirrorStatusPending,
-		OrderViewID: transfer.OrderViewId,
-	}
-	if err := dao.NewDepositSwapWithID(orderID).Updates(update); err != nil {
-		log.Logger().WithField("orderID", orderID).WithField("update", utils.JSON(update)).WithField("error", err).Error("failed to update deposit swap")
-		return resp.CodeInternalServerError
-	}
-	return resp.CodeSuccess
-}
-
-func Sell(orderID uint64, currencyPairs string, quantity float64) (code int) {
-	order, err := binance.GetClient().NewCreateOrderService().Symbol(currencyPairs).Side(BinanceOrderSideSELL).
-		Type(BinanceOrderTypeMarket).Quantity(quantity).NewOrderRespType(BinanceOrderRespTypeAck).Do(context.Background())
-	if err != nil {
-		params := map[string]interface{}{
-			"currencyPairs": currencyPairs,
-			"quantity":      quantity,
-			"error":         err,
-		}
-		log.Logger().WithFields(params).Error("failed to create sell order")
-		return resp.CodeInternalServerError
-	}
-	// todo failed to create order update failed status ？
-
-	result, ok := order.(connector.CreateOrderResponseACK)
-	if !ok {
-		// todo
-		return resp.CodeInternalServerError
-	}
-
-	update := &dao.DepositSwap{
-		Stage:           dao.SwapStageSell,
-		Status:          dao.SellStatusSent,
-		ExchangeOrderID: result.OrderId,
-	}
-	if err := dao.NewDepositSwapWithID(orderID).Updates(update); err != nil {
-		log.Logger().WithField("orderID", orderID).WithField("update", utils.JSON(update)).WithField("error", err).Error("failed to update deposit swap")
-		return resp.CodeInternalServerError
-	}
-	return resp.CodeSuccess
 }

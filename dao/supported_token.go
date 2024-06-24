@@ -1,8 +1,8 @@
 package dao
 
 import (
-	"github.com/mapprotocol/ceffu-fe-backend/resource/db"
-	"github.com/mapprotocol/ceffu-fe-backend/utils"
+	"github.com/mapprotocol/fe-backend/resource/db"
+	"github.com/mapprotocol/fe-backend/utils"
 	"time"
 )
 

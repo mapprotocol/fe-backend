@@ -1,8 +1,8 @@
 package dao
 
 import (
-	"github.com/mapprotocol/ceffu-fe-backend/resource/db"
-	"github.com/mapprotocol/ceffu-fe-backend/utils"
+	"github.com/mapprotocol/fe-backend/resource/db"
+	"github.com/mapprotocol/fe-backend/utils"
 	"time"
 )
 
@@ -43,8 +43,6 @@ const (
 	SwapStageMirror
 	SwapStageSell
 )
-
-const OldestLimit = 10
 
 type DepositSwap struct {
 	ID              uint64    `gorm:"column:id;type:bigint(20);primaryKey;autoIncrement:true" json:"id"`

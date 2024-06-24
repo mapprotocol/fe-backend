@@ -2,7 +2,7 @@ package http
 
 import (
 	"fmt"
-	"github.com/mapprotocol/ceffu-fe-backend/utils/reqerror"
+	"github.com/mapprotocol/fe-backend/utils/reqerror"
 	"io"
 	"net/http"
 	"strconv"

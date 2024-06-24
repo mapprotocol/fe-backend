@@ -2,7 +2,7 @@ package router
 
 import (
 	"github.com/gin-gonic/gin"
-	"github.com/mapprotocol/ceffu-fe-backend/controller"
+	"github.com/mapprotocol/fe-backend/controller"
 )
 
 func Register(engine *gin.Engine) {

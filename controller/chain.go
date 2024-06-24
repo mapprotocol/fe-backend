@@ -2,10 +2,10 @@ package controller
 
 import (
 	"github.com/gin-gonic/gin"
-	"github.com/mapprotocol/ceffu-fe-backend/entity"
-	"github.com/mapprotocol/ceffu-fe-backend/logic"
-	"github.com/mapprotocol/ceffu-fe-backend/resp"
-	"github.com/mapprotocol/ceffu-fe-backend/utils"
+	"github.com/mapprotocol/fe-backend/entity"
+	"github.com/mapprotocol/fe-backend/logic"
+	"github.com/mapprotocol/fe-backend/resp"
+	"github.com/mapprotocol/fe-backend/utils"
 )
 
 func SupportedChains(c *gin.Context) {
