@@ -1,6 +1,6 @@
-module github.com/mapprotocol/ceffu-fe-backend
+module github.com/mapprotocol/fe-backend
 
-go 1.20
+go 1.21
 
 require (
 	github.com/binance/binance-connector-go v0.5.2
