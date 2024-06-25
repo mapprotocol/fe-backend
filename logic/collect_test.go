@@ -14,6 +14,7 @@ import (
 	"github.com/btcsuite/btcd/wire"
 	"github.com/mapprotocol/fe-backend/third-party/mempool"
 	"testing"
+	"time"
 )
 
 var (
@@ -114,8 +115,20 @@ func makeNewTpAddress() (*btcec.PrivateKey, btcutil.Address, error) {
 	}
 	return privateKey, addr, nil
 }
-func waitTxOnChain(txhash *chainhash.Hash) error {
-	return nil
+func waitTxOnChain(txhash *chainhash.Hash, client *mempool.MempoolClient) (bool, error) {
+	time.Sleep(30 * time.Second)
+	fmt.Println("begin query....")
+	for {
+		resp, err := client.TransactionStatus(txhash)
+		if err != nil {
+			return false, err
+		}
+		if resp.Confirmed {
+			return true, nil
+		}
+		fmt.Println("try query again....")
+		time.Sleep(1 * time.Minute)
+	}
 }
 
 func TestGeneratePrivateKey(t *testing.T) {
@@ -160,8 +173,19 @@ func Test_getFeerate(t *testing.T) {
 	}
 	fmt.Println("FastestFee:", fees.FastestFee, "HalfHourFee", fees.HalfHourFee)
 }
-
 func Test_01(t *testing.T) {
+	network := &chaincfg.MainNetParams
+	if testnet {
+		network = &chaincfg.TestNet3Params
+	}
+	client := mempool.NewClient(network)
+	height, err := client.BlockHeight()
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println("height", height.String())
+}
+func Test_02(t *testing.T) {
 	network := &chaincfg.MainNetParams
 	if testnet {
 		network = &chaincfg.TestNet3Params
@@ -200,4 +224,24 @@ func Test_01(t *testing.T) {
 		panic(err)
 	}
 	fmt.Println("txhash:", txHash.String())
+
+	onChain, err := waitTxOnChain(txHash, client)
+	if err != nil {
+		fmt.Println("get tx state failed", err)
+		return
+	}
+	fmt.Println("txhash on chain", onChain)
+}
+
+func Test_03(t *testing.T) {
+	// collect test
+	//privStrs := []string{
+	//	"",
+	//	"",
+	//}
+	//addrStrs := []string{
+	//	"",
+	//	"",
+	//}
+
 }
