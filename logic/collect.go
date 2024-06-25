@@ -19,9 +19,9 @@ const (
 )
 
 var (
-	PrevAdminOutPoint2        *PrevOutPoint = nil
-	MinPreAdminOutPointValue2               = int64(20000)
-	NoMoreUTXO                              = errors.New("no more utxo")
+	//PrevAdminOutPoint2        *PrevOutPoint = nil
+	//MinPreAdminOutPointValue2               = int64(20000)
+	NoMoreUTXO = errors.New("no more utxo")
 )
 
 type PrevOutPoint struct {
