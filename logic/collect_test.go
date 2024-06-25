@@ -8,6 +8,7 @@ import (
 	"github.com/btcsuite/btcd/btcec/v2/schnorr"
 	"github.com/btcsuite/btcd/btcutil"
 	"github.com/btcsuite/btcd/chaincfg"
+	"github.com/btcsuite/btcd/chaincfg/chainhash"
 	btcmempool "github.com/btcsuite/btcd/mempool"
 	"github.com/btcsuite/btcd/txscript"
 	"github.com/btcsuite/btcd/wire"
@@ -16,7 +17,7 @@ import (
 )
 
 var (
-	testnet = false
+	testnet = true
 	priv1   = ""
 )
 
@@ -97,6 +98,26 @@ func makeMultiAddressTx(feerate, amount int64, outList []*PrevOutPoint, sender b
 	return commitTx, nil
 }
 
+func makeNewTpAddress() (*btcec.PrivateKey, btcutil.Address, error) {
+	privateKey, err := btcec.NewPrivateKey()
+	if err != nil {
+		return nil, nil, err
+	}
+	network := &chaincfg.MainNetParams
+	if testnet {
+		network = &chaincfg.TestNet3Params
+	}
+
+	addr, err := makeTpAddress(privateKey, network)
+	if err != nil {
+		return nil, nil, err
+	}
+	return privateKey, addr, nil
+}
+func waitTxOnChain(txhash *chainhash.Hash) error {
+	return nil
+}
+
 func TestGeneratePrivateKey(t *testing.T) {
 	privateKey, err := btcec.NewPrivateKey()
 	if err != nil {
@@ -139,21 +160,44 @@ func Test_getFeerate(t *testing.T) {
 	}
 	fmt.Println("FastestFee:", fees.FastestFee, "HalfHourFee", fees.HalfHourFee)
 }
-func Test_01(t *testing.T) {
-	//privateKeyBytes, err := hex.DecodeString(priv1)
-	//if err != nil {
-	//	panic(err)
-	//}
-	//senderPriv, _ := btcec.PrivKeyFromBytes(privateKeyBytes)
-	//network := &chaincfg.MainNetParams
-	//if testnet {
-	//	network = &chaincfg.TestNet3Params
-	//}
-	//client := mempool.NewClient(network)
-	//feerate := 50
 
-	//txHash, err := client.BroadcastTx(tx)
-	//if err != nil {
-	//	panic(err)
-	//}
+func Test_01(t *testing.T) {
+	network := &chaincfg.MainNetParams
+	if testnet {
+		network = &chaincfg.TestNet3Params
+	}
+	client := mempool.NewClient(network)
+	privateKeyBytes, err := hex.DecodeString(priv1)
+	if err != nil {
+		panic(err)
+	}
+	senderPriv, _ := btcec.PrivKeyFromBytes(privateKeyBytes)
+	sender, _ := btcutil.DecodeAddress("", network)
+
+	feerate := int64(5)
+	addrCount, amount := 3, int64(100)
+
+	addrs := make([]btcutil.Address, 0)
+	for i := 0; i < addrCount; i++ {
+		priv, addr, err := makeNewTpAddress()
+		if err != nil {
+			panic(err)
+		}
+		addrs = append(addrs, addr)
+		fmt.Println("priv:", hex.EncodeToString(priv.Serialize()), "addr:", addr.String())
+	}
+	outlist, err := gatherUTXO3(sender, client)
+	if err != nil {
+		panic(err)
+	}
+
+	tx, err := makeMultiAddressTx(feerate, amount, outlist, sender, senderPriv, addrs, client)
+	if err != nil {
+		panic(err)
+	}
+	txHash, err := client.BroadcastTx(tx)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println("txhash:", txHash.String())
 }

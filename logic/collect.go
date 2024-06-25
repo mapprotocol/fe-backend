@@ -218,7 +218,6 @@ func RunCollect(cfg *CollectCfg) error {
 			fmt.Println("collect the order...")
 			fmt.Println("collect the txhash", txHash.String())
 		}
-
 		time.Sleep(5 * time.Minute)
 	}
 	return nil
