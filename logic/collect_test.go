@@ -235,13 +235,64 @@ func Test_02(t *testing.T) {
 
 func Test_03(t *testing.T) {
 	// collect test
-	//privStrs := []string{
-	//	"",
-	//	"",
-	//}
-	//addrStrs := []string{
-	//	"",
-	//	"",
-	//}
+	privStrs := []string{
+		"",
+		"",
+	}
+	addrStrs := []string{
+		"",
+		"",
+	}
+	network := &chaincfg.MainNetParams
+	if testnet {
+		network = &chaincfg.TestNet3Params
+	}
+	client := mempool.NewClient(network)
+	privateKeyBytes, err := hex.DecodeString(priv1)
+	if err != nil {
+		panic(err)
+	}
+	feePriv, _ := btcec.PrivKeyFromBytes(privateKeyBytes)
+	feeSender, _ := btcutil.DecodeAddress("", network)
+	receiver, _ := btcutil.DecodeAddress("", network)
 
+	feerate, addrCount := int64(5), len(addrStrs)
+	privs, addrs := make([]*btcec.PrivateKey, 0), make([]btcutil.Address, 0)
+	for _, astr := range addrStrs {
+		addr, _ := btcutil.DecodeAddress(astr, network)
+		addrs = append(addrs, addr)
+	}
+	for _, astr := range privStrs {
+		pbytes, err := hex.DecodeString(astr)
+		if err != nil {
+			panic(err)
+		}
+		priv, _ := btcec.PrivKeyFromBytes(pbytes)
+		privs = append(privs, priv)
+	}
+	// make the tmp orders
+	items := make([]*OrderItem, 0)
+	for i := 0; i < addrCount; i++ {
+		item := &OrderItem{
+			OrderID: int64(i + 1),
+			Sender:  addrs[i],
+			Priv:    privs[i],
+		}
+		items = append(items, item)
+	}
+
+	tx, err := makeCollectTx1(feerate, receiver, feeSender, feePriv, items, client)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	txHash, err := client.BroadcastTx(tx)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println("collect the order...")
+	fmt.Println("collect the txhash", txHash.String())
+	fmt.Println("wait the tx on the chain")
+	waitTxOnChain(txHash, client)
+	fmt.Println("finish")
 }
