@@ -8,13 +8,11 @@ import (
 	"github.com/btcsuite/btcd/btcec/v2/schnorr"
 	"github.com/btcsuite/btcd/btcutil"
 	"github.com/btcsuite/btcd/chaincfg"
-	"github.com/btcsuite/btcd/chaincfg/chainhash"
 	btcmempool "github.com/btcsuite/btcd/mempool"
 	"github.com/btcsuite/btcd/txscript"
 	"github.com/btcsuite/btcd/wire"
 	"github.com/mapprotocol/fe-backend/third-party/mempool"
 	"testing"
-	"time"
 )
 
 var (
@@ -114,21 +112,6 @@ func makeNewTpAddress() (*btcec.PrivateKey, btcutil.Address, error) {
 		return nil, nil, err
 	}
 	return privateKey, addr, nil
-}
-func waitTxOnChain(txhash *chainhash.Hash, client *mempool.MempoolClient) (bool, error) {
-	time.Sleep(30 * time.Second)
-	fmt.Println("begin query....")
-	for {
-		resp, err := client.TransactionStatus(txhash)
-		if err != nil {
-			return false, err
-		}
-		if resp.Confirmed {
-			return true, nil
-		}
-		fmt.Println("try query again....")
-		time.Sleep(1 * time.Minute)
-	}
 }
 
 func TestGeneratePrivateKey(t *testing.T) {

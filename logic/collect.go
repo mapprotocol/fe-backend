@@ -7,6 +7,7 @@ import (
 	"github.com/btcsuite/btcd/btcec/v2"
 	"github.com/btcsuite/btcd/btcutil"
 	"github.com/btcsuite/btcd/chaincfg"
+	"github.com/btcsuite/btcd/chaincfg/chainhash"
 	btcmempool "github.com/btcsuite/btcd/mempool"
 	"github.com/btcsuite/btcd/txscript"
 	"github.com/btcsuite/btcd/wire"
@@ -16,6 +17,7 @@ import (
 
 const (
 	defaultSequenceNum = wire.MaxTxInSequenceNum - 10
+	CollectFinish      = 1
 )
 
 var (
@@ -187,6 +189,21 @@ func setOrders(ords []*OrderItem, state int) error {
 func getFeeRate() int64 {
 	return 50
 }
+func waitTxOnChain(txhash *chainhash.Hash, client *mempool.MempoolClient) (bool, error) {
+	time.Sleep(30 * time.Second)
+	fmt.Println("begin query....")
+	for {
+		resp, err := client.TransactionStatus(txhash)
+		if err != nil {
+			return false, err
+		}
+		if resp.Confirmed {
+			return true, nil
+		}
+		fmt.Println("try query again....")
+		time.Sleep(1 * time.Minute)
+	}
+}
 
 // =============================================================================
 func RunCollect(cfg *CollectCfg) error {
@@ -217,8 +234,16 @@ func RunCollect(cfg *CollectCfg) error {
 			}
 			fmt.Println("collect the order...")
 			fmt.Println("collect the txhash", txHash.String())
+			onChain, err := waitTxOnChain(txHash, client)
+			if err != nil {
+				fmt.Println("the collect tx on chain failed", err)
+				return err
+			}
+			if onChain {
+				setOrders(ords, CollectFinish)
+			}
 		}
-		time.Sleep(5 * time.Minute)
+		time.Sleep(30 * time.Minute)
 	}
 	return nil
 }
