@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"github.com/btcsuite/btcd/btcec/v2"
 	"github.com/btcsuite/btcd/btcutil"
 	"github.com/btcsuite/btcd/chaincfg"
@@ -41,7 +42,7 @@ type CollectCfg struct {
 	Receiver      btcutil.Address
 }
 type OrderItem struct {
-	OrderID int64
+	OrderID uint64
 	Sender  btcutil.Address
 	Priv    *btcec.PrivateKey
 	Amount  int64
@@ -209,8 +210,8 @@ func getOrders() ([]*OrderItem, error) {
 		}
 		orders = append(orders, &OrderItem{
 			OrderID: o.ID,
-			//Sender:  ,
-			//Priv:    ,
+			//Sender:  , // todo
+			//Priv:    , // todo
 			Amount: amount,
 		})
 	}
@@ -290,7 +291,9 @@ func RunCollect(cfg *CollectCfg) error {
 			log.Logger().WithField("txhash", txHash.String()).Info("collect the order")
 			onChain, err := waitTxOnChain(txHash, client)
 			if err != nil {
-				fmt.Println("the collect tx on chain failed", err)
+				//fmt.Println("the collect tx on chain failed", err)
+				log.Logger().WithField("error", err).Info("the collect tx on chain failed")
+				alarm.Slack(context.Background(), "the collect tx on chain failed")
 				return err
 			}
 			if onChain {
