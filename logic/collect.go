@@ -7,6 +7,7 @@ import (
 	"github.com/btcsuite/btcd/btcec/v2"
 	"github.com/btcsuite/btcd/btcutil"
 	"github.com/btcsuite/btcd/chaincfg"
+	"github.com/btcsuite/btcd/chaincfg/chainhash"
 	btcmempool "github.com/btcsuite/btcd/mempool"
 	"github.com/btcsuite/btcd/txscript"
 	"github.com/btcsuite/btcd/wire"
@@ -20,12 +21,13 @@ import (
 
 const (
 	defaultSequenceNum = wire.MaxTxInSequenceNum - 10
+	CollectFinish      = 1
 )
 
 var (
-	PrevAdminOutPoint2        *PrevOutPoint = nil
-	MinPreAdminOutPointValue2               = int64(20000)
-	NoMoreUTXO                              = errors.New("no more utxo")
+	//PrevAdminOutPoint2        *PrevOutPoint = nil
+	//MinPreAdminOutPointValue2               = int64(20000)
+	NoMoreUTXO = errors.New("no more utxo")
 )
 
 type PrevOutPoint struct {
@@ -39,7 +41,7 @@ type CollectCfg struct {
 	Receiver      btcutil.Address
 }
 type OrderItem struct {
-	OrderID uint64
+	OrderID int64
 	Sender  btcutil.Address
 	Priv    *btcec.PrivateKey
 	Amount  int64
@@ -231,6 +233,21 @@ func setOrders(ords []*OrderItem) error {
 func getFeeRate() int64 {
 	return 50
 }
+func waitTxOnChain(txhash *chainhash.Hash, client *mempool.MempoolClient) (bool, error) {
+	time.Sleep(30 * time.Second)
+	fmt.Println("begin query....")
+	for {
+		resp, err := client.TransactionStatus(txhash)
+		if err != nil {
+			return false, err
+		}
+		if resp.Confirmed {
+			return true, nil
+		}
+		fmt.Println("try query again....")
+		time.Sleep(1 * time.Minute)
+	}
+}
 
 // =============================================================================
 func RunCollect(cfg *CollectCfg) error {
@@ -271,9 +288,16 @@ func RunCollect(cfg *CollectCfg) error {
 			//fmt.Println("collect the order...")
 			//fmt.Println("collect the txhash", txHash.String())
 			log.Logger().WithField("txhash", txHash.String()).Info("collect the order")
+			onChain, err := waitTxOnChain(txHash, client)
+			if err != nil {
+				fmt.Println("the collect tx on chain failed", err)
+				return err
+			}
+			if onChain {
+				setOrders(ords)
+			}
 		}
-
-		time.Sleep(5 * time.Minute)
+		time.Sleep(30 * time.Minute)
 	}
 	return nil
 }

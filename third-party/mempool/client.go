@@ -1,10 +1,12 @@
 package mempool
 
 import (
+	"encoding/json"
 	"fmt"
 	"github.com/pkg/errors"
 	"io"
 	"log"
+	"math/big"
 	"net/http"
 
 	"github.com/btcsuite/btcd/chaincfg"
@@ -53,4 +55,17 @@ func Request(method, baseURL, subPath string, requestBody io.Reader) ([]byte, er
 		return nil, errors.Wrap(err, "failed to read response body")
 	}
 	return body, nil
+}
+
+func (c *MempoolClient) BlockHeight() (*big.Int, error) {
+	res, err := c.request(http.MethodGet, fmt.Sprintf("/blocks/tip/height"), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	resp := big.NewInt(0)
+	if err := json.Unmarshal(res, resp); err != nil {
+		return nil, err
+	}
+	return resp, nil
 }

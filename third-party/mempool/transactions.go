@@ -19,6 +19,14 @@ type TransactionStatusResponse struct {
 	BlockTime   uint64 `json:"block_time"`
 }
 
+type RecommendedFeesResponse struct {
+	FastestFee  int64 `json:"fastestFee"`
+	HalfHourFee int64 `json:"halfHourFee"`
+	HourFee     int64 `json:"hourFee"`
+	EconomyFee  int64 `json:"economyFee"`
+	MinimumFee  int64 `json:"minimumFee"`
+}
+
 func (c *MempoolClient) GetRawTransaction(txHash *chainhash.Hash) (*wire.MsgTx, error) {
 	res, err := c.request(http.MethodGet, fmt.Sprintf("/tx/%s/raw", txHash.String()), nil)
 	if err != nil {
@@ -57,6 +65,19 @@ func (c *MempoolClient) TransactionStatus(txHash *chainhash.Hash) (*TransactionS
 	}
 
 	resp := &TransactionStatusResponse{}
+	if err := json.Unmarshal(res, resp); err != nil {
+		return nil, err
+	}
+	return resp, nil
+}
+
+func (c *MempoolClient) RecommendedFees() (*RecommendedFeesResponse, error) {
+	res, err := c.request(http.MethodGet, "/v1/fees/recommended", nil)
+	if err != nil {
+		return nil, err
+	}
+
+	resp := &RecommendedFeesResponse{}
 	if err := json.Unmarshal(res, resp); err != nil {
 		return nil, err
 	}
