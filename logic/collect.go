@@ -1,16 +1,18 @@
 package logic
 
 import (
+	"context"
 	"encoding/hex"
 	"errors"
-	"fmt"
 	"github.com/btcsuite/btcd/btcec/v2"
 	"github.com/btcsuite/btcd/btcutil"
 	"github.com/btcsuite/btcd/chaincfg"
 	btcmempool "github.com/btcsuite/btcd/mempool"
 	"github.com/btcsuite/btcd/txscript"
 	"github.com/btcsuite/btcd/wire"
+	"github.com/mapprotocol/fe-backend/resource/log"
 	"github.com/mapprotocol/fe-backend/third-party/mempool"
+	"github.com/mapprotocol/fe-backend/utils/alarm"
 	"time"
 )
 
@@ -208,15 +210,20 @@ func RunCollect(cfg *CollectCfg) error {
 		if len(ords) > 0 {
 			tx, err := makeCollectTx1(feerate, cfg.Receiver, cfg.FeeAddress, feePriv, ords, client)
 			if err != nil {
-				fmt.Println(err)
-				return err
+				//fmt.Println(err)
+				log.Logger().WithField("error", err).Info("collect the order")
+				alarm.Slack(context.Background(), "failed to make collect tx")
+				return err // todo
 			}
 			txHash, err := client.BroadcastTx(tx)
 			if err != nil {
-				panic(err)
+				log.Logger().WithField("error", err).Error("failed to broadcast tx")
+				alarm.Slack(context.Background(), "failed to broadcast tx")
+				panic(err) // todo
 			}
-			fmt.Println("collect the order...")
-			fmt.Println("collect the txhash", txHash.String())
+			//fmt.Println("collect the order...")
+			//fmt.Println("collect the txhash", txHash.String())
+			log.Logger().WithField("txhash", txHash.String()).Info("collect the order")
 		}
 
 		time.Sleep(5 * time.Minute)
