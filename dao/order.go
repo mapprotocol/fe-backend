@@ -43,7 +43,7 @@ type Order struct {
 	DstToken          string    `gorm:"column:dst_token;type:varchar(255)" json:"dst_token"`
 	Receiver          string    `gorm:"column:receiver;type:varchar(255)" json:"receiver"`
 	OutAmount         string    `gorm:"column:out_amount;type:varchar(255)" json:"out_amount"`
-	OutTxHash         string    `gorm:"column:tx_hash;type:varchar(255)" json:"tx_hash"`
+	OutTxHash         string    `gorm:"column:out_tx_hash;type:varchar(255)" json:"out_tx_hash"`
 	Action            uint8     `gorm:"column:action;type:tinyint(4)" json:"action"`
 	Stage             uint8     `gorm:"column:stage;type:tinyint(4)" json:"stage"`
 	Status            int32     `gorm:"column:status;type:int(11)" json:"status"`
