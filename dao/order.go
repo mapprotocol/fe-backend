@@ -19,6 +19,7 @@ const (
 const (
 	OrderStag1 = iota + 1
 	OrderStag2
+	OrderStag3
 )
 
 const (
@@ -26,6 +27,8 @@ const (
 	OrderStatusConfirmed
 	OrderStatusFailed
 )
+
+const OrderStatusCollected = 1
 
 type Order struct {
 	ID        uint64    `gorm:"column:id;type:bigint(20);primaryKey;autoIncrement:true" json:"id"`
@@ -69,6 +72,10 @@ func (o *Order) Create() error {
 
 func (o *Order) Updates(update *Order) error {
 	return db.GetDB().Where(o).Updates(update).Error
+}
+
+func (o *Order) UpdatesByIDs(ids []uint64, update *Order) error {
+	return db.GetDB().Where("id in ?", ids).Updates(update).Error
 }
 
 func (o *Order) First() (get *Order, err error) {

@@ -10,9 +10,11 @@ import (
 	btcmempool "github.com/btcsuite/btcd/mempool"
 	"github.com/btcsuite/btcd/txscript"
 	"github.com/btcsuite/btcd/wire"
+	"github.com/mapprotocol/fe-backend/dao"
 	"github.com/mapprotocol/fe-backend/resource/log"
 	"github.com/mapprotocol/fe-backend/third-party/mempool"
 	"github.com/mapprotocol/fe-backend/utils/alarm"
+	"strconv"
 	"time"
 )
 
@@ -37,7 +39,7 @@ type CollectCfg struct {
 	Receiver      btcutil.Address
 }
 type OrderItem struct {
-	OrderID int64
+	OrderID uint64
 	Sender  btcutil.Address
 	Priv    *btcec.PrivateKey
 	Amount  int64
@@ -180,11 +182,51 @@ func getUtxoFromOrders(items []*OrderItem, btcApiClient *mempool.MempoolClient) 
 	return privs, outlists, nil
 }
 
-func getOrders() []*OrderItem {
-	return nil
+func getOrders() ([]*OrderItem, error) {
+	order := dao.Order{
+		Action: dao.OrderActionToEVM,
+		Stage:  dao.OrderStag2,
+		Status: dao.OrderStatusConfirmed,
+	}
+	gotOrders, _, err := order.Find(nil, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	orders := make([]*OrderItem, 0, len(gotOrders))
+	for _, o := range gotOrders {
+		amount, err := strconv.ParseInt(o.InAmount, 10, 64)
+		if err != nil {
+			params := map[string]interface{}{
+				"order_id": o.ID,
+				"amount":   o.InAmount,
+				"error":    err,
+			}
+			log.Logger().WithFields(params).Error("failed to parse amount")
+			return nil, err
+		}
+		orders = append(orders, &OrderItem{
+			OrderID: o.ID,
+			//Sender:  ,
+			//Priv:    ,
+			Amount: amount,
+		})
+	}
+
+	return []*OrderItem{}, nil
 }
-func setOrders(ords []*OrderItem, state int) error {
-	return nil
+
+func setOrders(ords []*OrderItem) error {
+	ids := make([]uint64, 0, len(ords))
+	for _, o := range ords {
+		ids = append(ids, o.OrderID)
+	}
+
+	update := &dao.Order{
+		Stage:  dao.OrderStag3,
+		Status: dao.OrderStatusCollected,
+	}
+	return dao.NewOrder().UpdatesByIDs(ids, update)
 }
 func getFeeRate() int64 {
 	return 50
@@ -205,7 +247,12 @@ func RunCollect(cfg *CollectCfg) error {
 
 	for {
 		// get the orders
-		ords := getOrders()
+		ords, err := getOrders()
+		if err != nil {
+			log.Logger().WithField("error", err).Error("failed to get orders")
+			alarm.Slack(context.Background(), "failed to get orders")
+			return err // todo
+		}
 		feerate := getFeeRate()
 		if len(ords) > 0 {
 			tx, err := makeCollectTx1(feerate, cfg.Receiver, cfg.FeeAddress, feePriv, ords, client)
