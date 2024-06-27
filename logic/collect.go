@@ -5,6 +5,9 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"strconv"
+	"time"
+
 	"github.com/btcsuite/btcd/btcec/v2"
 	"github.com/btcsuite/btcd/btcutil"
 	"github.com/btcsuite/btcd/chaincfg"
@@ -16,8 +19,6 @@ import (
 	"github.com/mapprotocol/fe-backend/resource/log"
 	"github.com/mapprotocol/fe-backend/third-party/mempool"
 	"github.com/mapprotocol/fe-backend/utils/alarm"
-	"strconv"
-	"time"
 )
 
 const (
@@ -28,7 +29,8 @@ const (
 var (
 	//PrevAdminOutPoint2        *PrevOutPoint = nil
 	//MinPreAdminOutPointValue2               = int64(20000)
-	NoMoreUTXO = errors.New("no more utxo")
+	MinBalanceInFeeAddress = int64(20000)
+	NoMoreUTXO             = errors.New("no more utxo")
 )
 
 type PrevOutPoint struct {
@@ -248,6 +250,29 @@ func setOrders(ords []*OrderItem) error {
 	}
 	return dao.NewOrder().UpdatesByIDs(ids, update)
 }
+func orderInfos(items []*OrderItem) (string, int64) {
+	str, all := "", int64(0)
+	for _, item := range items {
+		all = all + item.Amount
+		s := fmt.Sprintf("[orderID=%v,amount=%v]", item.OrderID, item.Amount)
+		str = str + s + "\n"
+	}
+	return str, all
+}
+func checkFeeAddress(addr btcutil.Address, client *mempool.MempoolClient) (bool, error) {
+	all := int64(0)
+	outs, err := gatherUTXO3(addr, client)
+	if err != nil {
+		return false, err
+	}
+	for _, out := range outs {
+		all = all + out.Value
+	}
+	if all < MinBalanceInFeeAddress {
+		return false, nil
+	}
+	return true, nil
+}
 func getFeeRate(test bool, client *mempool.MempoolClient) int64 {
 	if test {
 		return 5
@@ -289,13 +314,28 @@ func RunCollect(cfg *CollectCfg) error {
 
 	for {
 		// get the orders
+		fmt.Println("begin collecting.....")
 		ords, err := getOrders()
 		if err != nil {
 			log.Logger().WithField("error", err).Error("failed to get orders")
 			alarm.Slack(context.Background(), "failed to get orders")
 			return err // todo
 		}
+		strOrder, allAmount := orderInfos(ords)
 		feerate := getFeeRate(cfg.Testnet, client)
+
+		fmt.Println("orders:", strOrder)
+		fmt.Println("all amount", allAmount, "feerate", feerate)
+
+		enough, err := checkFeeAddress(cfg.FeeAddress, client)
+		if err != nil {
+			fmt.Println("checkFeeAddress failed", err)
+			return err
+		}
+		if !enough {
+			fmt.Println("the fee address has not enough balance")
+			return errors.New("the fee address has not enough balance")
+		}
 		if len(ords) > 0 {
 			tx, err := makeCollectTx1(feerate, cfg.Receiver, cfg.FeeAddress, feePriv, ords, client)
 			if err != nil {
@@ -321,7 +361,10 @@ func RunCollect(cfg *CollectCfg) error {
 				return err
 			}
 			if onChain {
-				setOrders(ords)
+				err = setOrders(ords)
+				if err != nil {
+					fmt.Println("set order failed", err)
+				}
 			}
 		}
 		time.Sleep(30 * time.Minute)
