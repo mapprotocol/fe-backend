@@ -174,15 +174,15 @@ func Test_02(t *testing.T) {
 		network = &chaincfg.TestNet3Params
 	}
 	client := mempool.NewClient(network)
-	privateKeyBytes, err := hex.DecodeString(priv1)
+	privateKeyBytes, err := hex.DecodeString("8b04a45a7f66395aa3f61fbd2bd1172b0a5f4e64891729dc9e49a9a9a6eb05fc")
 	if err != nil {
 		panic(err)
 	}
 	senderPriv, _ := btcec.PrivKeyFromBytes(privateKeyBytes)
-	sender, _ := btcutil.DecodeAddress("", network)
+	sender, _ := btcutil.DecodeAddress("tb1p23dgrhckt9vr24yuqdl3yu2xwj8em3wmn40ly0dtuf0lk0kk80jqesjhk4", network)
 
 	feerate := int64(5)
-	addrCount, amount := 3, int64(100)
+	addrCount, amount := 5, int64(100)
 
 	addrs := make([]btcutil.Address, 0)
 	for i := 0; i < addrCount; i++ {
@@ -219,25 +219,31 @@ func Test_02(t *testing.T) {
 func Test_03(t *testing.T) {
 	// collect test
 	privStrs := []string{
-		"",
-		"",
+		"c2a945ac319edcc497a2237acbc7077398b3f906efff9707bbd1c403928e6ada",
+		"6a4b301b961c50dfd56d84cd0c28b33b87a33669c811840fadaa83ef7d00e66f",
+		"b7f3592b75f5894ede91d408c4abffef21d0ca5e3f9d9fbec8ac9384b8595331",
+		"6f4dbb1e415761d97e008d8cee77abb1475fdba033547e8486cb17b436e959c3",
+		"253b06999cc7b531d6f53de8e43c1fc77e2bd238516c1d6d61e8954f7d32d34a",
 	}
 	addrStrs := []string{
-		"",
-		"",
+		"tb1p42xadanfhg82s8wm4yw59ys4vuunsyyvzteacdvta2z4p4vrs29satct4l",
+		"tb1pfx50n7wkdnha0rh3j70363phkv50s4pafrg6s9cfhhtxtxusf4xs46w8ve",
+		"tb1pew99gkv36gerrs7shy4tpr952250n02flnz30ezjy2qmz2rd7h6qn4e676",
+		"tb1psud7xj9sncur40xe4a3y72ngld2aq6pw36rjcn79ncq4ga656mjq8jnwgw",
+		"tb1pn4ammcs3dyzyfg3tk39ss8ly6d5ndpu9z75c9fg693c2gads7v9q4l0yys",
 	}
 	network := &chaincfg.MainNetParams
 	if testnet {
 		network = &chaincfg.TestNet3Params
 	}
 	client := mempool.NewClient(network)
-	privateKeyBytes, err := hex.DecodeString(priv1)
+	privateKeyBytes, err := hex.DecodeString("8b04a45a7f66395aa3f61fbd2bd1172b0a5f4e64891729dc9e49a9a9a6eb05fc")
 	if err != nil {
 		panic(err)
 	}
 	feePriv, _ := btcec.PrivKeyFromBytes(privateKeyBytes)
-	feeSender, _ := btcutil.DecodeAddress("", network)
-	receiver, _ := btcutil.DecodeAddress("", network)
+	feeSender, _ := btcutil.DecodeAddress("tb1p23dgrhckt9vr24yuqdl3yu2xwj8em3wmn40ly0dtuf0lk0kk80jqesjhk4", network)
+	receiver, _ := btcutil.DecodeAddress("tb1pwf8u8g9pxnnm3kleec2wwk790y0g7nuvm7qyvu7xl8752c9cqe7swdaakj", network)
 
 	feerate, addrCount := int64(5), len(addrStrs)
 	privs, addrs := make([]*btcec.PrivateKey, 0), make([]btcutil.Address, 0)

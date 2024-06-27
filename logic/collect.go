@@ -48,6 +48,23 @@ type OrderItem struct {
 	Amount  int64
 }
 
+func gatherUTXOForItem(sender btcutil.Address, client *mempool.MempoolClient) ([]*PrevOutPoint, error) {
+	outPointList := make([]*PrevOutPoint, 0)
+	unspentList, err := client.ListUnspent(sender)
+	if err != nil {
+		return nil, err
+	}
+	if len(unspentList) == 0 {
+		return nil, NoMoreUTXO
+	}
+	for i := range unspentList {
+		outPointList = append(outPointList, &PrevOutPoint{
+			Outpoint: unspentList[i].Outpoint,
+			Value:    unspentList[i].Output.Value,
+		})
+	}
+	return outPointList, nil
+}
 func gatherUTXO3(sender btcutil.Address, client *mempool.MempoolClient) ([]*PrevOutPoint, error) {
 	outPointList := make([]*PrevOutPoint, 0)
 	unspentList, err := client.ListUnspent(sender)
@@ -155,19 +172,19 @@ func makeCollectTx0(feerate int64, receiverAddress, feeAddress btcutil.Address, 
 // make the collect tx
 func makeCollectTx1(feerate int64, receiverAddress, feeAddress btcutil.Address, feePriv *btcec.PrivateKey,
 	items []*OrderItem, btcApiClient *mempool.MempoolClient) (*wire.MsgTx, error) {
-	feeItem := &OrderItem{
-		Sender: feeAddress,
-		Priv:   feePriv,
-		Amount: 0,
-	}
-	allItems := make([]*OrderItem, 0)
-	allItems = append(allItems, items...)
-	allItems = append(allItems, feeItem)
 
-	privs, outlists, err := getUtxoFromOrders(allItems, btcApiClient)
+	privs, outlists, err := getUtxoFromOrders(items, btcApiClient)
 	if err != nil {
 		return nil, err
 	}
+	// get the fee_address utxo
+	feeOutlist, err := gatherUTXO3(feeAddress, btcApiClient)
+	if err != nil {
+		return nil, err
+	}
+	privs = append(privs, feePriv)
+	outlists = append(outlists, feeOutlist)
+
 	tx, err := makeCollectTx0(feerate, receiverAddress, feeAddress, outlists, privs, btcApiClient)
 	return tx, err
 }
@@ -175,7 +192,7 @@ func makeCollectTx1(feerate int64, receiverAddress, feeAddress btcutil.Address, 
 func getUtxoFromOrders(items []*OrderItem, btcApiClient *mempool.MempoolClient) ([]*btcec.PrivateKey, [][]*PrevOutPoint, error) {
 	privs, outlists := make([]*btcec.PrivateKey, 0), make([][]*PrevOutPoint, 0)
 	for _, item := range items {
-		outlist, err := gatherUTXO3(item.Sender, btcApiClient)
+		outlist, err := gatherUTXOForItem(item.Sender, btcApiClient)
 		if err != nil && err != NoMoreUTXO {
 			return nil, nil, err
 		}
@@ -231,8 +248,15 @@ func setOrders(ords []*OrderItem) error {
 	}
 	return dao.NewOrder().UpdatesByIDs(ids, update)
 }
-func getFeeRate() int64 {
-	return 50
+func getFeeRate(test bool, client *mempool.MempoolClient) int64 {
+	if test {
+		return 5
+	}
+	resp, err := client.RecommendedFees()
+	if err != nil {
+		return 50
+	}
+	return resp.FastestFee
 }
 func waitTxOnChain(txhash *chainhash.Hash, client *mempool.MempoolClient) (bool, error) {
 	time.Sleep(30 * time.Second)
@@ -271,7 +295,7 @@ func RunCollect(cfg *CollectCfg) error {
 			alarm.Slack(context.Background(), "failed to get orders")
 			return err // todo
 		}
-		feerate := getFeeRate()
+		feerate := getFeeRate(cfg.Testnet, client)
 		if len(ords) > 0 {
 			tx, err := makeCollectTx1(feerate, cfg.Receiver, cfg.FeeAddress, feePriv, ords, client)
 			if err != nil {
