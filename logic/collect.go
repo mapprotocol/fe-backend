@@ -261,7 +261,13 @@ func getOrders(network *chaincfg.Params) ([]*OrderItem, error) {
 
 	return []*OrderItem{}, nil
 }
-
+func getLatestCollectInfo() (*chainhash.Hash, []*OrderItem, error) {
+	// txHash, err := chainhash.NewHashFromStr(string(res))
+	return nil, nil, nil
+}
+func setLatestCollectInfo(txhash *chainhash.Hash, orders []*OrderItem) error {
+	return nil
+}
 func setOrders(ords []*OrderItem) error {
 	ids := make([]uint64, 0, len(ords))
 	for _, o := range ords {
@@ -274,6 +280,7 @@ func setOrders(ords []*OrderItem) error {
 	}
 	return dao.NewOrder().UpdatesByIDs(ids, update)
 }
+
 func orderInfos(items []*OrderItem) (string, int64) {
 	str, all := "", int64(0)
 	for _, item := range items {
