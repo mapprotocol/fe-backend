@@ -299,7 +299,7 @@ func checkFeeAddress(addr btcutil.Address, client *mempool.MempoolClient) (bool,
 }
 func getFeeRate(test bool, client *mempool.MempoolClient) int64 {
 	if test {
-		return 5
+		return 20
 	}
 	resp, err := client.RecommendedFees()
 	if err != nil {
