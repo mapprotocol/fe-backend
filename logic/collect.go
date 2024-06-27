@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"github.com/mapprotocol/fe-backend/utils"
 	"strconv"
 	"time"
 
@@ -204,15 +205,15 @@ func getUtxoFromOrders(items []*OrderItem, btcApiClient *mempool.MempoolClient) 
 	return privs, outlists, nil
 }
 
-func getOrders(network *chaincfg.Params) ([]*OrderItem, error) {
+func getOrders(limit int, network *chaincfg.Params) ([]*OrderItem, int64, error) {
 	order := dao.Order{
 		Action: dao.OrderActionToEVM,
 		Stage:  dao.OrderStag2,
 		Status: dao.OrderStatusConfirmed,
 	}
-	gotOrders, _, err := order.Find(nil, nil)
+	gotOrders, count, err := order.Find(nil, dao.Paginate(1, limit))
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
 	orders := make([]*OrderItem, 0, len(gotOrders))
@@ -226,7 +227,7 @@ func getOrders(network *chaincfg.Params) ([]*OrderItem, error) {
 				"error":    err,
 			}
 			log.Logger().WithFields(params).Error("decode relayer address failed")
-			return nil, err
+			return nil, 0, err
 		}
 
 		privateKeyBytes, err := hex.DecodeString(o.RelayerPrivateKey)
@@ -236,7 +237,7 @@ func getOrders(network *chaincfg.Params) ([]*OrderItem, error) {
 				"error":    err,
 			}
 			log.Logger().WithFields(params).Error("failed to decode private key")
-			return nil, err
+			return nil, 0, err
 		}
 		privakeKey, _ := btcec.PrivKeyFromBytes(privateKeyBytes)
 
@@ -248,7 +249,7 @@ func getOrders(network *chaincfg.Params) ([]*OrderItem, error) {
 				"error":    err,
 			}
 			log.Logger().WithFields(params).Error("failed to parse amount")
-			return nil, err
+			return nil, 0, err
 		}
 
 		orders = append(orders, &OrderItem{
@@ -259,16 +260,51 @@ func getOrders(network *chaincfg.Params) ([]*OrderItem, error) {
 		})
 	}
 
-	return []*OrderItem{}, nil
+	return orders, count, nil
 }
+
 func getLatestCollectInfo() (*chainhash.Hash, []*OrderItem, error) {
-	// txHash, err := chainhash.NewHashFromStr(string(res))
-	return nil, nil, nil
+	collect := &dao.Collect{
+		Status: dao.CollectStatusPending,
+	}
+	gotCollects, _, err := collect.Find(nil, nil)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	orders := make([]*OrderItem, 0, len(gotCollects))
+	for _, c := range gotCollects {
+		orders = append(orders, &OrderItem{
+			OrderID: c.OrderID,
+		})
+	}
+	txHash, err := chainhash.NewHashFromStr(gotCollects[0].TxHash)
+	if err != nil {
+		return nil, nil, err
+	}
+	return txHash, orders, nil
 }
+
 func setLatestCollectInfo(txhash *chainhash.Hash, orders []*OrderItem) error {
+	collect := &dao.Collect{
+		TxHash: txhash.String(),
+	}
+	update := &dao.Collect{
+		Status: dao.CollectStatusConfirmed,
+	}
+	if err := collect.Updates(update); err != nil {
+		params := map[string]interface{}{
+			"tx_hash": txhash.String(),
+			"status":  dao.CollectStatusConfirmed,
+			"error":   err,
+		}
+		log.Logger().WithFields(params).Error("failed to update collect status")
+		return err
+	}
 	return nil
 }
-func setOrders(ords []*OrderItem) error {
+
+func setOrders(ords []*OrderItem, status uint8) error {
 	ids := make([]uint64, 0, len(ords))
 	for _, o := range ords {
 		ids = append(ids, o.OrderID)
@@ -276,9 +312,18 @@ func setOrders(ords []*OrderItem) error {
 
 	update := &dao.Order{
 		Stage:  dao.OrderStag3,
-		Status: dao.OrderStatusCollected,
+		Status: status,
 	}
-	return dao.NewOrder().UpdatesByIDs(ids, update)
+	if err := dao.NewOrder().UpdatesByIDs(ids, update); err != nil {
+		params := map[string]interface{}{
+			"ids":    utils.JSON(ids),
+			"update": utils.JSON(update),
+			"error":  err,
+		}
+		log.Logger().WithFields(params).Error("failed to update order status")
+		return err
+	}
+	return nil
 }
 
 func orderInfos(items []*OrderItem) (string, int64) {

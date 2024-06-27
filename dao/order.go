@@ -28,8 +28,6 @@ const (
 	OrderStatusFailed
 )
 
-const OrderStatusCollected = 1
-
 type Order struct {
 	ID                uint64    `gorm:"column:id;type:bigint(20);primaryKey;autoIncrement:true" json:"id"`
 	SrcChain          uint64    `gorm:"column:src_chain;type:bigint(20)" json:"src_chain"`
@@ -46,7 +44,7 @@ type Order struct {
 	OutTxHash         string    `gorm:"column:out_tx_hash;type:varchar(255)" json:"out_tx_hash"`
 	Action            uint8     `gorm:"column:action;type:tinyint(4)" json:"action"`
 	Stage             uint8     `gorm:"column:stage;type:tinyint(4)" json:"stage"`
-	Status            int32     `gorm:"column:status;type:int(11)" json:"status"`
+	Status            uint8     `gorm:"column:status;type:tinyint(4)" json:"status"`
 	CreatedAt         time.Time `gorm:"column:created_at;type:datetime" json:"created_at"`
 	UpdatedAt         time.Time `gorm:"column:updated_at;type:datetime" json:"updated_at"`
 }
