@@ -348,35 +348,37 @@ func RunCollect(cfg *CollectCfg) error {
 		strOrder, allAmount := orderInfos(ords)
 		feerate := getFeeRate(cfg.Testnet, client)
 
-		fmt.Println("orders:", strOrder)
-		fmt.Println("all amount", allAmount, "feerate", feerate)
+		log.Logger().WithField("orders", strOrder).Info("collect the order")
+		log.Logger().WithField("all amount", allAmount).WithField("feerate", feerate).Info("collect the order")
 
 		enough, err := checkFeeAddress(cfg.FeeAddress, client)
 		if err != nil {
-			fmt.Println("checkFeeAddress failed", err)
+			log.Logger().WithField("error", err).Error("failed to checkFeeAddress")
+			alarm.Slack(context.Background(), "check fee address balance failed")
 			return err
 		}
 		if !enough {
-			fmt.Println("the fee address has not enough balance")
-			return errors.New("the fee address has not enough balance")
+			e := errors.New("the fee address has not enough balance")
+			log.Logger().WithField("error", e).Error("low balance in fee address")
+			alarm.Slack(context.Background(), "low balance in fee address")
 		}
+
 		if len(ords) > 0 {
 			tx, err := makeCollectTx1(feerate, cfg.Receiver, cfg.FeeAddress, feePriv, ords, client)
 			if err != nil {
 				//fmt.Println(err)
-				log.Logger().WithField("error", err).Info("collect the order")
+				log.Logger().WithField("error", err).Info("make collect tx")
 				alarm.Slack(context.Background(), "failed to make collect tx")
-				return err // todo
+				return err
 			}
 			txHash, err := client.BroadcastTx(tx)
 			if err != nil {
 				log.Logger().WithField("error", err).Error("failed to broadcast tx")
 				alarm.Slack(context.Background(), "failed to broadcast tx")
-				panic(err) // todo
+				return err
 			}
-			//fmt.Println("collect the order...")
-			//fmt.Println("collect the txhash", txHash.String())
-			log.Logger().WithField("txhash", txHash.String()).Info("collect the order")
+			log.Logger().WithField("txhash", txHash.String()).Info("broadcast the collect tx")
+
 			onChain, err := waitTxOnChain(txHash, client)
 			if err != nil {
 				//fmt.Println("the collect tx on chain failed", err)
@@ -387,7 +389,7 @@ func RunCollect(cfg *CollectCfg) error {
 			if onChain {
 				err = setOrders(ords)
 				if err != nil {
-					fmt.Println("set order failed", err)
+					log.Logger().WithField("error", err).Info("set orders state failed")
 				}
 			}
 		}
