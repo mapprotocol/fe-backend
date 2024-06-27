@@ -1,16 +1,16 @@
 package main
 
 import (
-	"github.com/mapprotocol/fe-backend/logic"
-	"github.com/mapprotocol/fe-backend/utils/alarm"
-	"github.com/spf13/viper"
-	"os"
-	"os/signal"
-	"syscall"
-
+	"context"
+	"fmt"
+	"github.com/btcsuite/btcd/btcutil"
+	"github.com/btcsuite/btcd/chaincfg"
 	"github.com/mapprotocol/fe-backend/config"
+	"github.com/mapprotocol/fe-backend/logic"
 	"github.com/mapprotocol/fe-backend/resource/db"
 	"github.com/mapprotocol/fe-backend/resource/log"
+	"github.com/mapprotocol/fe-backend/utils/alarm"
+	"github.com/spf13/viper"
 )
 
 func main() {
@@ -24,19 +24,31 @@ func main() {
 	dbConf := viper.GetStringMapString("database")
 	db.Init(dbConf["user"], dbConf["password"], dbConf["host"], dbConf["port"], dbConf["name"])
 
-	cfg := &logic.CollectCfg{
-		Testnet:       viper.GetBool("testnet"),
-		StrFeePrivkey: viper.GetString("feeprivatekey"),
-		//FeeAddress:    viper.GetString("feeaddress"), // todo
-		//Receiver:      viper.GetString("receiver"), // todo
+	testnet := viper.GetBool("testnet")
+	network := &chaincfg.MainNetParams
+	if testnet {
+		network = &chaincfg.TestNet3Params
 	}
-	logic.RunCollect(cfg)
+	feeAddress, err := btcutil.DecodeAddress(viper.GetString("feeaddress"), network)
+	if err != nil {
+		log.Logger().WithField("error", err).Error("decode fee address failed")
+		return
+	}
+	receiverAddress, err := btcutil.DecodeAddress(viper.GetString("receiver"), network)
+	if err != nil {
+		log.Logger().WithField("error", err).Error("decode fee address failed")
+		return
+	}
 
-	sigs := make(chan os.Signal, 1)
-	signal.Notify(sigs, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
-	defer signal.Stop(sigs)
-	select {
-	case <-sigs:
-		log.Logger().Info("Signal received, shutting down now.")
+	cfg := &logic.CollectCfg{
+		Testnet:       testnet,
+		StrFeePrivkey: viper.GetString("feeprivatekey"),
+		FeeAddress:    feeAddress,
+		Receiver:      receiverAddress,
+	}
+	if err := logic.RunCollect(cfg); err != nil {
+		log.Logger().WithField("error", err).Error("collect failed")
+		alarm.Slack(context.Background(), fmt.Sprintf("collect failed: %s", err.Error()))
+		return
 	}
 }

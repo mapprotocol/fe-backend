@@ -204,7 +204,7 @@ func getUtxoFromOrders(items []*OrderItem, btcApiClient *mempool.MempoolClient) 
 	return privs, outlists, nil
 }
 
-func getOrders() ([]*OrderItem, error) {
+func getOrders(network *chaincfg.Params) ([]*OrderItem, error) {
 	order := dao.Order{
 		Action: dao.OrderActionToEVM,
 		Stage:  dao.OrderStag2,
@@ -217,6 +217,29 @@ func getOrders() ([]*OrderItem, error) {
 
 	orders := make([]*OrderItem, 0, len(gotOrders))
 	for _, o := range gotOrders {
+		relayer, err := btcutil.DecodeAddress(o.Relayer, network)
+		if err != nil {
+			params := map[string]interface{}{
+				"order_id": o.ID,
+				"network":  network.Net.String(),
+				"relayer":  o.Relayer,
+				"error":    err,
+			}
+			log.Logger().WithFields(params).Error("decode relayer address failed")
+			return nil, err
+		}
+
+		privateKeyBytes, err := hex.DecodeString(o.RelayerPrivateKey)
+		if err != nil {
+			params := map[string]interface{}{
+				"order_id": o.ID,
+				"error":    err,
+			}
+			log.Logger().WithFields(params).Error("failed to decode private key")
+			return nil, err
+		}
+		privakeKey, _ := btcec.PrivKeyFromBytes(privateKeyBytes)
+
 		amount, err := strconv.ParseInt(o.InAmount, 10, 64)
 		if err != nil {
 			params := map[string]interface{}{
@@ -227,11 +250,12 @@ func getOrders() ([]*OrderItem, error) {
 			log.Logger().WithFields(params).Error("failed to parse amount")
 			return nil, err
 		}
+
 		orders = append(orders, &OrderItem{
 			OrderID: o.ID,
-			//Sender:  , // todo
-			//Priv:    , // todo
-			Amount: amount,
+			Sender:  relayer,
+			Priv:    privakeKey,
+			Amount:  amount,
 		})
 	}
 
@@ -315,7 +339,7 @@ func RunCollect(cfg *CollectCfg) error {
 	for {
 		// get the orders
 		fmt.Println("begin collecting.....")
-		ords, err := getOrders()
+		ords, err := getOrders(network)
 		if err != nil {
 			log.Logger().WithField("error", err).Error("failed to get orders")
 			alarm.Slack(context.Background(), "failed to get orders")
