@@ -263,7 +263,7 @@ func Test_03(t *testing.T) {
 	items := make([]*OrderItem, 0)
 	for i := 0; i < addrCount; i++ {
 		item := &OrderItem{
-			OrderID: int64(i + 1),
+			OrderID: uint64(i + 1),
 			Sender:  addrs[i],
 			Priv:    privs[i],
 		}
@@ -283,5 +283,79 @@ func Test_03(t *testing.T) {
 	fmt.Println("collect the txhash", txHash.String())
 	fmt.Println("wait the tx on the chain")
 	waitTxOnChain(txHash, client)
+	fmt.Println("finish")
+}
+
+func Test_fullCollection(t *testing.T) {
+	network := &chaincfg.MainNetParams
+	if testnet {
+		network = &chaincfg.TestNet3Params
+	}
+	client := mempool.NewClient(network)
+
+	privateKeyBytes, err := hex.DecodeString("8b04a45a7f66395aa3f61fbd2bd1172b0a5f4e64891729dc9e49a9a9a6eb05fc")
+	if err != nil {
+		panic(err)
+	}
+	feePriv, _ := btcec.PrivKeyFromBytes(privateKeyBytes)
+	feeAddress, _ := btcutil.DecodeAddress("tb1p23dgrhckt9vr24yuqdl3yu2xwj8em3wmn40ly0dtuf0lk0kk80jqesjhk4", network)
+	receiver, _ := btcutil.DecodeAddress("tb1pwf8u8g9pxnnm3kleec2wwk790y0g7nuvm7qyvu7xl8752c9cqe7swdaakj", network)
+
+	addrCount, amount, feerate := 10, int64(100), int64(5)
+
+	addrs, privs := make([]btcutil.Address, 0), make([]*btcec.PrivateKey, 0)
+	items := make([]*OrderItem, 0)
+	for i := 0; i < addrCount; i++ {
+		priv, addr, err := makeNewTpAddress()
+		if err != nil {
+			panic(err)
+		}
+		addrs = append(addrs, addr)
+		privs = append(privs, priv)
+		item := &OrderItem{
+			OrderID: uint64(i + 1),
+			Sender:  addrs[i],
+			Priv:    privs[i],
+		}
+		items = append(items, item)
+		fmt.Println("priv:", hex.EncodeToString(priv.Serialize()), "addr:", addr.String())
+	}
+	outlist, err := gatherUTXO3(feeAddress, client)
+	if err != nil {
+		panic(err)
+	}
+
+	dTx, err := makeMultiAddressTx(feerate, amount, outlist, feeAddress, feePriv, addrs, client)
+	if err != nil {
+		panic(err)
+	}
+	txHash, err := client.BroadcastTx(dTx)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println("txhash:", txHash.String())
+
+	onChain, err := waitTxOnChain(txHash, client)
+	if err != nil {
+		fmt.Println("get tx state failed", err)
+		return
+	}
+	fmt.Println("txhash on chain", onChain)
+
+	// collect process
+	fmt.Println("make the collect tx.....")
+	cTx, err := makeCollectTx1(feerate, receiver, feeAddress, feePriv, items, client)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	txHash1, err := client.BroadcastTx(cTx)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println("collect the order...")
+	fmt.Println("collect the txhash", txHash1.String())
+	fmt.Println("wait the tx on the chain")
+	waitTxOnChain(txHash1, client)
 	fmt.Println("finish")
 }
