@@ -35,6 +35,10 @@ func (c *Collect) Create() error {
 	return db.GetDB().Create(c).Error
 }
 
+func (c *Collect) BatchCreate(cs []*Collect) error {
+	return db.GetDB().Create(cs).Error
+}
+
 func (c *Collect) Updates(update *Collect) error {
 	return db.GetDB().Where(c).Updates(update).Error
 }

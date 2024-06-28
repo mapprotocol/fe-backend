@@ -286,8 +286,26 @@ func getLatestCollectInfo() (*chainhash.Hash, []*OrderItem, error) {
 	return txHash, orders, nil
 }
 func createLatestCollectInfo(txhash *chainhash.Hash, orders []*OrderItem) error {
+	txHash := txhash.String()
+	collects := make([]*dao.Collect, 0, len(orders))
+	for _, o := range orders {
+		collects = append(collects, &dao.Collect{
+			OrderID: o.OrderID,
+			TxHash:  txHash,
+		})
+	}
+
+	if err := dao.NewCollect().BatchCreate(collects); err != nil {
+		params := map[string]interface{}{
+			"collects": utils.JSON(collects),
+			"error":    err,
+		}
+		log.Logger().WithFields(params).Error("failed to create collects")
+		return err
+	}
 	return nil
 }
+
 func setLatestCollectInfo(txhash *chainhash.Hash) error {
 	collect := &dao.Collect{
 		TxHash: txhash.String(),
