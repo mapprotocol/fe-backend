@@ -285,8 +285,10 @@ func getLatestCollectInfo() (*chainhash.Hash, []*OrderItem, error) {
 	}
 	return txHash, orders, nil
 }
-
-func setLatestCollectInfo(txhash *chainhash.Hash, orders []*OrderItem) error {
+func createLatestCollectInfo(txhash *chainhash.Hash, orders []*OrderItem) error {
+	return nil
+}
+func setLatestCollectInfo(txhash *chainhash.Hash) error {
 	collect := &dao.Collect{
 		TxHash: txhash.String(),
 	}
@@ -374,6 +376,9 @@ func waitTxOnChain(txhash *chainhash.Hash, client *mempool.MempoolClient) (bool,
 		fmt.Println("try query again....")
 		time.Sleep(1 * time.Minute)
 	}
+}
+func checkLatestTx() error {
+	return nil
 }
 
 // =============================================================================
