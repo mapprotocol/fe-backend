@@ -398,7 +398,27 @@ func waitTxOnChain(txhash *chainhash.Hash, client *mempool.MempoolClient) (bool,
 		time.Sleep(1 * time.Minute)
 	}
 }
-func checkLatestTx() error {
+func checkLatestTx(client *mempool.MempoolClient) error {
+	txhash, itmes, err := getLatestCollectInfo()
+	if err != nil {
+		log.Logger().WithField("error", err).Error("get latest collect info failed")
+		return err
+	}
+	sec, err := waitTxOnChain(txhash, client)
+	if err != nil {
+		log.Logger().WithField("error", err).Error("wait tx on chain failed")
+		return err
+	}
+	if sec {
+		if err = setOrders(itmes, CollectFinish); err == nil {
+			err = setLatestCollectInfo(txhash)
+			if err != nil {
+				log.Logger().WithField("error", err).Error("set latest collect info failed in check process")
+			}
+		} else {
+			log.Logger().WithField("error", err).Error("setOrders finish failed in check process")
+		}
+	}
 	return nil
 }
 
@@ -417,12 +437,18 @@ func RunCollect(cfg *CollectCfg) error {
 
 	for {
 		// get the orders
-		fmt.Println("begin collecting.....")
+		fmt.Println("begin collecting, check the latest collect info.....")
+		err := checkLatestTx(client)
+		if err != nil {
+			log.Logger().Info("check latest failed... will be retry")
+			time.Sleep(3 * time.Minute)
+			continue
+		}
 		ords, _, err := getOrders(10, network)
 		if err != nil {
 			log.Logger().WithField("error", err).Error("failed to get orders")
 			alarm.Slack(context.Background(), "failed to get orders")
-			return err // todo
+			return err
 		}
 		strOrder, allAmount := orderInfos(ords)
 		feerate := getFeeRate(cfg.Testnet, client)
