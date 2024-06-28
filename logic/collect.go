@@ -24,7 +24,8 @@ import (
 
 const (
 	defaultSequenceNum = wire.MaxTxInSequenceNum - 10
-	CollectFinish      = 1
+	CollectDoing       = 1
+	CollectFinish      = 2
 )
 
 var (
@@ -391,7 +392,7 @@ func RunCollect(cfg *CollectCfg) error {
 	for {
 		// get the orders
 		fmt.Println("begin collecting.....")
-		ords, err := getOrders(network)
+		ords, _, err := getOrders(10, network)
 		if err != nil {
 			log.Logger().WithField("error", err).Error("failed to get orders")
 			alarm.Slack(context.Background(), "failed to get orders")
@@ -439,7 +440,7 @@ func RunCollect(cfg *CollectCfg) error {
 				return err
 			}
 			if onChain {
-				err = setOrders(ords)
+				err = setOrders(ords, CollectFinish)
 				if err != nil {
 					log.Logger().WithField("error", err).Info("set orders state failed")
 				}
