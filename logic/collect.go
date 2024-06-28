@@ -404,6 +404,9 @@ func checkLatestTx(client *mempool.MempoolClient) error {
 		log.Logger().WithField("error", err).Error("get latest collect info failed")
 		return err
 	}
+	if txhash == nil {
+		return nil
+	}
 	sec, err := waitTxOnChain(txhash, client)
 	if err != nil {
 		log.Logger().WithField("error", err).Error("wait tx on chain failed")
@@ -483,7 +486,12 @@ func RunCollect(cfg *CollectCfg) error {
 				return err
 			}
 			log.Logger().WithField("txhash", txHash.String()).Info("broadcast the collect tx")
-
+			err = createLatestCollectInfo(txHash, ords)
+			if err != nil {
+				log.Logger().WithField("error", err).Error("create latest collect info failed")
+				return err
+			}
+			log.Logger().Info("create latest collect info success")
 			onChain, err := waitTxOnChain(txHash, client)
 			if err != nil {
 				//fmt.Println("the collect tx on chain failed", err)
@@ -496,6 +504,7 @@ func RunCollect(cfg *CollectCfg) error {
 				if err != nil {
 					log.Logger().WithField("error", err).Info("set orders state failed")
 				}
+				setLatestCollectInfo(txHash)
 			}
 		}
 		time.Sleep(30 * time.Minute)
