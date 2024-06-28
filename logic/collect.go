@@ -272,6 +272,9 @@ func getLatestCollectInfo() (*chainhash.Hash, []*OrderItem, error) {
 	if err != nil {
 		return nil, nil, err
 	}
+	if len(gotCollects) == 0 {
+		return nil, []*OrderItem{}, nil
+	}
 
 	orders := make([]*OrderItem, 0, len(gotCollects))
 	for _, c := range gotCollects {
