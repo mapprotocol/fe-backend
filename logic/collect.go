@@ -52,6 +52,12 @@ type OrderItem struct {
 	Amount  int64
 }
 
+type WithdrawOrder struct {
+	OrderID  uint64
+	Receiver btcutil.Address
+	Amount   int64
+}
+
 func gatherUTXOForItem(sender btcutil.Address, client *mempool.MempoolClient) ([]*PrevOutPoint, error) {
 	outPointList := make([]*PrevOutPoint, 0)
 	unspentList, err := client.ListUnspent(sender)
@@ -426,6 +432,129 @@ func checkLatestTx(client *mempool.MempoolClient) error {
 }
 
 // =============================================================================
+// withdraw infos
+func getWithdrawOrder() (*WithdrawOrder, error) {
+	return nil, nil
+}
+
+/*
+tx_in_sender1 						tx_out_receiver
+tx_in_sender2...       	--- >		tx_out_change (sender)
+tx_in_fee1				--- >   	tx_out_change (fee)
+tx_in_fee2...
+*/
+func makeWithdrawTx0(feerate, amount int64, tipper, receiver, sender btcutil.Address, senderPriv, feePriv *btcec.PrivateKey,
+	senderOutList, feeOutList []*PrevOutPoint, btcApiClient *mempool.MempoolClient) (*wire.MsgTx, error) {
+
+	commitTx := wire.NewMsgTx(wire.TxVersion)
+	totalSenderAmount, totalAmount := btcutil.Amount(0), btcutil.Amount(0)
+	TxPrevOutputFetcher := txscript.NewMultiPrevOutFetcher(nil)
+	pos := 0
+	tmpPrivs := make(map[int]*btcec.PrivateKey)
+
+	// handle the sender's utxo
+	for _, out := range senderOutList {
+		txOut, err := getTxOutByOutPoint2(out.Outpoint, btcApiClient)
+		if err != nil {
+			return nil, err
+		}
+		TxPrevOutputFetcher.AddPrevOut(*out.Outpoint, txOut)
+		in := wire.NewTxIn(out.Outpoint, nil, nil)
+		in.Sequence = defaultSequenceNum
+		commitTx.AddTxIn(in)
+		tmpPrivs[pos] = senderPriv
+		pos++
+		totalSenderAmount += btcutil.Amount(out.Value)
+		totalAmount += btcutil.Amount(out.Value)
+	}
+	time.Sleep(1 * time.Second) // limit rate
+	// handle the fee's utxo
+	for _, out := range feeOutList {
+		txOut, err := getTxOutByOutPoint2(out.Outpoint, btcApiClient)
+		if err != nil {
+			return nil, err
+		}
+		TxPrevOutputFetcher.AddPrevOut(*out.Outpoint, txOut)
+		in := wire.NewTxIn(out.Outpoint, nil, nil)
+		in.Sequence = defaultSequenceNum
+		commitTx.AddTxIn(in)
+		tmpPrivs[pos] = feePriv
+		pos++
+		totalAmount += btcutil.Amount(out.Value)
+	}
+	if int64(totalSenderAmount) < amount {
+		return nil, errors.New("not enough amount in the hot-wallet")
+	}
+	// handle the tx output
+	PkScript0, err := txscript.PayToAddrScript(receiver)
+	if err != nil {
+		return nil, err
+	}
+	commitTx.AddTxOut(&wire.TxOut{
+		PkScript: PkScript0,
+		Value:    amount,
+	})
+	PkScript1, err := txscript.PayToAddrScript(sender)
+	if err != nil {
+		return nil, err
+	}
+	commitTx.AddTxOut(&wire.TxOut{
+		PkScript: PkScript1,
+		Value:    int64(totalSenderAmount) - amount,
+	})
+	changePkScript, err := txscript.PayToAddrScript(tipper)
+	if err != nil {
+		return nil, err
+	}
+	// make the change
+	commitTx.AddTxOut(wire.NewTxOut(0, changePkScript))
+	txsize := btcmempool.GetTxVirtualSize(btcutil.NewTx(commitTx))
+	fee := btcutil.Amount(txsize) * btcutil.Amount(feerate)
+	changeAmount := totalAmount - fee - totalSenderAmount
+
+	if changeAmount > 0 {
+		commitTx.TxOut[len(commitTx.TxOut)-1].Value = int64(changeAmount)
+	} else {
+		return nil, errors.New("not enough fees")
+	}
+	// make the signature
+	witnessList := make([]wire.TxWitness, len(commitTx.TxIn))
+	for i := range commitTx.TxIn {
+		txOut := TxPrevOutputFetcher.FetchPrevOutput(commitTx.TxIn[i].PreviousOutPoint)
+		witness, err := txscript.TaprootWitnessSignature(commitTx, txscript.NewTxSigHashes(commitTx, TxPrevOutputFetcher),
+			i, txOut.Value, txOut.PkScript, txscript.SigHashDefault, tmpPrivs[i])
+		if err != nil {
+			return nil, err
+		}
+		witnessList[i] = witness
+	}
+	for i := range witnessList {
+		commitTx.TxIn[i].Witness = witnessList[i]
+	}
+	return commitTx, nil
+}
+
+func makeWithdrawTx1(feerate int64, tipper, sender btcutil.Address, senderPriv, feePriv *btcec.PrivateKey,
+	item *WithdrawOrder, btcApiClient *mempool.MempoolClient) (*wire.MsgTx, error) {
+
+	// get the sender_address utxo
+	senderOutlist, err := gatherUTXO3(sender, btcApiClient)
+	if err != nil {
+		return nil, err
+	}
+	// get the fee_address utxo
+	feeOutlist, err := gatherUTXO3(tipper, btcApiClient)
+	if err != nil {
+		return nil, err
+	}
+
+	tx, err := makeWithdrawTx0(feerate, item.Amount, tipper, item.Receiver, sender, senderPriv, feePriv,
+		senderOutlist, feeOutlist, btcApiClient)
+
+	return tx, err
+}
+
+// =============================================================================
 func RunCollect(cfg *CollectCfg) error {
 	privateKeyBytes, err := hex.DecodeString(cfg.StrFeePrivkey)
 	if err != nil {
@@ -509,5 +638,8 @@ func RunCollect(cfg *CollectCfg) error {
 		}
 		time.Sleep(30 * time.Minute)
 	}
+	return nil
+}
+func RunBtcWithdraw() error {
 	return nil
 }
