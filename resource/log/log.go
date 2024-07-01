@@ -14,7 +14,7 @@ var logger = logrus.New()
 
 const (
 	DEV      = "dev"
-	Filename = "ceffu-fe-backend.log"
+	Filename = "fe-backend.log"
 )
 
 func Init(env, path string) {

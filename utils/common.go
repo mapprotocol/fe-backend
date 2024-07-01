@@ -2,6 +2,9 @@ package utils
 
 import (
 	"encoding/json"
+	"github.com/btcsuite/btcd/btcutil"
+	"github.com/btcsuite/btcd/chaincfg"
+	"github.com/ethereum/go-ethereum/common"
 	"strings"
 )
 
@@ -11,6 +14,17 @@ func IsEmpty(s string) bool {
 
 func IsDuplicateError(err string) bool {
 	return strings.Contains(err, "Duplicate entry")
+}
+
+func IsValidEvmAddress(address string) bool {
+	return common.IsHexAddress(address)
+}
+
+func IsValidBitcoinAddress(address string, network *chaincfg.Params) bool {
+	if _, err := btcutil.DecodeAddress(address, network); err != nil {
+		return false
+	}
+	return true
 }
 
 func JSON(v interface{}) string {

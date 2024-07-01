@@ -15,6 +15,7 @@ type CreateOrderRequest struct {
 	DstChain uint64 `json:"dst_chain"`
 	DstToken string `json:"dst_token"`
 	Receiver string `json:"receiver"`
+	Action   uint8  `json:"action"`
 }
 
 // response
@@ -28,6 +29,6 @@ type SupportedTokensResponse struct {
 }
 
 type CreateOrderResponse struct {
-	OrderID        uint64 `json:"order_id"`
-	DepositAddress string `json:"deposit_address"`
+	OrderID uint64 `json:"order_id"`
+	Relayer string `json:"relayer"`
 }
