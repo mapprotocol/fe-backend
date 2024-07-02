@@ -441,6 +441,13 @@ func checkLatestTx(client *mempool.MempoolClient) error {
 
 // =============================================================================
 // withdraw infos
+func withdrawOrderToIds(items []*WithdrawOrder) []uint64 {
+	ids := make([]uint64, 0)
+	for _, item := range items {
+		ids = append(ids, item.OrderID)
+	}
+	return ids
+}
 func withdrawOrdersInfos(items []*WithdrawOrder) string {
 	return ""
 }
@@ -730,10 +737,10 @@ func RunBtcWithdraw(cfg *CollectCfg) error {
 					log.Logger().WithField("error", err).Info("make withdraw tx failed")
 					alarm.Slack(context.Background(), "failed to make withdraw tx")
 				} else {
-					// init the withdraw state
-					txhash1 := tx.TxHash()
+					// 1 init the withdraw state
+					txhash1, ids := tx.TxHash(), withdrawOrderToIds(orders)
 					log.Logger().WithField("txhash", txhash1.String()).Info("init user withdraw order")
-					err = initWithdrawOrders(&txhash1, nil, network)
+					err = initWithdrawOrders(&txhash1, ids, network)
 					if err != nil {
 						log.Logger().WithField("error", err).WithField("txhash", txhash1.String()).
 							Error("init user withdraw order failed")
@@ -743,7 +750,8 @@ func RunBtcWithdraw(cfg *CollectCfg) error {
 							log.Logger().WithField("error", err).Error("failed to broadcast tx")
 							alarm.Slack(context.Background(), "failed to broadcast tx")
 						} else {
-							updateWithdrawOrdersState(nil, WithdrawStateSend)
+							//  2. update orders state to WithdrawStateSend
+							err = updateWithdrawOrdersState(ids, WithdrawStateSend)
 							log.Logger().WithField("txhash", txHash.String()).Info("broadcast the withdraw tx")
 						}
 					}
