@@ -441,7 +441,10 @@ func checkLatestTx(client *mempool.MempoolClient) error {
 
 // =============================================================================
 // withdraw infos
-func getWithdrawOrders(network *chaincfg.Params) (*WithdrawOrder, error) {
+func withdrawOrdersInfos(items []*WithdrawOrder) string {
+	return ""
+}
+func getWithdrawOrders(network *chaincfg.Params) ([]*WithdrawOrder, error) {
 	return nil, nil
 }
 func initWithdrawOrders(txhash *chainhash.Hash, ids []uint64, network *chaincfg.Params) error {
@@ -457,8 +460,8 @@ tx_in_sender2...       	--- >		tx_out_change (sender)
 tx_in_fee1				--- >   	tx_out_change (fee)
 tx_in_fee2...
 */
-func makeWithdrawTx0(feerate, amount int64, tipper, receiver, sender btcutil.Address, senderPriv, feePriv *btcec.PrivateKey,
-	senderOutList, feeOutList []*PrevOutPoint, btcApiClient *mempool.MempoolClient) (*wire.MsgTx, error) {
+func makeWithdrawTx0(feerate int64, tipper, sender btcutil.Address, senderPriv, feePriv *btcec.PrivateKey, senderOutList,
+	feeOutList []*PrevOutPoint, items []*WithdrawOrder, btcApiClient *mempool.MempoolClient) (*wire.MsgTx, error) {
 
 	commitTx := wire.NewMsgTx(wire.TxVersion)
 	totalSenderAmount, totalAmount := btcutil.Amount(0), btcutil.Amount(0)
@@ -496,25 +499,31 @@ func makeWithdrawTx0(feerate, amount int64, tipper, receiver, sender btcutil.Add
 		pos++
 		totalAmount += btcutil.Amount(out.Value)
 	}
-	if int64(totalSenderAmount) < amount {
+
+	// handle the tx output
+	outAmount := int64(0)
+	for _, item := range items {
+		PkScript0, err := txscript.PayToAddrScript(item.Receiver)
+		if err != nil {
+			return nil, err
+		}
+		commitTx.AddTxOut(&wire.TxOut{
+			PkScript: PkScript0,
+			Value:    item.Amount,
+		})
+		outAmount += item.Amount
+	}
+	if int64(totalSenderAmount) < outAmount {
 		return nil, errors.New("not enough amount in the hot-wallet")
 	}
-	// handle the tx output
-	PkScript0, err := txscript.PayToAddrScript(receiver)
-	if err != nil {
-		return nil, err
-	}
-	commitTx.AddTxOut(&wire.TxOut{
-		PkScript: PkScript0,
-		Value:    amount,
-	})
+
 	PkScript1, err := txscript.PayToAddrScript(sender)
 	if err != nil {
 		return nil, err
 	}
 	commitTx.AddTxOut(&wire.TxOut{
 		PkScript: PkScript1,
-		Value:    int64(totalSenderAmount) - amount,
+		Value:    int64(totalSenderAmount) - outAmount,
 	})
 	changePkScript, err := txscript.PayToAddrScript(tipper)
 	if err != nil {
@@ -549,7 +558,7 @@ func makeWithdrawTx0(feerate, amount int64, tipper, receiver, sender btcutil.Add
 }
 
 func makeWithdrawTx1(feerate int64, tipper, sender btcutil.Address, senderPriv, feePriv *btcec.PrivateKey,
-	item *WithdrawOrder, btcApiClient *mempool.MempoolClient) (*wire.MsgTx, error) {
+	items []*WithdrawOrder, btcApiClient *mempool.MempoolClient) (*wire.MsgTx, error) {
 
 	// get the sender_address utxo
 	senderOutlist, err := gatherUTXO3(sender, btcApiClient)
@@ -562,8 +571,8 @@ func makeWithdrawTx1(feerate int64, tipper, sender btcutil.Address, senderPriv, 
 		return nil, err
 	}
 
-	tx, err := makeWithdrawTx0(feerate, item.Amount, tipper, item.Receiver, sender, senderPriv, feePriv,
-		senderOutlist, feeOutlist, btcApiClient)
+	tx, err := makeWithdrawTx0(feerate, tipper, sender, senderPriv, feePriv,
+		senderOutlist, feeOutlist, items, btcApiClient)
 
 	return tx, err
 }
@@ -693,7 +702,7 @@ func RunBtcWithdraw(cfg *CollectCfg) error {
 	for {
 		// get the withdrawal order
 		log.Logger().Info("begin withdrawal tx process.....")
-		order, err := getWithdrawOrders(network)
+		orders, err := getWithdrawOrders(network)
 		if err != nil {
 			log.Logger().WithField("error", err).Error("failed to get orders")
 			alarm.Slack(context.Background(), "failed to get withdraw orders")
@@ -702,11 +711,10 @@ func RunBtcWithdraw(cfg *CollectCfg) error {
 		}
 		feerate := getFeeRate(cfg.Testnet, client)
 
-		if order == nil {
+		if len(orders) == 0 {
 			log.Logger().Info("no more withdraw order")
 		} else {
-			log.Logger().WithField("withdraw id", order.OrderID).
-				WithField("receiver", order.Receiver.String()).Info("user withdraw...")
+			log.Logger().WithField("key", withdrawOrdersInfos(orders)).Info("user withdraw...")
 
 			enough, err := checkHotwalletBalance(cfg.FeeAddress, client)
 			if err != nil {
@@ -717,7 +725,7 @@ func RunBtcWithdraw(cfg *CollectCfg) error {
 			if !enough {
 				log.Logger().Info("low balance in hot-wallet,will to collect")
 			} else {
-				tx, err := makeWithdrawTx1(feerate, cfg.FeeAddress, cfg.Receiver, receiverPriv, feePriv, order, client)
+				tx, err := makeWithdrawTx1(feerate, cfg.FeeAddress, cfg.Receiver, receiverPriv, feePriv, orders, client)
 				if err != nil {
 					log.Logger().WithField("error", err).Info("make withdraw tx failed")
 					alarm.Slack(context.Background(), "failed to make withdraw tx")
