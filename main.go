@@ -41,10 +41,10 @@ func main() {
 	}
 
 	cfg := &logic.CollectCfg{
-		Testnet:       testnet,
-		StrFeePrivkey: viper.GetString("feeprivatekey"),
-		FeeAddress:    feeAddress,
-		Receiver:      receiverAddress,
+		Testnet:                 testnet,
+		StrHotWalletFee1Privkey: viper.GetString("feeprivatekey"),
+		HotWalletFee1:           feeAddress,
+		HotWallet1:              receiverAddress,
 	}
 	if err := logic.RunCollect(cfg); err != nil {
 		log.Logger().WithField("error", err).Error("collect failed")

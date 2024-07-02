@@ -40,11 +40,19 @@ type PrevOutPoint struct {
 	Value    int64
 }
 type CollectCfg struct {
-	Testnet         bool
-	StrFeePrivkey   string
-	FeeAddress      btcutil.Address
-	Receiver        btcutil.Address
-	StrReceiverPriv string
+	Testnet                 bool
+	StrHotWalletFee1Privkey string
+	StrHotWallet1Priv       string
+	HotWalletFee1           btcutil.Address
+	HotWallet1              btcutil.Address
+
+	StrHotWalletFee2Privkey string
+	StrHotWallet2Priv       string
+	HotWalletFee2           btcutil.Address
+	HotWallet2              btcutil.Address
+
+	StrHotWalletFee3Privkey string
+	HotWalletFee3           btcutil.Address
 }
 
 type OrderItem struct {
@@ -584,13 +592,12 @@ func makeWithdrawTx1(feerate int64, tipper, sender btcutil.Address, senderPriv, 
 	return tx, err
 }
 
-func checkLatestWithdrawTxs(cfg *CollectCfg) error {
+func checkLatestWithdrawTxs(cfg *CollectCfg) {
 	//if err != nil {
 	//	log.Logger().Info("check latest failed... will be retry")
 	//	time.Sleep(3 * time.Minute)
 	//	continue
 	//}
-	return nil
 }
 func checkHotwalletBalance(receiver btcutil.Address, client *mempool.MempoolClient) (bool, error) {
 	return true, nil
@@ -598,7 +605,7 @@ func checkHotwalletBalance(receiver btcutil.Address, client *mempool.MempoolClie
 
 // =============================================================================
 func RunCollect(cfg *CollectCfg) error {
-	privateKeyBytes, err := hex.DecodeString(cfg.StrFeePrivkey)
+	privateKeyBytes, err := hex.DecodeString(cfg.StrHotWalletFee1Privkey)
 	if err != nil {
 		panic(err)
 	}
@@ -630,7 +637,7 @@ func RunCollect(cfg *CollectCfg) error {
 		log.Logger().WithField("orders", strOrder).Info("collect the order")
 		log.Logger().WithField("all amount", allAmount).WithField("feerate", feerate).Info("collect the order")
 
-		enough, err := checkFeeAddress(cfg.FeeAddress, client)
+		enough, err := checkFeeAddress(cfg.HotWalletFee1, client)
 		if err != nil {
 			log.Logger().WithField("error", err).Error("failed to checkFeeAddress")
 			alarm.Slack(context.Background(), "check fee address balance failed")
@@ -643,7 +650,7 @@ func RunCollect(cfg *CollectCfg) error {
 		}
 
 		if len(ords) > 0 {
-			tx, err := makeCollectTx1(feerate, cfg.Receiver, cfg.FeeAddress, feePriv, ords, client)
+			tx, err := makeCollectTx1(feerate, cfg.HotWallet1, cfg.HotWalletFee1, feePriv, ords, client)
 			if err != nil {
 				//fmt.Println(err)
 				log.Logger().WithField("error", err).Info("make collect tx")
@@ -684,12 +691,12 @@ func RunCollect(cfg *CollectCfg) error {
 }
 
 func RunBtcWithdraw(cfg *CollectCfg) error {
-	privateKeyBytes, err := hex.DecodeString(cfg.StrFeePrivkey)
+	privateKeyBytes, err := hex.DecodeString(cfg.StrHotWalletFee1Privkey)
 	if err != nil {
 		panic(err)
 	}
 	feePriv, _ := btcec.PrivKeyFromBytes(privateKeyBytes)
-	privBytes1, err := hex.DecodeString(cfg.StrReceiverPriv)
+	privBytes1, err := hex.DecodeString(cfg.StrHotWallet1Priv)
 	if err != nil {
 		panic(err)
 	}
@@ -723,7 +730,7 @@ func RunBtcWithdraw(cfg *CollectCfg) error {
 		} else {
 			log.Logger().WithField("key", withdrawOrdersInfos(orders)).Info("user withdraw...")
 
-			enough, err := checkHotwalletBalance(cfg.FeeAddress, client)
+			enough, err := checkHotwalletBalance(cfg.HotWalletFee1, client)
 			if err != nil {
 				log.Logger().WithField("error", err).Error("failed to check hot-wallet balance")
 				alarm.Slack(context.Background(), "check hot-wallet balance failed")
@@ -732,7 +739,7 @@ func RunBtcWithdraw(cfg *CollectCfg) error {
 			if !enough {
 				log.Logger().Info("low balance in hot-wallet,will to collect")
 			} else {
-				tx, err := makeWithdrawTx1(feerate, cfg.FeeAddress, cfg.Receiver, receiverPriv, feePriv, orders, client)
+				tx, err := makeWithdrawTx1(feerate, cfg.HotWalletFee1, cfg.HotWallet1, receiverPriv, feePriv, orders, client)
 				if err != nil {
 					log.Logger().WithField("error", err).Info("make withdraw tx failed")
 					alarm.Slack(context.Background(), "failed to make withdraw tx")
