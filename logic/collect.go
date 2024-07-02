@@ -40,11 +40,13 @@ type PrevOutPoint struct {
 	Value    int64
 }
 type CollectCfg struct {
-	Testnet       bool
-	StrFeePrivkey string
-	FeeAddress    btcutil.Address
-	Receiver      btcutil.Address
+	Testnet         bool
+	StrFeePrivkey   string
+	FeeAddress      btcutil.Address
+	Receiver        btcutil.Address
+	StrReceiverPriv string
 }
+
 type OrderItem struct {
 	OrderID uint64
 	Sender  btcutil.Address
@@ -57,6 +59,12 @@ type WithdrawOrder struct {
 	Receiver btcutil.Address
 	Amount   int64
 }
+
+const (
+	WithdrawStateInit   = 1
+	WithdrawStateSend   = 2
+	WithdrawStateFinish = 3
+)
 
 func gatherUTXOForItem(sender btcutil.Address, client *mempool.MempoolClient) ([]*PrevOutPoint, error) {
 	outPointList := make([]*PrevOutPoint, 0)
@@ -433,8 +441,14 @@ func checkLatestTx(client *mempool.MempoolClient) error {
 
 // =============================================================================
 // withdraw infos
-func getWithdrawOrder() (*WithdrawOrder, error) {
+func getWithdrawOrders(network *chaincfg.Params) (*WithdrawOrder, error) {
 	return nil, nil
+}
+func initWithdrawOrders(txhash *chainhash.Hash, ids []uint64, network *chaincfg.Params) error {
+	return nil
+}
+func updateWithdrawOrdersState(ids []uint64, state int) error {
+	return nil
 }
 
 /*
@@ -554,6 +568,18 @@ func makeWithdrawTx1(feerate int64, tipper, sender btcutil.Address, senderPriv, 
 	return tx, err
 }
 
+func checkLatestWithdrawTxs(cfg *CollectCfg) error {
+	//if err != nil {
+	//	log.Logger().Info("check latest failed... will be retry")
+	//	time.Sleep(3 * time.Minute)
+	//	continue
+	//}
+	return nil
+}
+func checkHotwalletBalance(receiver btcutil.Address, client *mempool.MempoolClient) (bool, error) {
+	return true, nil
+}
+
 // =============================================================================
 func RunCollect(cfg *CollectCfg) error {
 	privateKeyBytes, err := hex.DecodeString(cfg.StrFeePrivkey)
@@ -640,6 +666,83 @@ func RunCollect(cfg *CollectCfg) error {
 	}
 	return nil
 }
-func RunBtcWithdraw() error {
+
+func RunBtcWithdraw(cfg *CollectCfg) error {
+	privateKeyBytes, err := hex.DecodeString(cfg.StrFeePrivkey)
+	if err != nil {
+		panic(err)
+	}
+	feePriv, _ := btcec.PrivKeyFromBytes(privateKeyBytes)
+	privBytes1, err := hex.DecodeString(cfg.StrReceiverPriv)
+	if err != nil {
+		panic(err)
+	}
+	receiverPriv, _ := btcec.PrivKeyFromBytes(privBytes1)
+
+	network := &chaincfg.MainNetParams
+	if cfg.Testnet {
+		network = &chaincfg.TestNet3Params
+	}
+	client := mempool.NewClient(network)
+
+	go checkLatestWithdrawTxs(cfg)
+
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		// get the withdrawal order
+		log.Logger().Info("begin withdrawal tx process.....")
+		order, err := getWithdrawOrders(network)
+		if err != nil {
+			log.Logger().WithField("error", err).Error("failed to get orders")
+			alarm.Slack(context.Background(), "failed to get withdraw orders")
+			time.Sleep(1 * time.Minute)
+			continue
+		}
+		feerate := getFeeRate(cfg.Testnet, client)
+
+		if order == nil {
+			log.Logger().Info("no more withdraw order")
+		} else {
+			log.Logger().WithField("withdraw id", order.OrderID).
+				WithField("receiver", order.Receiver.String()).Info("user withdraw...")
+
+			enough, err := checkHotwalletBalance(cfg.FeeAddress, client)
+			if err != nil {
+				log.Logger().WithField("error", err).Error("failed to check hot-wallet balance")
+				alarm.Slack(context.Background(), "check hot-wallet balance failed")
+				return err
+			}
+			if !enough {
+				log.Logger().Info("low balance in hot-wallet,will to collect")
+			} else {
+				tx, err := makeWithdrawTx1(feerate, cfg.FeeAddress, cfg.Receiver, receiverPriv, feePriv, order, client)
+				if err != nil {
+					log.Logger().WithField("error", err).Info("make withdraw tx failed")
+					alarm.Slack(context.Background(), "failed to make withdraw tx")
+				} else {
+					// init the withdraw state
+					txhash1 := tx.TxHash()
+					log.Logger().WithField("txhash", txhash1.String()).Info("init user withdraw order")
+					err = initWithdrawOrders(&txhash1, nil, network)
+					if err != nil {
+						log.Logger().WithField("error", err).WithField("txhash", txhash1.String()).
+							Error("init user withdraw order failed")
+					} else {
+						txHash, err := client.BroadcastTx(tx)
+						if err != nil {
+							log.Logger().WithField("error", err).Error("failed to broadcast tx")
+							alarm.Slack(context.Background(), "failed to broadcast tx")
+						} else {
+							updateWithdrawOrdersState(nil, WithdrawStateSend)
+							log.Logger().WithField("txhash", txHash.String()).Info("broadcast the withdraw tx")
+						}
+					}
+				}
+			}
+		}
+		time.Sleep(30 * time.Second)
+	}
 	return nil
 }
