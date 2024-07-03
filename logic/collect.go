@@ -53,6 +53,8 @@ type CollectCfg struct {
 
 	StrHotWalletFee3Privkey string
 	HotWalletFee3           btcutil.Address
+
+	MaxTransferAmount int64
 }
 
 type OrderItem struct {
@@ -599,8 +601,132 @@ func checkLatestWithdrawTxs(cfg *CollectCfg) {
 	//	continue
 	//}
 }
-func checkHotwalletBalance(receiver btcutil.Address, client *mempool.MempoolClient) (bool, error) {
+func checkHotwallet2Balance(receiver btcutil.Address, client *mempool.MempoolClient) (bool, error) {
 	return true, nil
+}
+
+// =============================================================================
+func makeSimpleTx0(feerate, amount int64, sender, receiver, tipper btcutil.Address, senderPriv,
+	feePriv *btcec.PrivateKey, senderOutList, feeOutList []*PrevOutPoint, btcApiClient *mempool.MempoolClient) (*wire.MsgTx, error) {
+
+	commitTx := wire.NewMsgTx(wire.TxVersion)
+	totalSenderAmount, totalAmount := btcutil.Amount(0), btcutil.Amount(0)
+	TxPrevOutputFetcher := txscript.NewMultiPrevOutFetcher(nil)
+	tmpPrivs, pos := make(map[int]*btcec.PrivateKey), 0
+
+	// handle the sender's utxo
+	for _, out := range senderOutList {
+		txOut, err := getTxOutByOutPoint2(out.Outpoint, btcApiClient)
+		if err != nil {
+			return nil, err
+		}
+		TxPrevOutputFetcher.AddPrevOut(*out.Outpoint, txOut)
+		in := wire.NewTxIn(out.Outpoint, nil, nil)
+		in.Sequence = defaultSequenceNum
+		commitTx.AddTxIn(in)
+		tmpPrivs[pos] = senderPriv
+		pos++
+		totalSenderAmount += btcutil.Amount(out.Value)
+		totalAmount += btcutil.Amount(out.Value)
+	}
+	time.Sleep(1 * time.Second) // limit rate
+	// handle the fee's utxo
+	for _, out := range feeOutList {
+		txOut, err := getTxOutByOutPoint2(out.Outpoint, btcApiClient)
+		if err != nil {
+			return nil, err
+		}
+		TxPrevOutputFetcher.AddPrevOut(*out.Outpoint, txOut)
+		in := wire.NewTxIn(out.Outpoint, nil, nil)
+		in.Sequence = defaultSequenceNum
+		commitTx.AddTxIn(in)
+		tmpPrivs[pos] = feePriv
+		pos++
+		totalAmount += btcutil.Amount(out.Value)
+	}
+
+	// handle the tx output
+	PkScript0, err := txscript.PayToAddrScript(receiver)
+	if err != nil {
+		return nil, err
+	}
+	commitTx.AddTxOut(&wire.TxOut{
+		PkScript: PkScript0,
+		Value:    amount,
+	})
+	if int64(totalSenderAmount) < amount {
+		return nil, errors.New("not enough amount in the hot-wallet")
+	}
+	// handle the sender change
+	PkScript1, err := txscript.PayToAddrScript(sender)
+	if err != nil {
+		return nil, err
+	}
+	commitTx.AddTxOut(&wire.TxOut{
+		PkScript: PkScript1,
+		Value:    int64(totalSenderAmount) - amount,
+	})
+	changePkScript, err := txscript.PayToAddrScript(tipper)
+	if err != nil {
+		return nil, err
+	}
+	// make the change
+	commitTx.AddTxOut(wire.NewTxOut(0, changePkScript))
+	txsize := btcmempool.GetTxVirtualSize(btcutil.NewTx(commitTx))
+	fee := btcutil.Amount(txsize) * btcutil.Amount(feerate)
+	changeAmount := totalAmount - fee - totalSenderAmount
+
+	if changeAmount > 0 {
+		commitTx.TxOut[len(commitTx.TxOut)-1].Value = int64(changeAmount)
+	} else {
+		return nil, errors.New("not enough fees")
+	}
+	// make the signature
+	witnessList := make([]wire.TxWitness, len(commitTx.TxIn))
+	for i := range commitTx.TxIn {
+		txOut := TxPrevOutputFetcher.FetchPrevOutput(commitTx.TxIn[i].PreviousOutPoint)
+		witness, err := txscript.TaprootWitnessSignature(commitTx, txscript.NewTxSigHashes(commitTx, TxPrevOutputFetcher),
+			i, txOut.Value, txOut.PkScript, txscript.SigHashDefault, tmpPrivs[i])
+		if err != nil {
+			return nil, err
+		}
+		witnessList[i] = witness
+	}
+	for i := range witnessList {
+		commitTx.TxIn[i].Witness = witnessList[i]
+	}
+	return commitTx, nil
+}
+
+func makeHotWallet1ToHotWallet2Tx(feerate int64, cfg *CollectCfg, btcApiClient *mempool.MempoolClient) (*wire.MsgTx, error) {
+	privateKeyBytes, err := hex.DecodeString(cfg.StrHotWallet1Priv)
+	if err != nil {
+		panic(err)
+	}
+	senderPriv, _ := btcec.PrivKeyFromBytes(privateKeyBytes)
+
+	privateKeyBytes, err = hex.DecodeString(cfg.StrHotWalletFee3Privkey)
+	if err != nil {
+		panic(err)
+	}
+	feePriv, _ := btcec.PrivKeyFromBytes(privateKeyBytes)
+
+	// get the sender_address utxo
+	senderOutlist, err := gatherUTXO3(cfg.HotWallet1, btcApiClient)
+	if err != nil {
+		return nil, err
+	}
+	// get the fee_address utxo
+	feeOutlist, err := gatherUTXO3(cfg.HotWalletFee3, btcApiClient)
+	if err != nil {
+		return nil, err
+	}
+
+	amount := cfg.MaxTransferAmount
+	tx, err := makeSimpleTx0(feerate, amount, cfg.HotWallet1, cfg.HotWallet2, cfg.HotWalletFee3, senderPriv, feePriv,
+		senderOutlist, feeOutlist, btcApiClient)
+
+	return tx, err
 }
 
 // =============================================================================
@@ -730,7 +856,7 @@ func RunBtcWithdraw(cfg *CollectCfg) error {
 		} else {
 			log.Logger().WithField("key", withdrawOrdersInfos(orders)).Info("user withdraw...")
 
-			enough, err := checkHotwalletBalance(cfg.HotWalletFee1, client)
+			enough, err := checkHotwallet2Balance(cfg.HotWalletFee1, client)
 			if err != nil {
 				log.Logger().WithField("error", err).Error("failed to check hot-wallet balance")
 				alarm.Slack(context.Background(), "check hot-wallet balance failed")
@@ -766,6 +892,41 @@ func RunBtcWithdraw(cfg *CollectCfg) error {
 			}
 		}
 		time.Sleep(30 * time.Second)
+	}
+	return nil
+}
+
+func RunHotWalletBalance(cfg *CollectCfg) error {
+
+	network := &chaincfg.MainNetParams
+	if cfg.Testnet {
+		network = &chaincfg.TestNet3Params
+	}
+	client := mempool.NewClient(network)
+
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		// get the withdrawal order
+		log.Logger().Info("begin hotwallet1 to hotwallet2 process.....")
+		feerate := getFeeRate(cfg.Testnet, client)
+
+		tx, err := makeHotWallet1ToHotWallet2Tx(feerate, cfg, client)
+		if err != nil {
+			log.Logger().WithField("error", err).Info("wallet1 to wallet2 failed")
+			alarm.Slack(context.Background(), "failed to makeHotWallet1ToHotWallet2Tx")
+		} else {
+			// 1 init the withdraw state
+			txHash, err := client.BroadcastTx(tx)
+			if err != nil {
+				log.Logger().WithField("error", err).Error("failed to broadcast tx")
+				alarm.Slack(context.Background(), "failed to broadcast tx")
+			} else {
+				log.Logger().WithField("txhash", txHash.String()).Info("broadcast the wallet1 to wallet2 tx")
+			}
+		}
+		time.Sleep(100 * time.Second)
 	}
 	return nil
 }
