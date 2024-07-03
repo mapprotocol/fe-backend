@@ -7,6 +7,7 @@ import (
 	"github.com/btcsuite/btcd/btcutil"
 	"github.com/btcsuite/btcd/chaincfg"
 	"github.com/btcsuite/btcd/txscript"
+	"github.com/ethereum/go-ethereum/common"
 	"gorm.io/gorm"
 	blog "log"
 
@@ -97,6 +98,7 @@ func UpdateOrder(orderID uint64, txHash string) int {
 		// todo check tx hash
 	} else if order.Action == dao.OrderActionFromEVM {
 		// todo check tx hash
+		common.HexToHash()
 	}
 
 	update := dao.Order{
