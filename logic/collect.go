@@ -50,6 +50,7 @@ type CollectCfg struct {
 	StrHotWallet2Priv       string
 	HotWalletFee2           btcutil.Address
 	HotWallet2              btcutil.Address
+	HotWallet2Line          int64
 
 	StrHotWalletFee3Privkey string
 	HotWalletFee3           btcutil.Address
@@ -459,10 +460,21 @@ func withdrawOrderToIds(items []*WithdrawOrder) []uint64 {
 	return ids
 }
 func withdrawOrdersInfos(items []*WithdrawOrder) string {
-	return ""
+	str, all := "", int64(0)
+	for _, item := range items {
+		str += fmt.Sprintf("[id=%v,amount=%v]", item.OrderID, item.Amount)
+		all += item.Amount
+	}
+	str0 := fmt.Sprintf("[ids=%d,all=%v] {", len(items), all)
+	str0 = str0 + str + "}"
+	return str0
 }
+
 func getWithdrawOrders(network *chaincfg.Params) ([]*WithdrawOrder, error) {
 	return nil, nil
+}
+func getInitedWithdrawOrders() ([]*chainhash.Hash, [][]uint64, error) {
+	return nil, nil, nil
 }
 func initWithdrawOrders(txhash *chainhash.Hash, ids []uint64, network *chaincfg.Params) error {
 	return nil
@@ -594,12 +606,39 @@ func makeWithdrawTx1(feerate int64, tipper, sender btcutil.Address, senderPriv, 
 	return tx, err
 }
 
-func checkLatestWithdrawTxs(cfg *CollectCfg) {
-	//if err != nil {
-	//	log.Logger().Info("check latest failed... will be retry")
-	//	time.Sleep(3 * time.Minute)
-	//	continue
-	//}
+func checkWithdrawTxsState(cfg *CollectCfg) {
+	network := &chaincfg.MainNetParams
+	if cfg.Testnet {
+		network = &chaincfg.TestNet3Params
+	}
+	client := mempool.NewClient(network)
+
+	for {
+		log.Logger().Info("begin withdraw tx state check...")
+		hashs, ids, err := getInitedWithdrawOrders()
+		if err != nil {
+			log.Logger().WithField("error", err).Error("getInitedWithdrawOrders in check state failed")
+		} else {
+			for i, h := range hashs {
+				onchain, err := waitTxOnChain(h, client)
+				if err != nil {
+					log.Logger().WithField("error", err).WithField("hash", h.String()).
+						Error("wait on chain failed [check state]")
+				} else {
+					if onchain {
+						log.Logger().WithField("hash", h.String()).WithField("ids", ids[i]).
+							Info("the ids was on chain")
+						err = updateWithdrawOrdersState(ids[i], WithdrawStateFinish)
+						if err != nil {
+							log.Logger().WithField("error", err).WithField("ids", ids[i]).
+								Error("update the ids to finish state failed")
+						}
+					}
+				}
+			}
+		}
+		time.Sleep(5 * time.Minute)
+	}
 }
 func checkHotwallet2Balance(receiver btcutil.Address, client *mempool.MempoolClient) (bool, error) {
 	return true, nil
@@ -834,7 +873,7 @@ func RunBtcWithdraw(cfg *CollectCfg) error {
 	}
 	client := mempool.NewClient(network)
 
-	go checkLatestWithdrawTxs(cfg)
+	go checkWithdrawTxsState(cfg)
 
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
@@ -924,6 +963,12 @@ func RunHotWalletBalance(cfg *CollectCfg) error {
 				alarm.Slack(context.Background(), "failed to broadcast tx")
 			} else {
 				log.Logger().WithField("txhash", txHash.String()).Info("broadcast the wallet1 to wallet2 tx")
+				onChain, err := waitTxOnChain(txHash, client)
+				if err != nil {
+					log.Logger().WithField("error", err).Error("wait the tx on chain failed")
+				} else {
+					log.Logger().WithField("txhash", txHash.String()).WithField("on chain", onChain).Info("the tx was on chain")
+				}
 			}
 		}
 		time.Sleep(100 * time.Second)
