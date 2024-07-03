@@ -359,3 +359,12 @@ func Test_fullCollection(t *testing.T) {
 	waitTxOnChain(txHash1, client)
 	fmt.Println("finish")
 }
+
+func Test_btc(t *testing.T) {
+	amount, err := btcutil.NewAmount(1.2)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	fmt.Println(int64(amount), amount)
+}
