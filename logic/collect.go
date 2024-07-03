@@ -470,15 +470,21 @@ func withdrawOrdersInfos(items []*WithdrawOrder) string {
 	return str0
 }
 
-func getWithdrawOrders(network *chaincfg.Params) ([]*WithdrawOrder, error) {
+func getWithdrawOrders(limit int, network *chaincfg.Params) ([]*WithdrawOrder, error) {
 	return nil, nil
 }
+
+// state = 1 | 2
 func getInitedWithdrawOrders() ([]*chainhash.Hash, [][]uint64, error) {
 	return nil, nil, nil
 }
+
+// state = 1 & txhash
 func initWithdrawOrders(txhash *chainhash.Hash, ids []uint64, network *chaincfg.Params) error {
 	return nil
 }
+
+// state=2
 func updateWithdrawOrdersState(ids []uint64, state int) error {
 	return nil
 }
@@ -881,7 +887,7 @@ func RunBtcWithdraw(cfg *CollectCfg) error {
 	for {
 		// get the withdrawal order
 		log.Logger().Info("begin withdrawal tx process.....")
-		orders, err := getWithdrawOrders(network)
+		orders, err := getWithdrawOrders(20, network)
 		if err != nil {
 			log.Logger().WithField("error", err).Error("failed to get orders")
 			alarm.Slack(context.Background(), "failed to get withdraw orders")
@@ -930,7 +936,7 @@ func RunBtcWithdraw(cfg *CollectCfg) error {
 				}
 			}
 		}
-		time.Sleep(30 * time.Second)
+		time.Sleep(60 * time.Second)
 	}
 	return nil
 }
