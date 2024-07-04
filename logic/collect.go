@@ -35,6 +35,7 @@ var (
 	//MinPreAdminOutPointValue2               = int64(20000)
 	MinBalanceInFeeAddress = int64(20000)
 	NoMoreUTXO             = errors.New("no more utxo")
+	LowBalanceHotWallet    = 11
 )
 
 type PrevOutPoint struct {
@@ -404,16 +405,16 @@ func getFeeRate(test bool, client *mempool.MempoolClient) int64 {
 	}
 	return resp.FastestFee
 }
-func waitTxOnChain(txhash *chainhash.Hash, client *mempool.MempoolClient) (bool, error) {
+func waitTxOnChain(txhash *chainhash.Hash, client *mempool.MempoolClient) error {
 	time.Sleep(30 * time.Second)
 	fmt.Println("begin query....")
 	for {
 		resp, err := client.TransactionStatus(txhash)
 		if err != nil {
-			return false, err
+			return err
 		}
 		if resp.Confirmed {
-			return true, nil
+			return nil
 		}
 		fmt.Println("try query again....")
 		time.Sleep(1 * time.Minute)
@@ -428,12 +429,11 @@ func checkLatestTx(client *mempool.MempoolClient) error {
 	if txhash == nil {
 		return nil
 	}
-	sec, err := waitTxOnChain(txhash, client)
+	err = waitTxOnChain(txhash, client)
 	if err != nil {
 		log.Logger().WithField("error", err).Error("wait tx on chain failed")
 		return err
-	}
-	if sec {
+	} else {
 		if err = setOrders(itmes, CollectFinish); err == nil {
 			err = setLatestCollectInfo(txhash)
 			if err != nil {
@@ -718,17 +718,15 @@ func checkWithdrawTxsState(cfg *CollectCfg) {
 			log.Logger().WithField("error", err).Error("getInitedWithdrawOrders in check state failed")
 		} else {
 			for _, h := range hashs {
-				onchain, err := waitTxOnChain(h, client)
+				err = waitTxOnChain(h, client)
 				if err != nil {
 					log.Logger().WithField("error", err).WithField("hash", h.String()).
 						Error("wait on chain failed [check state]")
 				} else {
-					if onchain {
-						log.Logger().WithField("hash", h.String()).Info("the hash was on chain")
-						err = updateWithdrawOrdersState(h, dao.WithdrawStateFinish)
-						if err != nil {
-							log.Logger().WithField("hash", h.String()).WithField("error", err).Error("update the hash to finish state failed")
-						}
+					log.Logger().WithField("hash", h.String()).Info("the hash was on chain")
+					err = updateWithdrawOrdersState(h, dao.WithdrawStateFinish)
+					if err != nil {
+						log.Logger().WithField("hash", h.String()).WithField("error", err).Error("update the hash to finish state failed")
 					}
 				}
 			}
@@ -868,6 +866,7 @@ func makeHotWallet1ToHotWallet2Tx(feerate int64, cfg *CollectCfg, btcApiClient *
 func Run(cfg *CollectCfg) error {
 	wg := &sync.WaitGroup{}
 	wg.Add(5)
+	chBalanceLow, chBalanceHigh := make(chan int), make(chan int)
 
 	go func(cfg *CollectCfg) {
 		defer wg.Done()
@@ -877,13 +876,13 @@ func Run(cfg *CollectCfg) error {
 
 	go func(cfg *CollectCfg) {
 		defer wg.Done()
-		err := RunBtcWithdraw(cfg)
+		err := RunBtcWithdraw(cfg, chBalanceLow)
 		log.Logger().WithField("error", err).Error("withdraw process finish")
 	}(cfg)
 
 	go func(cfg *CollectCfg) {
 		defer wg.Done()
-		err := RunHotWalletBalance(cfg)
+		err := RunHotWalletBalance(cfg, chBalanceLow, chBalanceHigh)
 		log.Logger().WithField("error", err).Error("hot wallet balance process finish")
 	}(cfg)
 
@@ -898,6 +897,8 @@ func Run(cfg *CollectCfg) error {
 	}(cfg)
 
 	wg.Wait()
+	close(chBalanceLow)
+	close(chBalanceHigh)
 	log.Logger().Info("......finish......")
 	return nil
 }
@@ -967,14 +968,13 @@ func RunCollect(cfg *CollectCfg) error {
 				return err
 			}
 			log.Logger().Info("create latest collect info success")
-			onChain, err := waitTxOnChain(txHash, client)
+			err = waitTxOnChain(txHash, client)
 			if err != nil {
 				//fmt.Println("the collect tx on chain failed", err)
 				log.Logger().WithField("error", err).Info("the collect tx on chain failed")
 				alarm.Slack(context.Background(), "the collect tx on chain failed")
 				return err
-			}
-			if onChain {
+			} else {
 				err = setOrders(ords, CollectFinish)
 				if err != nil {
 					log.Logger().WithField("error", err).Info("set orders state failed")
@@ -987,7 +987,7 @@ func RunCollect(cfg *CollectCfg) error {
 	return nil
 }
 
-func RunBtcWithdraw(cfg *CollectCfg) error {
+func RunBtcWithdraw(cfg *CollectCfg, ch1 chan<- int) error {
 	privateKeyBytes, err := hex.DecodeString(cfg.StrHotWalletFee1Privkey)
 	if err != nil {
 		panic(err)
@@ -1027,11 +1027,11 @@ func RunBtcWithdraw(cfg *CollectCfg) error {
 
 			tx, err := makeWithdrawTx1(feerate, cfg.HotWalletFee1, cfg.HotWallet1, receiverPriv, feePriv, orders, client)
 			if err != nil {
-				if err == localErr.LowBalanceInHotWallet2 {
-					// todo
-				}
 				log.Logger().WithField("error", err).Info("make withdraw tx failed")
 				alarm.Slack(context.Background(), "failed to make withdraw tx")
+				if err == localErr.LowBalanceInHotWallet2 {
+					ch1 <- LowBalanceHotWallet
+				}
 			} else {
 				// 1 init the withdraw state
 				txhash1, ids := tx.TxHash(), withdrawOrderToIds(orders)
@@ -1058,8 +1058,33 @@ func RunBtcWithdraw(cfg *CollectCfg) error {
 	return nil
 }
 
-func RunHotWalletBalance(cfg *CollectCfg) error {
+func HotWalletBalanceTransfer(cfg *CollectCfg, client *mempool.MempoolClient) error {
+	// get the withdrawal order
+	log.Logger().Info("begin hotwallet1 to hotwallet2 process.....")
+	feerate := getFeeRate(cfg.Testnet, client)
 
+	tx, err := makeHotWallet1ToHotWallet2Tx(feerate, cfg, client)
+	if err != nil {
+		log.Logger().WithField("error", err).Info("wallet1 to wallet2 failed")
+		return err
+	}
+
+	txHash, err := client.BroadcastTx(tx)
+	if err != nil {
+		log.Logger().WithField("error", err).Error("failed to broadcast tx")
+		return err
+	}
+	log.Logger().WithField("txhash", txHash.String()).Info("broadcast the wallet1 to wallet2 tx")
+	err = waitTxOnChain(txHash, client)
+	if err != nil {
+		log.Logger().WithField("error", err).Error("wait the tx on chain failed")
+	} else {
+		log.Logger().WithField("txhash", txHash.String()).Info("the tx was on chain")
+	}
+	return err
+}
+
+func RunHotWalletBalance(cfg *CollectCfg, ch1, ch2 chan int) error {
 	network := &chaincfg.MainNetParams
 	if cfg.Testnet {
 		network = &chaincfg.TestNet3Params
@@ -1070,31 +1095,25 @@ func RunHotWalletBalance(cfg *CollectCfg) error {
 	defer ticker.Stop()
 
 	for {
-		// get the withdrawal order
-		log.Logger().Info("begin hotwallet1 to hotwallet2 process.....")
-		feerate := getFeeRate(cfg.Testnet, client)
-
-		tx, err := makeHotWallet1ToHotWallet2Tx(feerate, cfg, client)
-		if err != nil {
-			log.Logger().WithField("error", err).Info("wallet1 to wallet2 failed")
-			alarm.Slack(context.Background(), "failed to makeHotWallet1ToHotWallet2Tx")
-		} else {
-			// 1 init the withdraw state
-			txHash, err := client.BroadcastTx(tx)
+		select {
+		case <-ticker.C:
+			err := HotWalletBalanceTransfer(cfg, client)
 			if err != nil {
-				log.Logger().WithField("error", err).Error("failed to broadcast tx")
-				alarm.Slack(context.Background(), "failed to broadcast tx")
-			} else {
-				log.Logger().WithField("txhash", txHash.String()).Info("broadcast the wallet1 to wallet2 tx")
-				onChain, err := waitTxOnChain(txHash, client)
+				log.Logger().WithField("error", err).Info("wallet1 to wallet2 failed")
+				alarm.Slack(context.Background(), "failed to makeHotWallet1ToHotWallet2Tx")
+			}
+		case msg := <-ch1:
+			if msg == LowBalanceHotWallet {
+				err := HotWalletBalanceTransfer(cfg, client)
 				if err != nil {
-					log.Logger().WithField("error", err).Error("wait the tx on chain failed")
+					log.Logger().WithField("error", err).Info("wallet1 to wallet2 failed")
+					alarm.Slack(context.Background(), "failed to makeHotWallet1ToHotWallet2Tx")
 				} else {
-					log.Logger().WithField("txhash", txHash.String()).WithField("on chain", onChain).Info("the tx was on chain")
+					ch2 <- 2
 				}
 			}
+		default:
 		}
-		time.Sleep(100 * time.Second)
 	}
 	return nil
 }
