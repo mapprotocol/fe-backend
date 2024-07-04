@@ -28,6 +28,12 @@ const (
 	OrderStatusFailed
 )
 
+const (
+	WithdrawStateInit = iota + 1
+	WithdrawStateSend
+	WithdrawStateFinish
+)
+
 type Order struct {
 	ID                uint64    `gorm:"column:id;type:bigint(20);primaryKey;autoIncrement:true" json:"id"`
 	SrcChain          uint64    `gorm:"column:src_chain;type:bigint(20)" json:"src_chain"`

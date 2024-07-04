@@ -71,12 +71,6 @@ type WithdrawOrder struct {
 	Amount   int64
 }
 
-const (
-	WithdrawStateInit   = 1
-	WithdrawStateSend   = 2
-	WithdrawStateFinish = 3
-)
-
 func gatherUTXOForItem(sender btcutil.Address, client *mempool.MempoolClient) ([]*PrevOutPoint, error) {
 	outPointList := make([]*PrevOutPoint, 0)
 	unspentList, err := client.ListUnspent(sender)
@@ -471,21 +465,111 @@ func withdrawOrdersInfos(items []*WithdrawOrder) string {
 }
 
 func getWithdrawOrders(limit int, network *chaincfg.Params) ([]*WithdrawOrder, error) {
-	return nil, nil
+	order := dao.Order{
+		Action: dao.OrderActionFromEVM,
+		Stage:  dao.OrderStag2,
+		Status: dao.OrderStatusConfirmed,
+	}
+	gotOrders, _, err := order.Find(nil, dao.Paginate(1, limit))
+	if err != nil {
+		return nil, err
+	}
+
+	orders := make([]*WithdrawOrder, 0, len(gotOrders))
+	for _, o := range gotOrders {
+		receiver, err := btcutil.DecodeAddress(o.Receiver, network)
+		if err != nil {
+			params := map[string]interface{}{
+				"order_id": o.ID,
+				"network":  network.Net.String(),
+				"relayer":  o.Relayer,
+				"error":    err,
+			}
+			log.Logger().WithFields(params).Error("decode relayer address failed")
+			return nil, err
+		}
+
+		amount, err := strconv.ParseInt(o.InAmount, 10, 64)
+		if err != nil {
+			params := map[string]interface{}{
+				"order_id": o.ID,
+				"amount":   o.InAmount,
+				"error":    err,
+			}
+			log.Logger().WithFields(params).Error("failed to parse amount")
+			return nil, err
+		}
+
+		orders = append(orders, &WithdrawOrder{
+			OrderID:  o.ID,
+			Receiver: receiver,
+			Amount:   amount,
+		})
+	}
+
+	return orders, nil
 }
 
 // state = 1 | 2
-func getInitedWithdrawOrders() ([]*chainhash.Hash, [][]uint64, error) {
-	return nil, nil, nil
+func getInitedWithdrawOrders(state uint8, limit int) ([]*chainhash.Hash, error) {
+	order := dao.Order{
+		Action: dao.OrderActionFromEVM,
+		Stage:  dao.OrderStag3,
+		Status: state,
+	}
+	gotOrders, _, err := order.Find(nil, dao.Paginate(1, limit))
+	if err != nil {
+		return nil, err
+	}
+
+	hashes := make([]*chainhash.Hash, 0, len(gotOrders))
+	for _, o := range gotOrders {
+		txHash, err := chainhash.NewHashFromStr(o.OutTxHash)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse tx hash, %s", o.OutTxHash)
+		}
+
+		hashes = append(hashes, txHash)
+	}
+	return nil, nil
 }
 
 // state = 1 & txhash
 func initWithdrawOrders(txhash *chainhash.Hash, ids []uint64, network *chaincfg.Params) error {
+	update := &dao.Order{
+		Stage:     dao.OrderStag3,
+		Status:    dao.WithdrawStateInit,
+		OutTxHash: txhash.String(),
+	}
+	if err := dao.NewOrder().UpdatesByIDs(ids, update); err != nil {
+		params := map[string]interface{}{
+			"ids":    utils.JSON(ids),
+			"update": utils.JSON(update),
+			"error":  err,
+		}
+		log.Logger().WithFields(params).Error("failed to update order status")
+		return err
+	}
 	return nil
 }
 
 // state=2
-func updateWithdrawOrdersState(ids []uint64, state int) error {
+func updateWithdrawOrdersState(txhash *chainhash.Hash, state uint8) error {
+	order := dao.Order{
+		OutTxHash: txhash.String(),
+	}
+	update := &dao.Order{
+		Status: state,
+	}
+	if err := order.Updates(update); err != nil {
+		params := map[string]interface{}{
+			"txHash": txhash.String(),
+			"update": utils.JSON(update),
+			"error":  err,
+		}
+		log.Logger().WithFields(params).Error("failed to update order status")
+		return err
+	}
 	return nil
 }
 
@@ -621,23 +705,21 @@ func checkWithdrawTxsState(cfg *CollectCfg) {
 
 	for {
 		log.Logger().Info("begin withdraw tx state check...")
-		hashs, ids, err := getInitedWithdrawOrders()
+		hashs, err := getInitedWithdrawOrders(dao.WithdrawStateSend, 20) // todo update limit
 		if err != nil {
 			log.Logger().WithField("error", err).Error("getInitedWithdrawOrders in check state failed")
 		} else {
-			for i, h := range hashs {
+			for _, h := range hashs {
 				onchain, err := waitTxOnChain(h, client)
 				if err != nil {
 					log.Logger().WithField("error", err).WithField("hash", h.String()).
 						Error("wait on chain failed [check state]")
 				} else {
 					if onchain {
-						log.Logger().WithField("hash", h.String()).WithField("ids", ids[i]).
-							Info("the ids was on chain")
-						err = updateWithdrawOrdersState(ids[i], WithdrawStateFinish)
+						log.Logger().WithField("hash", h.String()).Info("the hash was on chain")
+						err = updateWithdrawOrdersState(h, dao.WithdrawStateFinish)
 						if err != nil {
-							log.Logger().WithField("error", err).WithField("ids", ids[i]).
-								Error("update the ids to finish state failed")
+							log.Logger().WithField("hash", h.String()).WithField("error", err).Error("update the hash to finish state failed")
 						}
 					}
 				}
@@ -929,7 +1011,7 @@ func RunBtcWithdraw(cfg *CollectCfg) error {
 							alarm.Slack(context.Background(), "failed to broadcast tx")
 						} else {
 							//  2. update orders state to WithdrawStateSend
-							err = updateWithdrawOrdersState(ids, WithdrawStateSend)
+							err = updateWithdrawOrdersState(&txhash1, dao.WithdrawStateSend)
 							log.Logger().WithField("txhash", txHash.String()).Info("broadcast the withdraw tx")
 						}
 					}
