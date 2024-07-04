@@ -368,3 +368,6 @@ func Test_btc(t *testing.T) {
 	}
 	fmt.Println(int64(amount), amount)
 }
+func Test_makeTxhash(t *testing.T) {
+
+}

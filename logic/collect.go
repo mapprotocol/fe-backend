@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	localErr "github.com/mapprotocol/fe-backend/resource/err"
 	"github.com/mapprotocol/fe-backend/utils"
 	"strconv"
 	"time"
@@ -633,7 +634,10 @@ func makeWithdrawTx0(feerate int64, tipper, sender btcutil.Address, senderPriv, 
 		outAmount += item.Amount
 	}
 	if int64(totalSenderAmount) < outAmount {
-		return nil, errors.New("not enough amount in the hot-wallet")
+		log.Logger().WithField("hotwallet2", totalSenderAmount).WithField("need", outAmount).
+			Error("low balance")
+		alarm.Slack(context.Background(), fmt.Sprintf("[hot-wallet2=%v,need=%v]:low balance", totalAmount, outAmount))
+		return nil, localErr.LowBalanceInHotWallet2
 	}
 
 	PkScript1, err := txscript.PayToAddrScript(sender)
@@ -657,7 +661,10 @@ func makeWithdrawTx0(feerate int64, tipper, sender btcutil.Address, senderPriv, 
 	if changeAmount > 0 {
 		commitTx.TxOut[len(commitTx.TxOut)-1].Value = int64(changeAmount)
 	} else {
-		return nil, errors.New("not enough fees")
+		log.Logger().Error(localErr.LowFeeInHotWalletFee2)
+		alarm.Slack(context.Background(), localErr.LowFeeInHotWalletFee2.Error())
+
+		return nil, localErr.LowFeeInHotWalletFee2
 	}
 	// make the signature
 	witnessList := make([]wire.TxWitness, len(commitTx.TxIn))
@@ -983,42 +990,35 @@ func RunBtcWithdraw(cfg *CollectCfg) error {
 		} else {
 			log.Logger().WithField("key", withdrawOrdersInfos(orders)).Info("user withdraw...")
 
-			enough, err := checkHotwallet2Balance(cfg.HotWalletFee1, client)
+			tx, err := makeWithdrawTx1(feerate, cfg.HotWalletFee1, cfg.HotWallet1, receiverPriv, feePriv, orders, client)
 			if err != nil {
-				log.Logger().WithField("error", err).Error("failed to check hot-wallet balance")
-				alarm.Slack(context.Background(), "check hot-wallet balance failed")
-				return err
-			}
-			if !enough {
-				log.Logger().Info("low balance in hot-wallet,will to collect")
+				if err == localErr.LowBalanceInHotWallet2 {
+					// todo
+				}
+				log.Logger().WithField("error", err).Info("make withdraw tx failed")
+				alarm.Slack(context.Background(), "failed to make withdraw tx")
 			} else {
-				tx, err := makeWithdrawTx1(feerate, cfg.HotWalletFee1, cfg.HotWallet1, receiverPriv, feePriv, orders, client)
+				// 1 init the withdraw state
+				txhash1, ids := tx.TxHash(), withdrawOrderToIds(orders)
+				log.Logger().WithField("txhash", txhash1.String()).Info("init user withdraw order")
+				err = initWithdrawOrders(&txhash1, ids, network)
 				if err != nil {
-					log.Logger().WithField("error", err).Info("make withdraw tx failed")
-					alarm.Slack(context.Background(), "failed to make withdraw tx")
+					log.Logger().WithField("error", err).WithField("txhash", txhash1.String()).
+						Error("init user withdraw order failed")
 				} else {
-					// 1 init the withdraw state
-					txhash1, ids := tx.TxHash(), withdrawOrderToIds(orders)
-					log.Logger().WithField("txhash", txhash1.String()).Info("init user withdraw order")
-					err = initWithdrawOrders(&txhash1, ids, network)
+					txHash, err := client.BroadcastTx(tx)
 					if err != nil {
-						log.Logger().WithField("error", err).WithField("txhash", txhash1.String()).
-							Error("init user withdraw order failed")
+						log.Logger().WithField("error", err).Error("failed to broadcast tx")
+						alarm.Slack(context.Background(), "failed to broadcast tx")
 					} else {
-						txHash, err := client.BroadcastTx(tx)
-						if err != nil {
-							log.Logger().WithField("error", err).Error("failed to broadcast tx")
-							alarm.Slack(context.Background(), "failed to broadcast tx")
-						} else {
-							//  2. update orders state to WithdrawStateSend
-							err = updateWithdrawOrdersState(&txhash1, dao.WithdrawStateSend)
-							log.Logger().WithField("txhash", txHash.String()).Info("broadcast the withdraw tx")
-						}
+						//  2. update orders state to WithdrawStateSend
+						err = updateWithdrawOrdersState(&txhash1, dao.WithdrawStateSend)
+						log.Logger().WithField("txhash", txHash.String()).Info("broadcast the withdraw tx")
 					}
 				}
 			}
 		}
-		time.Sleep(60 * time.Second)
+		time.Sleep(2 * time.Minute)
 	}
 	return nil
 }
