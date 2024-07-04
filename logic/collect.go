@@ -8,6 +8,7 @@ import (
 	localErr "github.com/mapprotocol/fe-backend/resource/err"
 	"github.com/mapprotocol/fe-backend/utils"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/btcsuite/btcd/btcec/v2"
@@ -735,7 +736,7 @@ func checkWithdrawTxsState(cfg *CollectCfg) {
 		time.Sleep(5 * time.Minute)
 	}
 }
-func checkHotwallet2Balance(receiver btcutil.Address, client *mempool.MempoolClient) (bool, error) {
+func checkHotwallet2Balance(cfg *CollectCfg) (bool, error) {
 	return true, nil
 }
 
@@ -864,6 +865,42 @@ func makeHotWallet1ToHotWallet2Tx(feerate int64, cfg *CollectCfg, btcApiClient *
 }
 
 // =============================================================================
+func Run(cfg *CollectCfg) error {
+	wg := &sync.WaitGroup{}
+	wg.Add(5)
+
+	go func(cfg *CollectCfg) {
+		defer wg.Done()
+		err := RunCollect(cfg)
+		log.Logger().WithField("error", err).Error("collect process finish")
+	}(cfg)
+
+	go func(cfg *CollectCfg) {
+		defer wg.Done()
+		err := RunBtcWithdraw(cfg)
+		log.Logger().WithField("error", err).Error("withdraw process finish")
+	}(cfg)
+
+	go func(cfg *CollectCfg) {
+		defer wg.Done()
+		err := RunHotWalletBalance(cfg)
+		log.Logger().WithField("error", err).Error("hot wallet balance process finish")
+	}(cfg)
+
+	go func(cfg *CollectCfg) {
+		defer wg.Done()
+		checkWithdrawTxsState(cfg)
+	}(cfg)
+
+	go func(cfg *CollectCfg) {
+		defer wg.Done()
+		checkHotwallet2Balance(cfg)
+	}(cfg)
+
+	wg.Wait()
+	log.Logger().Info("......finish......")
+	return nil
+}
 func RunCollect(cfg *CollectCfg) error {
 	privateKeyBytes, err := hex.DecodeString(cfg.StrHotWalletFee1Privkey)
 	if err != nil {
@@ -967,8 +1004,6 @@ func RunBtcWithdraw(cfg *CollectCfg) error {
 		network = &chaincfg.TestNet3Params
 	}
 	client := mempool.NewClient(network)
-
-	go checkWithdrawTxsState(cfg)
 
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()

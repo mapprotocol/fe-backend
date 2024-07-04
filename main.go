@@ -46,7 +46,7 @@ func main() {
 		HotWalletFee1:           feeAddress,
 		HotWallet1:              receiverAddress,
 	}
-	if err := logic.RunCollect(cfg); err != nil {
+	if err := logic.Run(cfg); err != nil {
 		log.Logger().WithField("error", err).Error("collect failed")
 		alarm.Slack(context.Background(), fmt.Sprintf("collect failed: %s", err.Error()))
 		return
