@@ -35,7 +35,7 @@ var (
 	//MinPreAdminOutPointValue2               = int64(20000)
 	MinBalanceInFeeAddress = int64(20000)
 	NoMoreUTXO             = errors.New("no more utxo")
-	MinUtxoAmount          = int64(5000)
+	MinUtxoAmount          = int64(100)
 	LowBalanceHotWallet    = 11
 	FullBalanceHotWallet   = 12
 )

@@ -208,12 +208,12 @@ func Test_02(t *testing.T) {
 	}
 	fmt.Println("txhash:", txHash.String())
 
-	onChain, err := waitTxOnChain(txHash, client)
+	err = waitTxOnChain(txHash, client)
 	if err != nil {
 		fmt.Println("get tx state failed", err)
 		return
 	}
-	fmt.Println("txhash on chain", onChain)
+	fmt.Println("txhash on chain")
 }
 
 func Test_03(t *testing.T) {
@@ -335,12 +335,12 @@ func Test_fullCollection(t *testing.T) {
 	}
 	fmt.Println("txhash:", txHash.String())
 
-	onChain, err := waitTxOnChain(txHash, client)
+	err = waitTxOnChain(txHash, client)
 	if err != nil {
 		fmt.Println("get tx state failed", err)
 		return
 	}
-	fmt.Println("txhash on chain", onChain)
+	fmt.Println("txhash on chain")
 
 	// collect process
 	fmt.Println("make the collect tx.....")
@@ -368,6 +368,60 @@ func Test_btc(t *testing.T) {
 	}
 	fmt.Println(int64(amount), amount)
 }
-func Test_makeTxhash(t *testing.T) {
+func Test_makeTxhashAndSimpleTransfer(t *testing.T) {
+	network := &chaincfg.MainNetParams
+	if testnet {
+		network = &chaincfg.TestNet3Params
+	}
+	client := mempool.NewClient(network)
+	privateKeyBytes, err := hex.DecodeString("8b04a45a7f66395aa3f61fbd2bd1172b0a5f4e64891729dc9e49a9a9a6eb05fc")
+	if err != nil {
+		panic(err)
+	}
+	senderPriv, _ := btcec.PrivKeyFromBytes(privateKeyBytes)
+	sender, _ := btcutil.DecodeAddress("tb1p23dgrhckt9vr24yuqdl3yu2xwj8em3wmn40ly0dtuf0lk0kk80jqesjhk4", network)
+
+	privateKeyBytes, err = hex.DecodeString("5a538bd636712fdd4855c74d8f4b3438b06bee3a1240adc4ee5f2f6b8393dfb9")
+	if err != nil {
+		panic(err)
+	}
+	tipperPriv, _ := btcec.PrivKeyFromBytes(privateKeyBytes)
+	tipper, _ := btcutil.DecodeAddress("tb1pj3jq046hzh9k3czd55v6ldvey3quhqagzm7wnueszjukjjah950s4rwhdu", network)
+
+	receiver, _ := btcutil.DecodeAddress("tb1pwf8u8g9pxnnm3kleec2wwk790y0g7nuvm7qyvu7xl8752c9cqe7swdaakj", network)
+
+	senderOutlist, err := gatherUTXO3(sender, client)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	feeOutlist, err := gatherUTXO3(tipper, client)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	feerate := int64(25)
+
+	tx, err := makeSimpleTx0(feerate, 500, sender, receiver, tipper, senderPriv, tipperPriv, senderOutlist, feeOutlist, client)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	fmt.Println("txhash1", tx.TxHash().String())
+	txHash, err := client.BroadcastTx(tx)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	fmt.Println("txhash2", txHash.String())
+	err = waitTxOnChain(txHash, client)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	fmt.Println("tx was on chain")
+}
+func Test_channel(t *testing.T) {
 
 }
