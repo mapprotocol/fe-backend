@@ -789,7 +789,7 @@ func makeSimpleTx0(feerate, amount int64, sender, receiver, tipper btcutil.Addre
 		Value:    amount,
 	})
 	if int64(totalSenderAmount) < amount {
-		return nil, errors.New("not enough amount in the hot-wallet")
+		return nil, localErr.LowBalanceInHotWallet1
 	}
 	// handle the sender change
 	PkScript1, err := txscript.PayToAddrScript(sender)
@@ -813,7 +813,7 @@ func makeSimpleTx0(feerate, amount int64, sender, receiver, tipper btcutil.Addre
 	if changeAmount > 0 {
 		commitTx.TxOut[len(commitTx.TxOut)-1].Value = int64(changeAmount)
 	} else {
-		return nil, errors.New("not enough fees")
+		return nil, localErr.LowFeeInHotWalletFee3
 	}
 	// make the signature
 	witnessList := make([]wire.TxWitness, len(commitTx.TxIn))
@@ -1114,26 +1114,31 @@ func RunHotWalletBalance(cfg *CollectCfg, ch1, ch2 chan int) error {
 	}
 	client := mempool.NewClient(network)
 
-	ticker := time.NewTicker(30 * time.Second)
+	ticker := time.NewTicker(30 * time.Minute)
 	defer ticker.Stop()
+	transfer := false
 
 	for {
 		select {
 		case <-ticker.C:
 			// check the water line
-			err := HotWalletBalanceTransfer(cfg, client)
-			if err != nil {
-				log.Logger().WithField("error", err).Info("wallet1 to wallet2 failed")
-				alarm.Slack(context.Background(), "failed to makeHotWallet1ToHotWallet2Tx")
+			if transfer {
+				err := HotWalletBalanceTransfer(cfg, client)
+				if err != nil {
+					log.Logger().WithField("error", err).Info("wallet1 to wallet2 failed")
+					alarm.Slack(context.Background(), "failed to makeHotWallet1ToHotWallet2Tx")
+				}
 			}
 		case msg := <-ch1:
 			if msg == LowBalanceHotWallet {
+				transfer = true
 				err := HotWalletBalanceTransfer(cfg, client)
 				if err != nil {
 					log.Logger().WithField("error", err).Info("wallet1 to wallet2 failed")
 					alarm.Slack(context.Background(), "failed to makeHotWallet1ToHotWallet2Tx")
 				} else {
 					ch2 <- FullBalanceHotWallet
+					transfer = false
 				}
 			}
 		default:
