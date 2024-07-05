@@ -12,7 +12,9 @@ import (
 	"github.com/btcsuite/btcd/txscript"
 	"github.com/btcsuite/btcd/wire"
 	"github.com/mapprotocol/fe-backend/third-party/mempool"
+	"sync"
 	"testing"
+	"time"
 )
 
 var (
@@ -422,6 +424,57 @@ func Test_makeTxhashAndSimpleTransfer(t *testing.T) {
 	}
 	fmt.Println("tx was on chain")
 }
-func Test_channel(t *testing.T) {
 
+func Test_04(t *testing.T) {
+}
+
+func Test_channe01(t *testing.T) {
+	ticker := time.NewTicker(10 * time.Second)
+	defer ticker.Stop()
+	index := 0
+	for {
+		select {
+		case <-ticker.C:
+			index++
+			fmt.Println("ticker index", index, time.Now())
+			if index > 10 {
+				return
+			}
+		default:
+		}
+	}
+}
+func Test_channe02(t *testing.T) {
+	wg := &sync.WaitGroup{}
+	wg.Add(4)
+	chBalanceLow, chBalanceHigh := make(chan int), make(chan int)
+	ticker1 := time.NewTicker(1 * time.Second)
+
+	go func() {
+		defer wg.Done()
+		action, pos := false, 0
+
+		for {
+			select {
+			case <-ticker1.C:
+				i := pos % 5
+				if i == 0 || action {
+					//chBalanceLow <- 1
+					fmt.Println("set ch1 state....")
+				}
+				pos++
+			case msg := <-chBalanceHigh:
+				if msg == 2 {
+					action = true
+					fmt.Println("begin the channel....")
+				}
+			}
+		}
+	}()
+	go func() {
+		defer wg.Done()
+	}()
+	wg.Wait()
+	close(chBalanceLow)
+	close(chBalanceHigh)
 }
