@@ -35,6 +35,7 @@ var (
 	//MinPreAdminOutPointValue2               = int64(20000)
 	MinBalanceInFeeAddress = int64(20000)
 	NoMoreUTXO             = errors.New("no more utxo")
+	MinUtxoAmount          = int64(5000)
 	LowBalanceHotWallet    = 11
 	FullBalanceHotWallet   = 12
 )
@@ -104,7 +105,7 @@ func gatherUTXO3(sender btcutil.Address, client *mempool.MempoolClient) ([]*Prev
 	}
 
 	for i := range unspentList {
-		if unspentList[i].Output.Value < 5000 {
+		if unspentList[i].Output.Value < MinUtxoAmount {
 			continue
 		}
 		outPointList = append(outPointList, &PrevOutPoint{
@@ -735,8 +736,19 @@ func checkWithdrawTxsState(cfg *CollectCfg) {
 		time.Sleep(5 * time.Minute)
 	}
 }
-func checkHotwallet2Balance(cfg *CollectCfg) (bool, error) {
-	return true, nil
+func checkHotwallet2Balance(cfg *CollectCfg, hotwallet2 btcutil.Address, client *mempool.MempoolClient) (bool, error) {
+	outs, err := gatherUTXO3(hotwallet2, client)
+	if err != nil {
+		return false, err
+	}
+	all := int64(0)
+	for _, out := range outs {
+		all += out.Value
+	}
+	if all < cfg.HotWallet2Line {
+		return true, nil
+	}
+	return false, nil
 }
 
 // =============================================================================
@@ -866,7 +878,7 @@ func makeHotWallet1ToHotWallet2Tx(feerate int64, cfg *CollectCfg, btcApiClient *
 // =============================================================================
 func Run(cfg *CollectCfg) error {
 	wg := &sync.WaitGroup{}
-	wg.Add(5)
+	wg.Add(4)
 	chBalanceLow, chBalanceHigh := make(chan int), make(chan int)
 
 	go func(cfg *CollectCfg) {
@@ -890,11 +902,6 @@ func Run(cfg *CollectCfg) error {
 	go func(cfg *CollectCfg) {
 		defer wg.Done()
 		checkWithdrawTxsState(cfg)
-	}(cfg)
-
-	go func(cfg *CollectCfg) {
-		defer wg.Done()
-		checkHotwallet2Balance(cfg)
 	}(cfg)
 
 	wg.Wait()
@@ -1116,13 +1123,14 @@ func RunHotWalletBalance(cfg *CollectCfg, ch1, ch2 chan int) error {
 
 	ticker := time.NewTicker(30 * time.Minute)
 	defer ticker.Stop()
-	transfer := false
+	transfer, hotwallet2 := false, cfg.HotWallet2
 
 	for {
 		select {
 		case <-ticker.C:
 			// check the water line
-			if transfer {
+			t, err := checkHotwallet2Balance(cfg, hotwallet2, client)
+			if transfer || (t && err == nil) {
 				err := HotWalletBalanceTransfer(cfg, client)
 				if err != nil {
 					log.Logger().WithField("error", err).Info("wallet1 to wallet2 failed")
