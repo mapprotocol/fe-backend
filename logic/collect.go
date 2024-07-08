@@ -1123,14 +1123,14 @@ func RunHotWalletBalance(cfg *CollectCfg, ch1, ch2 chan int) error {
 
 	ticker := time.NewTicker(30 * time.Minute)
 	defer ticker.Stop()
-	transfer, hotwallet2 := false, cfg.HotWallet2
+	hotwallet2 := cfg.HotWallet2
 
 	for {
 		select {
 		case <-ticker.C:
 			// check the water line
-			t, err := checkHotwallet2Balance(cfg, hotwallet2, client)
-			if transfer || (t && err == nil) {
+			transfer, err := checkHotwallet2Balance(cfg, hotwallet2, client)
+			if transfer && err == nil {
 				err := HotWalletBalanceTransfer(cfg, client)
 				if err != nil {
 					log.Logger().WithField("error", err).Info("wallet1 to wallet2 failed")
@@ -1139,15 +1139,12 @@ func RunHotWalletBalance(cfg *CollectCfg, ch1, ch2 chan int) error {
 			}
 		case msg := <-ch1:
 			if msg == LowBalanceHotWallet {
-				transfer = true
 				err := HotWalletBalanceTransfer(cfg, client)
 				if err != nil {
 					log.Logger().WithField("error", err).Info("wallet1 to wallet2 failed")
 					alarm.Slack(context.Background(), "failed to makeHotWallet1ToHotWallet2Tx")
-				} else {
-					ch2 <- FullBalanceHotWallet
-					transfer = false
 				}
+				ch2 <- FullBalanceHotWallet
 			}
 		default:
 		}

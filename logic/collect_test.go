@@ -452,28 +452,53 @@ func Test_channe02(t *testing.T) {
 
 	go func() {
 		defer wg.Done()
-		action, pos := false, 0
+		action, pos := true, 0
 
 		for {
 			select {
 			case <-ticker1.C:
 				i := pos % 5
-				if i == 0 || action {
-					//chBalanceLow <- 1
-					fmt.Println("set ch1 state....")
+				if action {
+					if i == 0 {
+						action = false
+						chBalanceLow <- 1
+						fmt.Println("action=false,chLow set...")
+					}
+					fmt.Println("set withdraw state....")
 				}
 				pos++
 			case msg := <-chBalanceHigh:
 				if msg == 2 {
 					action = true
-					fmt.Println("begin the channel....")
+					fmt.Println("set action=true,begin the channel....[withdraw]")
 				}
 			}
 		}
 	}()
+
 	go func() {
 		defer wg.Done()
+		pos := 0
+
+		for {
+			select {
+			case <-ticker1.C:
+				i := pos % 50
+				if i == 0 {
+					fmt.Println("set ch2 state....")
+				}
+				pos++
+			case msg := <-chBalanceLow:
+				if msg == 1 {
+					fmt.Println("begin the balance channel,will set action=true....")
+					time.Sleep(5 * time.Second)
+					chBalanceHigh <- 2
+					fmt.Println("end the balance channel....")
+				}
+			}
+		}
 	}()
+
 	wg.Wait()
 	close(chBalanceLow)
 	close(chBalanceHigh)
