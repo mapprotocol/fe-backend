@@ -424,7 +424,64 @@ func Test_makeTxhashAndSimpleTransfer(t *testing.T) {
 	}
 	fmt.Println("tx was on chain")
 }
+func Test_withdraw(t *testing.T) {
+	network := &chaincfg.MainNetParams
+	if testnet {
+		network = &chaincfg.TestNet3Params
+	}
+	client := mempool.NewClient(network)
 
+	privateKeyBytes, err := hex.DecodeString("8b04a45a7f66395aa3f61fbd2bd1172b0a5f4e64891729dc9e49a9a9a6eb05fc")
+	if err != nil {
+		panic(err)
+	}
+	senderPriv, _ := btcec.PrivKeyFromBytes(privateKeyBytes)
+	sender, _ := btcutil.DecodeAddress("tb1p23dgrhckt9vr24yuqdl3yu2xwj8em3wmn40ly0dtuf0lk0kk80jqesjhk4", network)
+
+	privateKeyBytes, err = hex.DecodeString("5a538bd636712fdd4855c74d8f4b3438b06bee3a1240adc4ee5f2f6b8393dfb9")
+	if err != nil {
+		panic(err)
+	}
+	tipperPriv, _ := btcec.PrivKeyFromBytes(privateKeyBytes)
+	tipper, _ := btcutil.DecodeAddress("tb1pj3jq046hzh9k3czd55v6ldvey3quhqagzm7wnueszjukjjah950s4rwhdu", network)
+
+	strReceivers := []string{
+		"tb1p42xadanfhg82s8wm4yw59ys4vuunsyyvzteacdvta2z4p4vrs29satct4l",
+		"tb1pfx50n7wkdnha0rh3j70363phkv50s4pafrg6s9cfhhtxtxusf4xs46w8ve",
+		"tb1pew99gkv36gerrs7shy4tpr952250n02flnz30ezjy2qmz2rd7h6qn4e676",
+		"tb1psud7xj9sncur40xe4a3y72ngld2aq6pw36rjcn79ncq4ga656mjq8jnwgw",
+		"tb1pn4ammcs3dyzyfg3tk39ss8ly6d5ndpu9z75c9fg693c2gads7v9q4l0yys",
+	}
+	items := []*WithdrawOrder{}
+	for i, s := range strReceivers {
+		receiver0, _ := btcutil.DecodeAddress(s, network)
+		items = append(items, &WithdrawOrder{
+			OrderID:  uint64(i),
+			Receiver: receiver0,
+			Amount:   100,
+		})
+	}
+	feerate := int64(25)
+
+	tx, err := makeWithdrawTx1(feerate, tipper, sender, senderPriv, tipperPriv, items, client)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	fmt.Println("txhash1", tx.TxHash().String())
+	txHash, err := client.BroadcastTx(tx)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	fmt.Println("txhash2", txHash.String())
+	err = waitTxOnChain(txHash, client)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	fmt.Println("tx was on chain")
+}
 func Test_04(t *testing.T) {
 }
 
