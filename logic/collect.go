@@ -48,17 +48,17 @@ type CollectCfg struct {
 	Testnet                 bool
 	StrHotWalletFee1Privkey string
 	StrHotWallet1Priv       string
-	HotWalletFee1           btcutil.Address
-	HotWallet1              btcutil.Address
+	HotWalletFee1           btcutil.Address // use for collect tx fee
+	HotWallet1              btcutil.Address // use for collect
 
 	StrHotWalletFee2Privkey string
 	StrHotWallet2Priv       string
-	HotWalletFee2           btcutil.Address
-	HotWallet2              btcutil.Address
+	HotWalletFee2           btcutil.Address // use for withdraw  tx fee
+	HotWallet2              btcutil.Address // use for withdraw
 	HotWallet2Line          int64
 
 	StrHotWalletFee3Privkey string
-	HotWalletFee3           btcutil.Address
+	HotWalletFee3           btcutil.Address // use for move tx fee (hot1 --> hot2)
 
 	MaxTransferAmount int64
 }
