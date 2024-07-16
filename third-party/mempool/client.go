@@ -2,13 +2,12 @@ package mempool
 
 import (
 	"fmt"
-	"github.com/pkg/errors"
 	"io"
 	"log"
-	"net/http"
 
 	"github.com/btcsuite/btcd/chaincfg"
 	"github.com/btcsuite/btcd/wire"
+	uhttp "github.com/mapprotocol/fe-backend/utils/http"
 )
 
 type MempoolClient struct {
@@ -31,26 +30,7 @@ func NewClient(netParams *chaincfg.Params) *MempoolClient {
 	}
 }
 
-func (c *MempoolClient) request(method, subPath string, requestBody io.Reader) ([]byte, error) {
-	return Request(method, c.baseURL, subPath, requestBody)
-}
-
-func Request(method, baseURL, subPath string, requestBody io.Reader) ([]byte, error) {
-	url := fmt.Sprintf("%s%s", baseURL, subPath)
-	req, err := http.NewRequest(method, url, requestBody)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to create request")
-	}
-	req.Header.Add("Content-Type", "application/json")
-	req.Header.Add("Accept", "application/json")
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to send request")
-	}
-	defer resp.Body.Close()
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to read response body")
-	}
-	return body, nil
+func (c *MempoolClient) request(method, subPath string, body io.Reader) ([]byte, error) {
+	url := fmt.Sprintf("%s%s", c.baseURL, subPath)
+	return uhttp.Request(url, method, nil, body)
 }

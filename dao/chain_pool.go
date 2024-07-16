@@ -6,13 +6,12 @@ import (
 	"time"
 )
 
-const TableNameSupportedChain = "supported_chain"
+const TableNameChainPool = "chain_pool"
 
-type SupportedChain struct {
+type ChainPool struct {
 	ID                 uint64    `gorm:"column:id;type:bigint(20);primaryKey;autoIncrement:true" json:"id"`
 	ChainID            string    `gorm:"column:chain_id;type:varchar(255)" json:"chain_id"`
 	ChainName          string    `gorm:"column:chain_name;type:varchar(255)" json:"chain_name"`
-	ChainIcon          string    `gorm:"column:chain_icon;type:varchar(255)" json:"chain_icon"`
 	ChainRPC           string    `gorm:"column:chain_rpc;type:varchar(255)" json:"chain_rpc"`
 	ChainPoolContract  string    `gorm:"column:chain_pool_contract;type:varchar(255)" json:"chain_pool_contract"`
 	GasLimitMultiplier string    `gorm:"column:gas_limit_multiplier;type:varchar(255)" json:"gas_limit_multiplier"`
@@ -20,25 +19,25 @@ type SupportedChain struct {
 	UpdatedAt          time.Time `gorm:"column:updated_at;type:datetime" json:"updated_at"`
 }
 
-func (*SupportedChain) TableName() string {
-	return TableNameSupportedChain
+func (*ChainPool) TableName() string {
+	return TableNameChainPool
 }
 
-func NewSupportedChain() *SupportedChain {
-	return &SupportedChain{}
+func NewChainPool() *ChainPool {
+	return &ChainPool{}
 }
 
-func NewSupportedChainWithChainID(chainID string) *SupportedChain {
-	return &SupportedChain{ChainID: chainID}
+func NewChainPoolWithChainID(chainID string) *ChainPool {
+	return &ChainPool{ChainID: chainID}
 }
 
-func (sc *SupportedChain) First() (get *SupportedChain, err error) {
-	err = db.GetDB().Where(sc).First(&get).Error
+func (cp *ChainPool) First() (get *ChainPool, err error) {
+	err = db.GetDB().Where(cp).First(&get).Error
 	return get, err
 }
 
-func (sc *SupportedChain) Find(ext *QueryExtra, pager Pager) (list []*SupportedChain, count int64, err error) {
-	tx := db.GetDB().Where(sc)
+func (cp *ChainPool) Find(ext *QueryExtra, pager Pager) (list []*ChainPool, count int64, err error) {
+	tx := db.GetDB().Where(cp)
 	if ext != nil {
 		if ext.Conditions != nil {
 			for k, v := range ext.Conditions {
@@ -56,7 +55,7 @@ func (sc *SupportedChain) Find(ext *QueryExtra, pager Pager) (list []*SupportedC
 	}
 
 	if pager != nil {
-		if err := tx.Model(sc).Count(&count).Error; err != nil {
+		if err := tx.Model(cp).Count(&count).Error; err != nil {
 			return list, count, err
 		}
 		if count == 0 {

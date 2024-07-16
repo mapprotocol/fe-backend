@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"encoding/binary"
 	"encoding/json"
 	"strings"
 )
@@ -18,16 +19,12 @@ func JSON(v interface{}) string {
 	return string(bs)
 }
 
-func ValidatePage(page, size int) (int, int) {
-	if page <= 0 {
-		page = 1
-	}
+func Uint64ToByte32(num uint64) [32]byte {
+	var result [32]byte
+	binary.BigEndian.PutUint64(result[:], num)
+	return result
+}
 
-	switch {
-	case size > 100:
-		size = 100
-	case size <= 0:
-		size = 20
-	}
-	return page, size
+func BytesToUint64(b []byte) uint64 {
+	return binary.BigEndian.Uint64(b)
 }

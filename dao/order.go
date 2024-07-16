@@ -29,20 +29,21 @@ const (
 
 type Order struct {
 	ID        uint64    `gorm:"column:id;type:bigint(20);primaryKey;autoIncrement:true" json:"id"`
-	SrcChain  uint64    `gorm:"column:src_chain;type:bigint(20)" json:"src_chain"`
+	SrcChain  string    `gorm:"column:src_chain;type:varchar(255)" json:"src_chain"`
 	SrcToken  string    `gorm:"column:src_token;type:varchar(255)" json:"src_token"`
 	Sender    string    `gorm:"column:sender;type:varchar(255)" json:"sender"`
 	InAmount  string    `gorm:"column:in_amount;type:varchar(255)" json:"in_amount"`
 	InTxHash  string    `gorm:"column:in_tx_hash;type:varchar(255)" json:"in_tx_hash"`
 	Relayer   string    `gorm:"column:relayer;type:varchar(255)" json:"relayer"`
-	DstChain  uint64    `gorm:"column:dst_chain;type:bigint(20)" json:"dst_chain"`
+	DstChain  string    `gorm:"column:dst_chain;type:varchar(255)" json:"dst_chain"`
 	DstToken  string    `gorm:"column:dst_token;type:varchar(255)" json:"dst_token"`
 	Receiver  string    `gorm:"column:receiver;type:varchar(255)" json:"receiver"`
 	OutAmount string    `gorm:"column:out_amount;type:varchar(255)" json:"out_amount"`
-	OutTxHash string    `gorm:"column:tx_hash;type:varchar(255)" json:"tx_hash"`
+	OutTxHash string    `gorm:"column:out_tx_hash;type:varchar(255)" json:"out_tx_hash"`
 	Action    uint8     `gorm:"column:action;type:tinyint(4)" json:"action"`
 	Stage     uint8     `gorm:"column:stage;type:tinyint(4)" json:"stage"`
 	Status    int32     `gorm:"column:status;type:int(11)" json:"status"`
+	Slippage  uint64    `gorm:"column:slippage;type:bigint(20)" json:"slippage"`
 	CreatedAt time.Time `gorm:"column:created_at;type:datetime" json:"created_at"`
 	UpdatedAt time.Time `gorm:"column:updated_at;type:datetime" json:"updated_at"`
 }
@@ -112,7 +113,13 @@ func (o *Order) Find(ext *QueryExtra, pager Pager) (list []*Order, count int64, 
 	return list, count, err
 }
 
-func (o *Order) GetOldest10ByStatus(id uint64, status uint8) (list []*Order, err error) { // todo add stage to query params
-	err = db.GetDB().Where(o).Where("id >= ?", id).Where("status = ?", status).Limit(OldestLimit).Find(&list).Error
+func (o *Order) GetOldest10ByStatus(id uint64, action, stage, status uint8) (list []*Order, err error) {
+	err = db.GetDB().Where(o).Where("id >= ?", id).Where("action = ?", action).
+		Where("stage = ?", stage).Where("status = ?", status).Limit(OldestLimit).Find(&list).Error
+	return list, err
+}
+
+func (o *Order) GetOldest10ByID(id uint64) (list []*Order, err error) {
+	err = db.GetDB().Where(o).Where("id >= ?", id).Limit(OldestLimit).Find(&list).Error
 	return list, err
 }
