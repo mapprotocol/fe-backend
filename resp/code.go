@@ -7,6 +7,13 @@ const (
 )
 
 const (
+	CodeButterServerError = iota + 50001
+	CodeButterNotAvailableRoute
+	CodeTONRouteServerError
+	CodeTONRouteNotAvailableRoute
+)
+
+const (
 	CodeOrderNotFound = 4001
 )
 

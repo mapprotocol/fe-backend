@@ -29,21 +29,22 @@ const (
 
 type Order struct {
 	ID                uint64    `gorm:"column:id;type:bigint(20);primaryKey;autoIncrement:true" json:"id"`
-	SrcChain          uint64    `gorm:"column:src_chain;type:bigint(20)" json:"src_chain"`
+	SrcChain          string    `gorm:"column:src_chain;type:varchar(255)" json:"src_chain"`
 	SrcToken          string    `gorm:"column:src_token;type:varchar(255)" json:"src_token"`
 	Sender            string    `gorm:"column:sender;type:varchar(255)" json:"sender"`
 	InAmount          string    `gorm:"column:in_amount;type:varchar(255)" json:"in_amount"`
 	InTxHash          string    `gorm:"column:in_tx_hash;type:varchar(255)" json:"in_tx_hash"`
 	Relayer           string    `gorm:"column:relayer;type:varchar(255)" json:"relayer"`
 	RelayerPrivateKey string    `gorm:"column:relayer_private_key;type:varchar(255)" json:"relayer_private_key"`
-	DstChain          uint64    `gorm:"column:dst_chain;type:bigint(20)" json:"dst_chain"`
+	DstChain          string    `gorm:"column:dst_chain;type:varchar(255)" json:"dst_chain"`
 	DstToken          string    `gorm:"column:dst_token;type:varchar(255)" json:"dst_token"`
 	Receiver          string    `gorm:"column:receiver;type:varchar(255)" json:"receiver"`
 	OutAmount         string    `gorm:"column:out_amount;type:varchar(255)" json:"out_amount"`
 	OutTxHash         string    `gorm:"column:out_tx_hash;type:varchar(255)" json:"out_tx_hash"`
 	Action            uint8     `gorm:"column:action;type:tinyint(4)" json:"action"`
 	Stage             uint8     `gorm:"column:stage;type:tinyint(4)" json:"stage"`
-	Status            uint8     `gorm:"column:status;type:tinyint(4)" json:"status"`
+	Status            uint8     `gorm:"column:status;type:int(11)" json:"status"`
+	Slippage          uint64    `gorm:"column:slippage;type:bigint(20)" json:"slippage"`
 	CreatedAt         time.Time `gorm:"column:created_at;type:datetime" json:"created_at"`
 	UpdatedAt         time.Time `gorm:"column:updated_at;type:datetime" json:"updated_at"`
 }
@@ -64,8 +65,9 @@ func (o *Order) TableName() string {
 	return TableNameOrder
 }
 
-func (o *Order) Create() error {
-	return db.GetDB().Create(o).Error
+func (o *Order) Create() (uint64, error) {
+	err := db.GetDB().Create(o).Error
+	return o.ID, err
 }
 
 func (o *Order) Updates(update *Order) error {

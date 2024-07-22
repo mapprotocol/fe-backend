@@ -6,10 +6,11 @@ import (
 	"fmt"
 	uhttp "github.com/mapprotocol/fe-backend/utils/http"
 	"github.com/mapprotocol/fe-backend/utils/reqerror"
+	"github.com/spf13/viper"
 	"strconv"
 )
 
-const PathSwap = "/routeAndSwap"
+const PathSwap = "/swap"
 const PathRouteAndSwap = "/routeAndSwap"
 
 var (
@@ -19,7 +20,7 @@ var (
 
 type SwapRequest struct {
 	Hash     string `json:"hash"`
-	Slippage string `json:"slippage"`
+	Slippage uint64 `json:"slippage"`
 	From     string `json:"from"`
 	Receiver string `json:"receiver"`
 	CallData string `json:"callData"`
@@ -38,7 +39,7 @@ type RouteAndSwapRequest struct {
 	TokenInAddress  string `json:"tokenInAddress"`
 	TokenOutAddress string `json:"tokenOutAddress"`
 	Kind            string `json:"type"`
-	Slippage        string `json:"slippage"`
+	Slippage        uint64 `json:"slippage"`
 	Entrance        string `json:"entrance"`
 	From            string `json:"from"`
 	Receiver        string `json:"receiver"`
@@ -181,11 +182,12 @@ type TxData struct {
 }
 
 func Swap(request *SwapRequest) (*TxData, error) {
-	params, err := uhttp.URLEncode(request)
+	params, err := uhttp.URLEncode(request) // todo
 	if err != nil {
 		return nil, err
 	}
-	url := fmt.Sprintf("%s/%s?%s", Domain, PathSwap, params)
+	url := fmt.Sprintf("%s%s?%s", Domain, PathSwap, params)
+	fmt.Println("============================== swap url: ", url)
 	ret, err := uhttp.Get(url, nil, nil)
 	if err != nil {
 		return nil, reqerror.NewExternalRequestError(
@@ -216,11 +218,12 @@ func Swap(request *SwapRequest) (*TxData, error) {
 }
 
 func RouteAndSwap(request *RouteAndSwapRequest) (*TxData, error) {
-	params, err := uhttp.URLEncode(request)
+	request.Entrance = viper.GetStringMapString("butter")["entrance"]
+	params, err := uhttp.URLEncode(request) // todo
 	if err != nil {
 		return nil, err
 	}
-	url := fmt.Sprintf("%s/%s?%s", Domain, PathRouteAndSwap, params)
+	url := fmt.Sprintf("%s%s?%s", Domain, PathRouteAndSwap, params)
 	ret, err := uhttp.Get(url, nil, nil)
 	if err != nil {
 		return nil, reqerror.NewExternalRequestError(

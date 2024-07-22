@@ -5,6 +5,7 @@ import (
 	"fmt"
 	uhttp "github.com/mapprotocol/fe-backend/utils/http"
 	"github.com/mapprotocol/fe-backend/utils/reqerror"
+	"github.com/spf13/viper"
 	"strconv"
 )
 
@@ -20,7 +21,7 @@ type RouteRequest struct {
 	Amount          string `json:"amount"`
 	TokenInAddress  string `json:"tokenInAddress"`
 	TokenOutAddress string `json:"tokenOutAddress"`
-	Kind            string `json:"type"`
+	Type            string `json:"type"`
 	Slippage        string `json:"slippage"`
 	Entrance        string `json:"entrance"`
 }
@@ -166,12 +167,14 @@ type RouteResponseData struct {
 	} `json:"minAmountOut"`
 }
 
-func Route(request *RouteRequest) ([]*RouteResponseData, error) {
+func Route(request *RouteRequest) ([]*RouteResponseData, error) { // todo check butter special code(code: 2003, message: No Route Found)
+	request.Entrance = viper.GetStringMapString("butter")["entrance"]
 	params, err := uhttp.URLEncode(request) // todo
 	if err != nil {
 		return nil, err
 	}
-	url := fmt.Sprintf("%s/%s?%s", Domain, PathRoute, params)
+	url := fmt.Sprintf("%s%s?%s", Domain, PathRoute, params)
+	fmt.Println("============================== route url: ", url)
 	ret, err := uhttp.Get(url, nil, nil)
 	if err != nil {
 		return nil, reqerror.NewExternalRequestError(

@@ -7,7 +7,7 @@ import (
 	"github.com/btcsuite/btcd/btcutil"
 	"github.com/btcsuite/btcd/chaincfg"
 	"github.com/btcsuite/btcd/txscript"
-	"github.com/ethereum/go-ethereum/common"
+	"github.com/mapprotocol/fe-backend/constants"
 	"gorm.io/gorm"
 	blog "log"
 
@@ -38,13 +38,13 @@ func InitNetworkParams(network string) {
 	}
 }
 
-func CreateOrder(srcChain uint64, srcToken, sender, amount string, dstChain uint64, dstToken, receiver string, action uint8) (ret *entity.CreateOrderResponse, code int) {
+func CreateOrder(srcChain, srcToken, sender, amount string, dstChain, dstToken, receiver string, action uint8, slippage uint64) (ret *entity.CreateOrderResponse, code int) {
 	var (
 		addressStr    string
 		privateKeyStr string
 	)
 
-	if action == dao.OrderActionToEVM {
+	if srcChain == constants.BTCChainID {
 		privateKey, err := generateKey()
 		if err != nil {
 			log.Logger().WithField("error", err).Error("failed to generate key")
@@ -57,9 +57,8 @@ func CreateOrder(srcChain uint64, srcToken, sender, amount string, dstChain uint
 		}
 		addressStr = address.String()
 		privateKeyStr = string(privateKey.Serialize())
-	} else if action == dao.OrderActionFromEVM {
-		// todo
 	}
+
 	order := &dao.Order{
 		SrcChain:          srcChain,
 		SrcToken:          srcToken,
@@ -73,14 +72,16 @@ func CreateOrder(srcChain uint64, srcToken, sender, amount string, dstChain uint
 		Action:            action,
 		Stage:             dao.OrderStag1,
 		Status:            dao.OrderStatusPending,
+		Slippage:          slippage,
 	}
-	if err := order.Create(); err != nil {
+	orderID, err := order.Create()
+	if err != nil {
 		log.Logger().WithField("order", utils.JSON(order)).WithField("error", err).Error("failed to create order")
 		return nil, resp.CodeInternalServerError
 	}
 
 	return &entity.CreateOrderResponse{
-		OrderID: order.ID,
+		OrderID: orderID,
 		Relayer: addressStr,
 	}, resp.CodeSuccess
 }
@@ -98,7 +99,7 @@ func UpdateOrder(orderID uint64, txHash string) int {
 		// todo check tx hash
 	} else if order.Action == dao.OrderActionFromEVM {
 		// todo check tx hash
-		common.HexToHash()
+		//common.HexToHash()
 	}
 
 	update := dao.Order{

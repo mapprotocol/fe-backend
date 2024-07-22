@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"encoding/binary"
 	"encoding/json"
 	"strings"
 
@@ -64,6 +65,12 @@ func IsHexHash(s string) bool {
 		s = s[2:]
 	}
 	return len(s) == 2*common.HashLength && isHex(s)
+}
+
+func Uint64ToByte32(num uint64) [32]byte {
+	var result [32]byte
+	binary.BigEndian.PutUint64(result[:], num)
+	return result
 }
 
 // has0xPrefix validates str begins with '0x' or '0X'.

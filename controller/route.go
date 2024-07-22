@@ -2,10 +2,13 @@ package controller
 
 import (
 	"github.com/gin-gonic/gin"
+	"github.com/mapprotocol/fe-backend/constants"
+	"github.com/mapprotocol/fe-backend/dao"
 	"github.com/mapprotocol/fe-backend/entity"
 	"github.com/mapprotocol/fe-backend/logic"
 	"github.com/mapprotocol/fe-backend/resp"
 	"github.com/mapprotocol/fe-backend/utils"
+	"math/big"
 	"strconv"
 )
 
@@ -14,22 +17,35 @@ const (
 	exactOut = "exactOut"
 )
 
-func GetRoute(c *gin.Context) {
+func Route(c *gin.Context) {
 	req := &entity.RouteRequest{}
 	if err := c.ShouldBindQuery(req); err != nil {
 		resp.ParameterErr(c, "")
 		return
 	}
-	if utils.IsEmpty(req.FromChainID) {
-		resp.ParameterErr(c, "missing fromChainId")
-		return
-	}
-	if utils.IsEmpty(req.ToChainID) {
-		resp.ParameterErr(c, "missing toChainId")
-		return
-	}
-	if utils.IsEmpty(req.Amount) {
+	//if utils.IsEmpty(req.FromChainID) || req.FromChainID == "0" {
+	//	resp.ParameterErr(c, "missing fromChainId")
+	//	return
+	//}
+	//if _, ok := new(big.Int).SetString(req.FromChainID, 10); !ok {
+	//	resp.ParameterErr(c, "invalid fromChainId")
+	//	return
+	//}
+
+	//if utils.IsEmpty(req.ToChainID) || req.ToChainID == "0" {
+	//	resp.ParameterErr(c, "missing toChainId")
+	//	return
+	//}
+	//if _, ok := new(big.Int).SetString(req.ToChainID, 10); !ok {
+	//	resp.ParameterErr(c, "invalid toChainId")
+	//	return
+	//}
+	if utils.IsEmpty(req.Amount) || req.Amount == "0" {
 		resp.ParameterErr(c, "missing amount")
+		return
+	}
+	if _, err := strconv.ParseFloat(req.Amount, 64); err != nil {
+		resp.ParameterErr(c, "invalid amount")
 		return
 	}
 	if utils.IsEmpty(req.TokenInAddress) {
@@ -40,15 +56,15 @@ func GetRoute(c *gin.Context) {
 		resp.ParameterErr(c, "missing tokenOutAddress")
 		return
 	}
-	if utils.IsEmpty(req.Kind) {
+	if utils.IsEmpty(req.Type) {
 		resp.ParameterErr(c, "missing type")
 		return
 	}
-	if req.Kind != exactIn && req.Kind != exactOut {
+	if req.Type != exactIn && req.Type != exactOut {
 		resp.ParameterErr(c, "type must be exactIn or exactOut")
 		return
 	}
-	if utils.IsEmpty(req.Slippage) {
+	if utils.IsEmpty(req.Slippage) || req.Slippage == "0" {
 		resp.ParameterErr(c, "missing slippage")
 	}
 	slippage, err := strconv.ParseUint(req.Slippage, 10, 64)
@@ -56,17 +72,48 @@ func GetRoute(c *gin.Context) {
 		resp.ParameterErr(c, "invalid slippage")
 		return
 	}
-	if slippage < 0 || slippage > 5000 {
+	if slippage < constants.SlippageMin || slippage > constants.SlippageMax {
 		resp.ParameterErr(c, "invalid slippage")
 		return
 	}
-
-	ret, code := logic.GetRoute(req)
-	if code != resp.CodeSuccess {
-		resp.Error(c, code)
+	if req.Action == dao.OrderActionToEVM {
+		if req.FromChainID != constants.BTCChainID && req.FromChainID != constants.TONChainID {
+			resp.ParameterErr(c, "invalid fromChainId")
+			return
+		}
+	} else if req.Action == dao.OrderActionFromEVM {
+		if req.ToChainID != constants.BTCChainID && req.ToChainID != constants.TONChainID {
+			resp.ParameterErr(c, "invalid toChainId")
+			return
+		}
+	} else {
+		resp.ParameterErr(c, "invalid action")
 		return
 	}
-	resp.Success(c, ret)
+
+	code := resp.CodeSuccess
+	ret := make([]*entity.RouteResponse, 0)
+
+	switch req.Action {
+	case dao.OrderActionToEVM:
+		if req.FromChainID == constants.TONChainID {
+			ret, code = logic.GetTONToEVMRoute(req)
+			if code != resp.CodeSuccess {
+				resp.Error(c, code)
+				return
+			}
+		}
+	case dao.OrderActionFromEVM:
+		if req.ToChainID == constants.TONChainID {
+			ret, code = logic.GetEVMToTONRoute(req)
+			if code != resp.CodeSuccess {
+				resp.Error(c, code)
+				return
+			}
+		}
+	}
+
+	resp.SuccessList(c, int64(len(ret)), ret)
 }
 
 func Swap(c *gin.Context) {
@@ -75,6 +122,45 @@ func Swap(c *gin.Context) {
 		resp.ParameterErr(c, "")
 		return
 	}
+	if utils.IsEmpty(req.SrcChain) {
+		resp.ParameterErr(c, "missing srcChain")
+		return
+	}
+	if _, ok := new(big.Int).SetString(req.SrcChain, 10); !ok {
+		resp.ParameterErr(c, "invalid srcChain")
+		return
+	}
+
+	if !utils.IsValidEvmAddress(req.SrcToken) {
+		resp.ParameterErr(c, "invalid srcToken")
+		return
+	}
+	//if !utils.IsValidEvmAddress(req.DstToken) {
+	//	resp.ParameterErr(c, "invalid dstToken")
+	//	return
+	//} // todo
+	if utils.IsEmpty(req.Amount) {
+		resp.ParameterErr(c, "missing amount")
+		return
+	}
+	if _, err := strconv.ParseFloat(req.Amount, 64); err != nil {
+		resp.ParameterErr(c, "invalid amount")
+		return
+	}
+
+	if utils.IsEmpty(req.DstChain) {
+		resp.ParameterErr(c, "missing dstChain")
+		return
+	}
+	if _, ok := new(big.Int).SetString(req.DstChain, 10); !ok {
+		resp.ParameterErr(c, "invalid dstChain")
+		return
+	}
+	if !utils.IsValidBitcoinAddress(req.Receiver, logic.NetParams) {
+		resp.ParameterErr(c, "invalid receiver")
+		return
+	}
+
 	if utils.IsEmpty(req.Hash) {
 		resp.ParameterErr(c, "missing hash")
 		return
@@ -87,20 +173,13 @@ func Swap(c *gin.Context) {
 		resp.ParameterErr(c, "invalid slippage")
 		return
 	}
-	if slippage < 0 || slippage > 5000 {
+	if slippage < constants.SlippageMin || slippage > constants.SlippageMax {
 		resp.ParameterErr(c, "invalid slippage")
 		return
 	}
-	if utils.IsEmpty(req.From) {
-		resp.ParameterErr(c, "missing from")
-		return
-	}
-	if utils.IsEmpty(req.Receiver) {
-		resp.ParameterErr(c, "missing receiver")
-		return
-	}
 
-	ret, code := logic.Swap(req.Hash, req.Slippage, req.From, req.Receiver)
+	//ret, code := logic.Swap(req.SrcChain, req.SrcToken, req.Sender, amount, req.Receiver, req.Hash, slippage)
+	ret, code := logic.Swap(req.SrcChain, req.SrcToken, req.Sender, big.NewInt(1), req.DstChain, req.Receiver, req.Hash, slippage) // todo relpace amount
 	if code != resp.CodeSuccess {
 		resp.Error(c, code)
 		return

@@ -1,5 +1,23 @@
 package entity
 
+type CreateOrderRequest struct {
+	SrcChain string `json:"srcChain"`
+	SrcToken string `json:"srcToken"`
+	Sender   string `json:"sender"`
+	Amount   string `json:"amount"`
+	DstChain string `json:"dstChain"`
+	DstToken string `json:"dstToken"`
+	Receiver string `json:"receiver"`
+	Action   uint8  `json:"action"`
+	Hash     string `json:"hash"`
+	Slippage uint64 `json:"slippage"`
+}
+
+type UpdateOrderRequest struct {
+	OrderID  uint64 `json:"orderId"`
+	InTxHash string `json:"inTxHash"`
+}
+
 type OrderListRequest struct {
 	Sender string `form:"sender"`
 	Page   int    `form:"page"`
@@ -7,37 +25,42 @@ type OrderListRequest struct {
 }
 
 type OrderDetailRequest struct {
-	OrderID uint64 `form:"order_id"`
+	OrderID uint64 `form:"orderId"`
 }
 
 // response
 
+type CreateOrderResponse struct {
+	OrderID uint64 `json:"order_id"`
+	Relayer string `json:"relayer"`
+}
+
 type OrderListResponse struct {
-	OrderID   uint64 `json:"order_id"`
-	SrcChain  uint64 `json:"src_chain"`
-	SrcToken  string `json:"src_token"`
+	OrderID   uint64 `json:"orderId"`
+	SrcChain  string `json:"srcChain"`
+	SrcToken  string `json:"srcToken"`
 	Sender    string `json:"sender"`
-	InAmount  string `json:"in_amount"`
-	DstChain  uint64 `json:"dst_chain"`
-	DstToken  string `json:"dst_token"`
+	InAmount  string `json:"inAmount"`
+	DstChain  string `json:"dstChain"`
+	DstToken  string `json:"dstToken"`
 	Receiver  string `json:"receiver"`
-	OutAmount string `json:"out_amount"`
+	OutAmount string `json:"outAmount"`
 	Action    uint8  `json:"action"`
 	Status    uint8  `json:"status"`
-	CreatedAt int64  `json:"created_at"`
+	CreatedAt int64  `json:"createdAt"`
 }
 
 type OrderDetailResponse struct {
-	OrderID   uint64 `json:"order_id"`
-	SrcChain  uint64 `json:"src_chain"`
-	SrcToken  string `json:"src_token"`
+	OrderID   uint64 `json:"orderId"`
+	SrcChain  string `json:"srcChain"`
+	SrcToken  string `json:"srcToken"`
 	Sender    string `json:"sender"`
-	InAmount  string `json:"in_amount"`
-	DstChain  uint64 `json:"dst_chain"`
-	DstToken  string `json:"dst_token"`
+	InAmount  string `json:"inAmount"`
+	DstChain  string `json:"dstChain"`
+	DstToken  string `json:"dstToken"`
 	Receiver  string `json:"receiver"`
-	OutAmount string `json:"out_amount"`
+	OutAmount string `json:"outAmount"`
 	Action    uint8  `json:"action"`
 	Status    uint8  `json:"status"`
-	CreatedAt int64  `json:"created_at"`
+	CreatedAt int64  `json:"createdAt"`
 }

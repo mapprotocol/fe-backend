@@ -268,3 +268,31 @@ func TestIsValidBitcoinAddress(t *testing.T) {
 		})
 	}
 }
+
+func TestIsValidBitcoinAddress1(t *testing.T) {
+	type args struct {
+		address string
+		network *chaincfg.Params
+	}
+	tests := []struct {
+		name string
+		args args
+		want bool
+	}{
+		{
+			name: "t-1",
+			args: args{
+				address: "tb1q7kf0tanmqw9guuhdrrhpsfxc8qyp8gxe5xpwce",
+				network: &chaincfg.TestNet3Params,
+			},
+			want: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := IsValidBitcoinAddress(tt.args.address, tt.args.network); got != tt.want {
+				t.Errorf("IsValidBitcoinAddress() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}

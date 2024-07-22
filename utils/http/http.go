@@ -13,9 +13,12 @@ import (
 
 const defaultHTTPTimeout = 20 * time.Second
 
-func Request(url, method string, headers http.Header, body io.Reader) ([]byte, error) {
+func Request(url, method string, headers http.Header, body io.Reader, timeout ...time.Duration) ([]byte, error) {
 	client := http.Client{
 		Timeout: defaultHTTPTimeout,
+	}
+	if len(timeout) > 0 {
+		client.Timeout = timeout[0]
 	}
 
 	request, err := http.NewRequest(method, url, body)

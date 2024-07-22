@@ -22,7 +22,7 @@ func NewExternalRequestError(path string, opts ...ErrorOption) *ExternalRequestE
 }
 
 func (e *ExternalRequestError) Error() string {
-	msg := fmt.Sprintf("Error while making external request to %s,", e.Path)
+	msg := fmt.Sprintf("[Error while making external request to %s, ", e.Path)
 
 	if e.Method != "" {
 		msg += fmt.Sprintf(" method: %s, ", e.Method)
@@ -39,5 +39,6 @@ func (e *ExternalRequestError) Error() string {
 	if e.Err != nil {
 		msg += fmt.Sprintf("error: %s", e.Err.Error())
 	}
+	msg += "]"
 	return msg
 }
