@@ -445,42 +445,13 @@ curl --location 'http://127.0.0.1:8181/api/v1/order/list?sender=tb1p862kth24h9gv
 
 ## 接口调用顺序
 
-### ton to evm:
+### btc to evm:
 
-1. /api/v1/route (聚合路由)
-2. /api/v1/order/create (创建订单)
-3. 发送包含订单ID的交易
+1. /api/v1/route
+2. /api/v1/order/create
 
-### evm to evm:
+### evm to btc:
 
-1. /api/v1/route (聚合路由)
+1. /api/v1/route
 2. /api/v1/swap 该接口会创建一个 order 并构建 swap 交易的 data
-3. 根据获取的交易数据发送交易
-4. /api/v1/update (更新订单第一阶段交易 hash) 非必须
-
-TON to EVM:
-srcToken(TON) -> USDT(TON)
-USDT(TON) -> USDT(dstChain)
-USDT(dstChain) -> dstToken(dstChain)
-
-EVM to TON:
-srcToken(srcChain) -> USDT(srcChain)
-USDT(srcChain) -> USDT(dstChain)
-USDT(dstChain) -> dstToken(dstChain)
-
-BTC:
-BTC(bitcoin) -> BTC(bitcoin)
-BTC(bitcoin) -> WBTC(dstChain)
-WBTC(dstChain) -> dstToken(dstChain)
-
-================================================================================
-
-TON to EVM:
-srcToken(TON) -> USDT(TON)
-USDT(TON) -> USDT(MAP)
-USDT(MAP) -> dstToken(dstChain)
-
-EVM to TON:
-srcToken(srcChain) -> USDT(srcChain)
-USDT(dstChain-out) -> USDT(dstChain-out(MAP))
-USDT(dstChain-out/ ton-in) -> dstToken(TON-out)
+3. /api/v1/update
