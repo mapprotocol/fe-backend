@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"github.com/mapprotocol/fe-backend/resource/tonclient"
 	blog "log"
 	"os"
@@ -17,7 +18,23 @@ import (
 	"github.com/mapprotocol/fe-backend/utils/tx"
 )
 
+const (
+	VersionMajor = 0        // Major version component of the current release
+	VersionMinor = 0        // Minor version component of the current release
+	VersionPatch = 1        // Patch version component of the current release
+	VersionMeta  = "stable" // Version metadata to append to the version string
+)
+
+func version() string {
+	return fmt.Sprintf("%d.%d.%d-%s", VersionMajor, VersionMinor, VersionPatch, VersionMeta)
+}
+
 func main() {
+	args := os.Args
+	if len(args) >= 2 && args[1] == "version" {
+		fmt.Println("version:", version())
+		return
+	}
 	// init config
 	config.Init()
 	// init log
