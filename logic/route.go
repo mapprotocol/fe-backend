@@ -13,6 +13,7 @@ import (
 	"github.com/mapprotocol/fe-backend/utils"
 	"github.com/spf13/viper"
 	"math/big"
+	"strconv"
 	"sync"
 )
 
@@ -834,7 +835,7 @@ func GetTONToEVMRoute(req *entity.RouteRequest) (ret []*entity.RouteResponse, co
 	return ret, resp.CodeSuccess
 }
 
-func GetEVMToTONRoute(req *entity.RouteRequest) (ret []*entity.RouteResponse, code int) {
+func GetEVMToTONRoute(req *entity.RouteRequest, slippage uint64) (ret []*entity.RouteResponse, code int) {
 	var (
 		tonTokenIn  entity.Token
 		tonTokenOut entity.Token
@@ -844,7 +845,7 @@ func GetEVMToTONRoute(req *entity.RouteRequest) (ret []*entity.RouteResponse, co
 		TokenInAddress:  req.TokenInAddress,
 		TokenOutAddress: constants.USDTOfChainPoll,
 		Type:            req.Type,
-		Slippage:        req.Slippage,
+		Slippage:        strconv.FormatUint(slippage/3*2, 10),
 		FromChainID:     req.FromChainID,
 		ToChainID:       constants.ChainPollChainID,
 		Amount:          req.Amount,
@@ -867,7 +868,7 @@ func GetEVMToTONRoute(req *entity.RouteRequest) (ret []*entity.RouteResponse, co
 		ToChainID:       req.ToChainID,
 		TokenInAddress:  constants.USDTOfTON,
 		TokenOutAddress: req.TokenOutAddress,
-		Slippage:        req.Slippage,
+		Slippage:        strconv.FormatUint(slippage/3, 10),
 	}
 	tonRoutes, err := getTONRoutes(tonRequest, butterRoutes) // todo skip error ?
 	if err != nil {
@@ -1063,13 +1064,13 @@ func Swap(srcChain, srcToken, sender string, amount *big.Int, dstToken, receiver
 
 	orderIDByte32 := utils.Uint64ToByte32(orderID)
 	// todo check on the amount in the contract?
-	packed, err := PackOnReceived(amount, orderIDByte32, common.HexToAddress(srcToken), common.HexToAddress(sender), []byte(receiver))
+	packed, err := PackOnReceived(amount, orderIDByte32, common.HexToAddress(constants.USDTOfChainPoll), common.HexToAddress(sender), []byte(receiver))
 	if err != nil {
 		params := map[string]interface{}{
 			"amount":        amount,
 			"orderID":       order,
 			"orderIDByte32": orderIDByte32,
-			"srcToken":      srcToken, // src token
+			"token":         constants.USDTOfChainPoll,
 			"sender":        sender,
 			"receiver":      receiver,
 			"error":         err,
@@ -1091,7 +1092,7 @@ func Swap(srcChain, srcToken, sender string, amount *big.Int, dstToken, receiver
 
 	request := &butter.SwapRequest{
 		Hash:     hash,
-		Slippage: slippage,
+		Slippage: slippage / 3 * 2,
 		From:     sender,
 		Receiver: viper.GetString("butterRouterContract"),
 		CallData: encodedCallback,

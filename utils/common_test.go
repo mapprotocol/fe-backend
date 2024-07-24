@@ -3,6 +3,7 @@ package utils
 import (
 	"github.com/btcsuite/btcd/btcutil"
 	"github.com/btcsuite/btcd/chaincfg"
+	"math/big"
 	"testing"
 )
 
@@ -295,4 +296,15 @@ func TestIsValidBitcoinAddress1(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestName2(t *testing.T) {
+	amountBigFloat, ok := new(big.Float).SetString("0.08")
+	if !ok {
+		t.Fatal("amountBigFloat")
+	}
+	exp := new(big.Int).Exp(big.NewInt(10), big.NewInt(18), nil)
+	amount := new(big.Float).Mul(amountBigFloat, new(big.Float).SetInt(exp))
+	amountBigInt, _ := amount.Int(nil)
+	t.Log(amountBigInt)
 }

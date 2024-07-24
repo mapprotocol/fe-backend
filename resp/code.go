@@ -24,12 +24,23 @@ const (
 )
 
 const (
+	MsgButterServerError         = "Butter Server Error"
+	MsgButterNotAvailableRoute   = "Butter Not Available Route"
+	MsgTONRouteServerError       = "Ton Router Server Error"
+	MsgTONRouteNotAvailableRoute = "Ton Router Not Available Route"
+)
+
+const (
 	MsgOrderNotFound = "order not found"
 )
 
 var code2msg = map[int]string{
-	CodeSuccess:             MsgSuccess,
-	CodeParameterErr:        MsgParameterErr,
-	CodeInternalServerError: MsgInternalServerError,
-	CodeOrderNotFound:       MsgOrderNotFound,
+	CodeSuccess:                   MsgSuccess,
+	CodeParameterErr:              MsgParameterErr,
+	CodeInternalServerError:       MsgInternalServerError,
+	CodeButterServerError:         MsgButterServerError,
+	CodeButterNotAvailableRoute:   MsgButterNotAvailableRoute,
+	CodeTONRouteServerError:       MsgTONRouteServerError,
+	CodeTONRouteNotAvailableRoute: MsgTONRouteNotAvailableRoute,
+	CodeOrderNotFound:             MsgOrderNotFound,
 }

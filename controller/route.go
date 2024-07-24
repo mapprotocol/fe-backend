@@ -105,7 +105,7 @@ func Route(c *gin.Context) {
 		}
 	case dao.OrderActionFromEVM:
 		if req.ToChainID == constants.TONChainID {
-			ret, code = logic.GetEVMToTONRoute(req)
+			ret, code = logic.GetEVMToTONRoute(req, slippage)
 			if code != resp.CodeSuccess {
 				resp.Error(c, code)
 				return
@@ -156,10 +156,10 @@ func Swap(c *gin.Context) {
 		resp.ParameterErr(c, "invalid dstChain")
 		return
 	}
-	if !utils.IsValidBitcoinAddress(req.Receiver, logic.NetParams) {
-		resp.ParameterErr(c, "invalid receiver")
-		return
-	}
+	//if !utils.IsValidBitcoinAddress(req.Receiver, logic.NetParams) {
+	//	resp.ParameterErr(c, "invalid receiver")
+	//	return
+	//}
 
 	if utils.IsEmpty(req.Hash) {
 		resp.ParameterErr(c, "missing hash")
@@ -178,8 +178,16 @@ func Swap(c *gin.Context) {
 		return
 	}
 
-	//ret, code := logic.Swap(req.SrcChain, req.SrcToken, req.Sender, amount, req.Receiver, req.Hash, slippage)
-	ret, code := logic.Swap(req.SrcChain, req.SrcToken, req.Sender, big.NewInt(1), req.DstChain, req.Receiver, req.Hash, slippage) // todo relpace amount
+	amountBigFloat, ok := new(big.Float).SetString(req.Amount)
+	if !ok {
+		resp.ParameterErr(c, "invalid amount")
+		return
+	}
+	exp := new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(req.Decimal)), nil)
+	amount := new(big.Float).Mul(amountBigFloat, new(big.Float).SetInt(exp))
+	amountBigInt, _ := amount.Int(nil)
+
+	ret, code := logic.Swap(req.SrcChain, req.SrcToken, req.Sender, amountBigInt, req.DstChain, req.Receiver, req.Hash, slippage)
 	if code != resp.CodeSuccess {
 		resp.Error(c, code)
 		return
