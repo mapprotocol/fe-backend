@@ -1,11 +1,20 @@
 ###
-env: dev
-logDir: /tmp
-debug: true
-address: 0.0.0.0:8181
+env: "dev"
+logDir: "/tmp"
 database:
-  host: 127.0.0.1
-  port: 3306
-  user: root
-  password: 1234
-  name: ceffu
+  host: ""
+  port: ""
+  user: ""
+  password: ""
+  name: ""
+endpoints:
+  filter: ""
+network: ""
+bitcoin:
+  sender: ""
+  senderprivatekey: ""
+chainpool:
+  senderprivatekey: ""
+ton:
+  words: ""
+  password: ""

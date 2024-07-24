@@ -3,7 +3,6 @@ package tx
 import (
 	"context"
 	"crypto/ecdsa"
-	"fmt"
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/mapprotocol/fe-backend/bindings/ferouter"
@@ -107,7 +106,7 @@ func (t *Transactor) DeliverAndSwap(orderID [32]byte, initiator common.Address, 
 		//opts.GasLimit = gasLimit
 		//opts.Value = value
 
-		log.Logger().WithField("nonce", opts.Nonce).Info("will send transaction")
+		log.Logger().WithField("nonce", opts.Nonce).Info("will send deliver and swap  transaction")
 		txHash, err = t.sendTransaction(t.privateKey, t.chainPoolContract, value, input)
 		if err != nil {
 			if isNonceTooLow(err.Error()) {
@@ -130,7 +129,7 @@ func (t *Transactor) sendTransaction(privateKey *ecdsa.PrivateKey, to common.Add
 			"address": t.address.Hex(),
 			"error":   err,
 		}
-		log.Logger().WithFields(fields).Error("failed to get chain id")
+		log.Logger().WithFields(fields).Error("failed to get node")
 		return common.Hash{}, err
 	}
 
@@ -152,18 +151,16 @@ func (t *Transactor) sendTransaction(privateKey *ecdsa.PrivateKey, to common.Add
 			"msg":   utils.JSON(msg),
 			"error": err,
 		}
-		log.Logger().WithFields(fields).Error("failed to get estimate gas")
+		log.Logger().WithFields(fields).Error("failed to estimate gas")
 		return common.Hash{}, err
 	}
 
-	fmt.Println("============================== gasLimit: ", gasLimit)
 	if t.gasLimitMultiplier > 1 && gasLimit > 0 {
 		gasLimit = uint64(float64(gasLimit) * t.gasLimitMultiplier)
 	}
 	if gasLimit < 1 {
 		gasLimit = 2100000
 	}
-	fmt.Println("============================== gasLimit: ", gasLimit)
 
 	txData := &types.LegacyTx{
 		Nonce:    nonce,
@@ -177,6 +174,7 @@ func (t *Transactor) sendTransaction(privateKey *ecdsa.PrivateKey, to common.Add
 	chainID, err := t.client.ChainID(context.Background())
 	if err != nil {
 		log.Logger().WithField("rpc", t.endpoint).WithField("error", err).Error("failed to get chain id")
+		return common.Hash{}, err
 	}
 
 	signer := types.LatestSignerForChainID(chainID)
@@ -211,17 +209,13 @@ func (t *Transactor) estimateGas(to common.Address, input []byte) (*big.Int, uin
 	}
 
 	msg := ethereum.CallMsg{From: t.address, To: &to, GasPrice: gasPrice, Value: nil, Data: input}
-	fmt.Println("============================== ")
 	gasLimit, err := t.client.EstimateGas(context.Background(), msg)
 	if err != nil {
-		fmt.Println("============================== estimate gas error: ", err)
 		return nil, 0, err
 	}
-	fmt.Printf("============================== gasPrice: %v, gasLimit: %v\n", gasPrice, gasLimit)
 	if t.gasLimitMultiplier > 1 {
 		gasLimit = uint64(float64(gasLimit) * t.gasLimitMultiplier)
 	}
-	fmt.Printf("============================== gasPrice: %v, gasLimit: %v\n", gasPrice, gasLimit)
 
 	return gasPrice, gasLimit, nil
 }

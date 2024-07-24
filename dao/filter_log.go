@@ -38,7 +38,9 @@ func (fl *FilterLog) Updates(update *FilterLog) error {
 }
 
 func (fl *FilterLog) UpdateLatestLogID(latestLogID uint64) error {
-	return db.GetDB().Where(fl).Update("latest_log_id = ?", latestLogID).Error
+	return db.GetDB().Model(&FilterLog{}).Where(fl).Updates(map[string]interface{}{
+		"latest_log_id": latestLogID,
+	}).Error
 }
 
 func (fl *FilterLog) First() (get *FilterLog, err error) {

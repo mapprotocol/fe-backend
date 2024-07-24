@@ -28,7 +28,7 @@ import (
 const (
 	SwapType = "exactIn"
 	Entrance = "Butter+"
-	Sender   = "0xA9024d80366A7cc34698C05d6A19FCf7e3F1aD34"
+	Sender   = "0x0Eb16A9cFDf8e3A4471EF190eE63de5A24f38787"
 )
 
 const (
@@ -492,8 +492,7 @@ func HandlePendingOrdersOfFirstStageFromEVM() error {
 				}
 				log.Logger().WithFields(fields).Error("order action not match")
 				alarm.Slack(context.Background(), "order action not match")
-				//return
-				continue // todo
+				continue
 			}
 			if order.Stage != dao.OrderStag1 {
 				fields := map[string]interface{}{
@@ -502,8 +501,7 @@ func HandlePendingOrdersOfFirstStageFromEVM() error {
 				}
 				log.Logger().WithFields(fields).Error("order stage not match")
 				alarm.Slack(context.Background(), "order stage not match")
-				//return
-				continue // todo
+				continue
 			}
 			if order.Status != dao.OrderStatusPending {
 				fields := map[string]interface{}{
@@ -512,8 +510,7 @@ func HandlePendingOrdersOfFirstStageFromEVM() error {
 				}
 				log.Logger().WithFields(fields).Error("order status not pending")
 				alarm.Slack(context.Background(), "order status not pending")
-				//return
-				continue // todo
+				continue
 			}
 			//if order.SrcToken != onReceivedParams.Token.String() {
 			//	fields := map[string]interface{}{
@@ -523,13 +520,12 @@ func HandlePendingOrdersOfFirstStageFromEVM() error {
 			//	}
 			//	log.Logger().WithFields(fields).Error("src token not match")
 			//	alarm.Slack(context.Background(), "src token not match")
-			//	//return
-			//	continue //  todo
+			//	continue
 			//}
-
+			_, afterAmount := fees(onReceivedParams.Amount, FeeRate)
 			update := &dao.Order{
 				ID:       order.ID,
-				InAmount: onReceivedParams.Amount.String(), // todo 手续费
+				InAmount: afterAmount.String(),
 				Status:   dao.OrderStatusConfirmed,
 			}
 			if err := dao.NewOrder().Updates(update); err != nil {
@@ -703,4 +699,11 @@ func TransactionIsConfirmed(txHash string) (bool, error) {
 	}
 
 	return ret.Confirmed, nil
+}
+
+func fees(amount, feeRate *big.Int) (feeAmount, afterAmount *big.Int) {
+	feeRate = new(big.Int).Div(feeRate, big.NewInt(1000))
+	feeAmount = new(big.Int).Mul(amount, feeRate)
+	afterAmount = new(big.Int).Sub(amount, feeAmount)
+	return feeAmount, afterAmount
 }

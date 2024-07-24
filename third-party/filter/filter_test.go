@@ -1,6 +1,7 @@
 package filter
 
 import (
+	"github.com/spf13/viper"
 	"reflect"
 	"testing"
 )
@@ -50,6 +51,7 @@ func TestGetLogs(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			viper.Set("endpoints.filter", "")
 			got, err := GetLogs(tt.args.id, tt.args.chainID, tt.args.topic, tt.args.limit)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("GetLogs() error = %v, wantErr %v", err, tt.wantErr)

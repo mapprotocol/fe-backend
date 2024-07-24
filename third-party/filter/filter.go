@@ -14,7 +14,7 @@ const pathGetLogs = "/v1/mos/list"
 
 const successCode = 200
 
-const projectID = 1
+const projectID = 7
 
 type GetLogsResponse struct {
 	Code    int    `json:"code"`
@@ -43,7 +43,6 @@ type GetLogsResponseItem struct {
 
 func GetLogs(id uint64, chainID, topic string, limit uint8) ([]*GetLogsResponseItem, error) {
 	params := fmt.Sprintf("id=%d&project_id=%d&chain_id=%s&topic=%s&limit=%d", id, projectID, chainID, topic, limit)
-	//url := fmt.Sprintf("%s%s?%s", viper.GetStringMap("endpoints")["filter"], pathGetLogs, params)
 	url := fmt.Sprintf("%s%s?%s", viper.GetStringMap("endpoints")["filter"], pathGetLogs, params)
 	ret, err := uhttp.Get(url, nil, nil)
 	if err != nil {

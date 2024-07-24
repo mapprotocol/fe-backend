@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/mapprotocol/fe-backend/resource/tonclient"
 	blog "log"
 	"os"
 	"os/signal"
@@ -22,12 +23,15 @@ func main() {
 	// init log
 	log.Init(viper.GetString("env"), viper.GetString("logDir"))
 	// init db
-	dbConf := viper.GetStringMapString("database")
-	db.Init(dbConf["user"], dbConf["password"], dbConf["host"], dbConf["port"], dbConf["name"])
+	dbConfig := viper.GetStringMapString("database")
+	db.Init(dbConfig["user"], dbConfig["password"], dbConfig["host"], dbConfig["port"], dbConfig["name"])
 
-	task.InitMempoolClient(viper.GetString("network"))
+	//task.InitMempoolClient(viper.GetString("network"))
 
-	tx.InitTransactor(viper.GetString("senderprivatekey"))
+	tx.InitTransactor(viper.GetStringMapString("chainpool")["senderprivatekey"])
+
+	tonConfig := viper.GetStringMapString("ton")
+	tonclient.Init(tonConfig["words"], tonConfig["password"])
 
 	runTask()
 	//runBTCTask()
@@ -139,4 +143,18 @@ func runTONTask() {
 
 		task.HandlePendingOrdersOfSecondStageFromTONToEVM()
 	}()
+
+	go func() {
+		defer func() {
+			stack := string(debug.Stack())
+			log.Logger().WithField("stack", stack).Error("failed to HandleConfirmedOrdersOfFirstStageFromEVMToTON")
+
+			if r := recover(); r != nil {
+				log.Logger().WithField("error", r).Error("failed to recover HandleConfirmedOrdersOfFirstStageFromEVMToTON")
+			}
+		}()
+
+		task.HandleConfirmedOrdersOfFirstStageFromEVMToTON()
+	}()
+
 }
