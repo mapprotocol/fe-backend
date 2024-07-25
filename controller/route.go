@@ -147,6 +147,10 @@ func Swap(c *gin.Context) {
 		resp.ParameterErr(c, "invalid amount")
 		return
 	}
+	if req.Decimal <= 0 {
+		resp.ParameterErr(c, "missing decimal")
+		return
+	}
 
 	if utils.IsEmpty(req.DstChain) {
 		resp.ParameterErr(c, "missing dstChain")
