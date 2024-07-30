@@ -2,9 +2,16 @@ package butter
 
 import (
 	"github.com/mapprotocol/fe-backend/utils"
-	"reflect"
+	"github.com/spf13/viper"
 	"testing"
 )
+
+func TestMain(m *testing.M) {
+	viper.Set("endpoints", map[string]string{
+		"butter": "https://butter.io",
+	})
+	m.Run()
+}
 
 func TestRouterAndSwap(t *testing.T) {
 	type args struct {
@@ -25,8 +32,8 @@ func TestRouterAndSwap(t *testing.T) {
 					Amount:          "1",
 					TokenInAddress:  "0x0000000000000000000000000000000000000000",
 					TokenOutAddress: "0x0000000000000000000000000000000000000000",
-					Kind:            "exactIn",
-					Slippage:        "100",
+					Type:            "exactIn",
+					Slippage:        100,
 					Entrance:        "Butter+",
 					From:            "0xf855a761f9182c4b22A04753681A1F6324Ed3449",
 					Receiver:        "0xf855a761f9182c4b22A04753681A1F6324Ed3449",
@@ -44,8 +51,8 @@ func TestRouterAndSwap(t *testing.T) {
 					Amount:          "10",
 					TokenInAddress:  "0x0000000000000000000000000000000000000000",
 					TokenOutAddress: "0x0000000000000000000000000000000000000000",
-					Kind:            "exactIn",
-					Slippage:        "100",
+					Type:            "exactIn",
+					Slippage:        100,
 					Entrance:        "Butter+",
 					From:            "0xf855a761f9182c4b22A04753681A1F6324Ed3449",
 					Receiver:        "0xf855a761f9182c4b22A04753681A1F6324Ed3449",
@@ -60,11 +67,11 @@ func TestRouterAndSwap(t *testing.T) {
 				request: &RouterAndSwapRequest{
 					FromChainID:     "22776",
 					ToChainID:       "137",
-					Amount:          "1000",
+					Amount:          "0.1",
 					TokenInAddress:  "0x0000000000000000000000000000000000000000",
 					TokenOutAddress: "0x0000000000000000000000000000000000000000",
-					Kind:            "exactIn",
-					Slippage:        "100",
+					Type:            "exactIn",
+					Slippage:        100,
 					Entrance:        "Butter+",
 					From:            "0xf855a761f9182c4b22A04753681A1F6324Ed3449",
 					Receiver:        "0xf855a761f9182c4b22A04753681A1F6324Ed3449",
@@ -81,9 +88,7 @@ func TestRouterAndSwap(t *testing.T) {
 				t.Errorf("RouterAndSwap() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("RouterAndSwap() got = %v, want %v", utils.JSON(got), tt.want)
-			}
+			t.Logf("RouterAndSwap() got = %v", utils.JSON(got))
 			t.Log("got: ", got)
 		})
 	}

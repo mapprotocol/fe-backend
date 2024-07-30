@@ -199,7 +199,7 @@ func HandleConfirmedOrdersOfFirstStageFromBTCToEVM() {
 					Amount:          amount.String(), // todo
 					TokenInAddress:  params.WBTCOfChainPool,
 					TokenOutAddress: o.DstToken,
-					Kind:            SwapType,
+					Type:            SwapType,
 					Slippage:        strconv.FormatUint(o.Slippage, 10), // todo
 					Entrance:        Entrance,
 					//From:            o.Sender,
@@ -411,6 +411,9 @@ func HandlePendingOrdersOfSecondStageFromBTCToEVM() {
 //	}
 //}
 
+// HandlePendingOrdersOfFirstStageFromEVM filter the OnReceived event log.
+// If this log is found, update order status to confirmed
+// action = 2, stage = 1, status = 1 ==> status = 2
 func HandlePendingOrdersOfFirstStageFromEVM() error {
 	filterLog := dao.NewFilterLog(params.ChainIDOfChainPool, params.OnReceivedTopic)
 	for {
@@ -460,7 +463,7 @@ func HandlePendingOrdersOfFirstStageFromEVM() error {
 				return err
 			}
 
-			onReceivedParams, err := UnpackOnReceived(logData)
+			onReceived, err := UnpackOnReceived(logData)
 			if err != nil {
 				fields := map[string]interface{}{
 					"id":      lg.Id,
@@ -474,69 +477,31 @@ func HandlePendingOrdersOfFirstStageFromEVM() error {
 				return err
 			}
 
-			orderID := utils.BytesToUint64(onReceivedParams.OrderId[:])
-			order, err := dao.NewOrderWithID(orderID).First()
-			if err != nil {
-				fields := map[string]interface{}{
-					"orderID": orderID,
-					"error":   err.Error(),
+			orderID := utils.BytesToUint64(onReceived.OrderId[:])
+			_, afterAmount := fees(new(big.Float).SetInt(onReceived.ChainPoolTokenAmount), FeeRate)
+			order := dao.NewOrder()
+			if onReceived.DstChain.String() == params.TONChainID {
+				order = &dao.Order{
+					OrderIDFromContract: orderID,
+					SrcChain:            onReceived.SrcChain.String(),
+					SrcToken:            string(onReceived.SrcToken),
+					Sender:              string(onReceived.Sender),
+					InAmount:            onReceived.InAmount,
+					RelayToken:          params.USDTOfChainPool,
+					RelayAmount:         afterAmount.String(),
+					DstChain:            onReceived.DstChain.String(),
+					DstToken:            string(onReceived.DstToken),
+					Receiver:            string(onReceived.Receiver),
+					Action:              dao.OrderActionFromEVM,
+					Stage:               dao.OrderStag1,
+					Status:              dao.OrderStatusConfirmed,
 				}
-				log.Logger().WithFields(fields).Error("failed to get order")
-				alarm.Slack(context.Background(), "failed to get order")
-				return err
 			}
-			if order.Action != dao.OrderActionFromEVM {
-				fields := map[string]interface{}{
-					"orderID": orderID,
-					"action":  order.Action,
-				}
-				log.Logger().WithFields(fields).Error("order action not match")
-				alarm.Slack(context.Background(), "order action not match")
-				continue
-			}
-			if order.Stage != dao.OrderStag1 {
-				fields := map[string]interface{}{
-					"orderID": orderID,
-					"stage":   order.Stage,
-				}
-				log.Logger().WithFields(fields).Error("order stage not match")
-				alarm.Slack(context.Background(), "order stage not match")
-				continue
-			}
-			if order.Status != dao.OrderStatusPending {
-				fields := map[string]interface{}{
-					"orderID": orderID,
-					"status":  order.Status,
-				}
-				log.Logger().WithFields(fields).Error("order status not pending")
-				alarm.Slack(context.Background(), "order status not pending")
-				continue
-			}
-			//if order.SrcToken != onReceivedParams.Token.String() {
-			//	fields := map[string]interface{}{
-			//		"orderID":       orderID,
-			//		"srcToken":      order.SrcToken,
-			//		"receivedToken": onReceivedParams.Token.String(),
-			//	}
-			//	log.Logger().WithFields(fields).Error("src token not match")
-			//	alarm.Slack(context.Background(), "src token not match")
-			//	continue
-			//}
-			_, afterAmount := fees(onReceivedParams.Amount, FeeRate)
-			update := &dao.Order{
-				ID:       order.ID,
-				InAmount: afterAmount.String(),
-				Status:   dao.OrderStatusConfirmed,
-			}
-			if err := dao.NewOrder().Updates(update); err != nil {
-				fields := map[string]interface{}{
-					"orderID": orderID,
-					"update":  utils.JSON(update),
-					"error":   err.Error(),
-				}
-				log.Logger().WithFields(fields).Error("failed to update order status")
+
+			if err := order.Create(); err != nil {
+				log.Logger().WithField("order", utils.JSON(order)).WithField("error", err).Error("failed to create order")
 				alarm.Slack(context.Background(), "failed to update order status")
-				return err
+				continue
 			}
 
 			if err := filterLog.UpdateLatestLogID(lg.Id); err != nil {
@@ -701,9 +666,16 @@ func TransactionIsConfirmed(txHash string) (bool, error) {
 	return ret.Confirmed, nil
 }
 
-func fees(amount, feeRate *big.Int) (feeAmount, afterAmount *big.Int) {
-	feeRate = new(big.Int).Div(feeRate, big.NewInt(1000))
-	feeAmount = new(big.Int).Mul(amount, feeRate)
-	afterAmount = new(big.Int).Sub(amount, feeAmount)
+//func fees(amount, feeRate *big.Int) (feeAmount, afterAmount *big.Int) {
+//	feeRate = new(big.Int).Div(feeRate, big.NewInt(1000))
+//	feeAmount = new(big.Int).Mul(amount, feeRate)
+//	afterAmount = new(big.Int).Sub(amount, feeAmount)
+//	return feeAmount, afterAmount
+//}
+
+func fees(amount, feeRate *big.Float) (feeAmount, afterAmount *big.Float) {
+	feeRate = new(big.Float).Quo(feeRate, big.NewFloat(1000))
+	feeAmount = new(big.Float).Mul(amount, feeRate)
+	afterAmount = new(big.Float).Sub(amount, feeAmount)
 	return feeAmount, afterAmount
 }

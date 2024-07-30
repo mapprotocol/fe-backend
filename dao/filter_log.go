@@ -84,7 +84,7 @@ func (fl *FilterLog) Find(ext *QueryExtra, pager Pager) (list []*FilterLog, coun
 	return list, count, err
 }
 
-func (fl *FilterLog) GetOldest10ByStatus(id uint64, action, stage, status uint8) (list []*FilterLog, err error) { // todo add stage to query params
+func (fl *FilterLog) GetOldest10ByStatus(id uint64, action, stage, status uint8) (list []*FilterLog, err error) {
 	err = db.GetDB().Where(fl).Where("id >= ?", id).Where("action = ?", action).
 		Where("stage = ?", stage).Where("status = ?", status).Limit(OldestLimit).Find(&list).Error
 	return list, err

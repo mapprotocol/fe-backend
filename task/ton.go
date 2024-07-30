@@ -5,7 +5,6 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -13,15 +12,16 @@ import (
 	"github.com/mapprotocol/fe-backend/params"
 	"github.com/mapprotocol/fe-backend/resource/tonclient"
 	"github.com/mapprotocol/fe-backend/third-party/butter"
+	"github.com/mapprotocol/fe-backend/third-party/filter"
 	"github.com/mapprotocol/fe-backend/third-party/tonrouter"
 	"github.com/mapprotocol/fe-backend/utils"
 	"github.com/mapprotocol/fe-backend/utils/alarm"
 	"github.com/mapprotocol/fe-backend/utils/tx"
+	"github.com/spf13/viper"
 	"github.com/xssnick/tonutils-go/ton/wallet"
 	"github.com/xssnick/tonutils-go/tvm/cell"
 	"math/big"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/mapprotocol/fe-backend/resource/log"
@@ -29,272 +29,181 @@ import (
 	"github.com/xssnick/tonutils-go/tlb"
 )
 
-var FeeRate = big.NewInt(7) // 7/1000
+var FeeRate = big.NewFloat(7) // 7/1000
 
 const (
 	EventIDTONToEVM = "34a7e0e8"
 	EventIDEVMToTON = "1a6c0a51"
 )
 
-func HandlePendingOrdersOfFirstStageFromTONToEVM() error {
-	filterLog := dao.NewFilterLog(params.ChainIDOfTon, params.SwapLogTopic)
-	gotLog, err := filterLog.First()
-	if err != nil {
-		fields := map[string]interface{}{
-			"chainID": params.ChainIDOfTon,
-			"topic":   params.SwapLogTopic,
-			"error":   err.Error(),
-		}
-		log.Logger().WithFields(fields).Error("failed to get filter log info")
-		alarm.Slack(context.Background(), "failed to get filter log info")
-		return err
-	}
+var isMultiChainPool = false
 
-	master, err := tonclient.Client().CurrentMasterchainInfo(context.Background()) // we fetch block just to trigger chain proof check
-	if err != nil {
-		log.Logger().WithField("error", err.Error()).Error("failed to get master chain info")
-		return err
-	}
-	log.Logger().Info("master proof checks are completed successfully, now communication is 100% safe!, master: ", master)
+func init() {
+	isMultiChainPool = viper.GetBool("ismultichainpool")
+}
 
-	// address on which we are accepting payments
-	treasuryAddress := address.MustParseAddr(params.ChainPoolAddressOnTON) // todo contract name
-	lastProcessedLT := gotLog.LatestLogID
-	// channel with new transactions
-	transactions := make(chan *tlb.Transaction)
-
-	// it is a blocking call, so we start it asynchronously
-	go tonclient.Client().SubscribeOnTransactions(context.Background(), treasuryAddress, lastProcessedLT, transactions) // 47840872000005
-
-	log.Logger().Info("waiting for transfers...")
-
-	// listen for new transactions from channel
-	for t := range transactions {
-		out := t.IO.Out
-		if out == nil {
-			continue
-		}
-		messages, err := out.ToSlice()
+// HandlePendingOrdersOfFirstStageFromTONToEVM
+// create order from ton to evm( action=1, stage=1, status=2)
+func HandlePendingOrdersOfFirstStageFromTONToEVM() {
+	filterLog := dao.NewFilterLog(params.TONChainID, EventIDTONToEVM)
+	for {
+		gotLog, err := filterLog.First()
 		if err != nil {
-			log.Logger().WithField("error", err.Error()).Error("failed to get out messages")
+			fields := map[string]interface{}{
+				"chainID": params.TONChainID,
+				"topic":   EventIDTONToEVM,
+				"error":   err.Error(),
+			}
+			log.Logger().WithFields(fields).Error("failed to get filter log info")
+			alarm.Slack(context.Background(), "failed to get filter log info")
+			time.Sleep(5 * time.Second)
 			continue
 		}
-		for _, msg := range messages {
-			if msg.MsgType != tlb.MsgTypeExternalOut {
+
+		logs, err := filter.GetLogs(gotLog.LatestLogID, params.TONChainID, EventIDTONToEVM, uint8(20))
+		if err != nil {
+			fields := map[string]interface{}{
+				"id":      gotLog.LatestLogID,
+				"chainID": params.TONChainID,
+				"topic":   EventIDTONToEVM,
+				"limit":   uint8(20),
+				"error":   err.Error(),
+			}
+			log.Logger().WithFields(fields).Error("failed to get logs")
+			alarm.Slack(context.Background(), "failed to get logs")
+			continue
+		}
+
+		for _, lg := range logs {
+			if lg.Id <= gotLog.LatestLogID {
 				continue
 			}
 
-			externalOut := msg.AsExternalOut()
-			payload := externalOut.Payload()
-			if payload == nil {
-				fmt.Println("payload is ni")
-				continue
-			}
-
-			slice := payload.BeginParse()
+			body := &cell.Cell{}
+			slice := body.BeginParse()
 			if slice == nil {
 				continue
 			}
+			if err := json.Unmarshal([]byte(fmt.Sprintf(`"%s"`, lg.LogData)), &body); err != nil {
+				log.Logger().WithField("error", err.Error()).Error("failed to unmarshal data")
+				alarm.Slack(context.Background(), "failed to unmarshal data")
+				continue
+			}
 
-			if strings.Contains(strings.ToLower(externalOut.DstAddr.String()), EventIDTONToEVM) {
-				orderID, err := slice.LoadUInt(64)
-				if err != nil {
-					log.Logger().WithField("error", err.Error()).Error("failed to load order id")
-					alarm.Slack(context.Background(), "failed to load order id from")
-					continue
-				}
-				//from, err := slice.LoadRef()
-				//if err != nil {
-				//	log.Logger().WithField("error", err.Error()).Error("failed to load from ref")
-				//	alarm.Slack(context.Background(), "failed to load from ref")
-				//	continue
-				//}
-				//to, err := slice.LoadRef()
-				//if err != nil {
-				//	log.Logger().WithField("error", err.Error()).Error("failed to load to ref")
-				//	alarm.Slack(context.Background(), "failed to load to ref")
-				//	continue
-				//}
-				//sender, err := from.LoadAddr()
-				//if err != nil {
-				//	log.Logger().WithField("error", err.Error()).Error("failed to load sender")
-				//	alarm.Slack(context.Background(), "failed to load sender")
-				//	return err
-				//}
-				//srcToken, err := from.LoadAddr()
-				//if err != nil {
-				//	log.Logger().WithField("error", err.Error()).Error("failed to load src token")
-				//	alarm.Slack(context.Background(), "failed to load rc token")
-				//	return err
-				//}
-				//amountIn, err := slice.LoadUInt(32)
-				//if err != nil {
-				//	log.Logger().WithField("error", err.Error()).Error("failed to load amount in")
-				//	alarm.Slack(context.Background(), "failed to load amount in")
-				//	continue
-				//}
-				//toChainID, err := slice.LoadUInt(32)
-				//if err != nil {
-				//	log.Logger().WithField("error", err.Error()).Error("failed to load to chain id")
-				//	alarm.Slack(context.Background(), "failed to load to chain id")
-				//	continue
-				//}
-				//r, err := to.LoadBigUInt(160)
-				//if err != nil {
-				//	log.Logger().WithField("error", err.Error()).Error("failed to load receiver")
-				//	alarm.Slack(context.Background(), "failed to load receiver")
-				//	continue
-				//}
-				//receiver := "0x" + hex.EncodeToString(r.Bytes())
-				//tokenOUt, err := to.LoadBigUInt(160)
-				//if err != nil {
-				//	log.Logger().WithField("error", err.Error()).Error("failed to load token out address")
-				//	alarm.Slack(context.Background(), "failed to load token out address")
-				//	continue
-				//}
-				//tokenOutAddress := "0x" + hex.EncodeToString(tokenOUt.Bytes())
-				amount, err := slice.LoadUInt(32)
-				if err != nil {
-					log.Logger().WithField("error", err.Error()).Error("failed to load jetton amount")
-					alarm.Slack(context.Background(), "failed to load jetton amount")
-					continue
-				}
+			orderID, err := slice.LoadUInt(64)
+			if err != nil {
+				// todo add unique flag to log
+				log.Logger().WithField("error", err.Error()).Error("failed to load order id")
+				alarm.Slack(context.Background(), "failed to load order id from")
+				continue
+			}
+			from, err := slice.LoadRef()
+			if err != nil {
+				log.Logger().WithField("error", err.Error()).Error("failed to load from ref")
+				alarm.Slack(context.Background(), "failed to load from ref")
+				continue
+			}
+			to, err := slice.LoadRef()
+			if err != nil {
+				log.Logger().WithField("error", err.Error()).Error("failed to load to ref")
+				alarm.Slack(context.Background(), "failed to load to ref")
+				continue
+			}
+			srcChain, err := slice.LoadUInt(64)
+			if err != nil {
+				log.Logger().WithField("error", err.Error()).Error("failed to load to chain id")
+				alarm.Slack(context.Background(), "failed to load to chain id")
+				continue
+			}
+			sender, err := from.LoadAddr()
+			if err != nil {
+				log.Logger().WithField("error", err.Error()).Error("failed to load sender")
+				alarm.Slack(context.Background(), "failed to load sender")
+				continue
+			}
+			srcToken, err := from.LoadAddr()
+			if err != nil {
+				log.Logger().WithField("error", err.Error()).Error("failed to load src token")
+				alarm.Slack(context.Background(), "failed to load rc token")
+				continue
+			}
+			inAmount, err := slice.LoadUInt(64)
+			if err != nil {
+				log.Logger().WithField("error", err.Error()).Error("failed to load amount in")
+				alarm.Slack(context.Background(), "failed to load amount in")
+				continue
+			}
+			dstChain, err := slice.LoadUInt(64)
+			if err != nil {
+				log.Logger().WithField("error", err.Error()).Error("failed to load to chain id")
+				alarm.Slack(context.Background(), "failed to load to chain id")
+				continue
+			}
+			r, err := to.LoadBigUInt(160)
+			if err != nil {
+				log.Logger().WithField("error", err.Error()).Error("failed to load receiver")
+				alarm.Slack(context.Background(), "failed to load receiver")
+				continue
+			}
+			receiver := "0x" + hex.EncodeToString(r.Bytes())
+			tokenOUt, err := to.LoadBigUInt(160)
+			if err != nil {
+				log.Logger().WithField("error", err.Error()).Error("failed to load token out address")
+				alarm.Slack(context.Background(), "failed to load token out address")
+				continue
+			}
+			dstToken := "0x" + hex.EncodeToString(tokenOUt.Bytes())
+			relayAmount, err := slice.LoadUInt(32)
+			if err != nil {
+				log.Logger().WithField("error", err.Error()).Error("failed to load jetton amount")
+				alarm.Slack(context.Background(), "failed to load jetton amount")
+				continue
+			}
 
-				order, err := dao.NewOrderWithID(orderID).First()
-				if err != nil {
-					fields := map[string]interface{}{
-						"orderID": orderID,
-						"error":   err.Error(),
-					}
-					log.Logger().WithFields(fields).Error("failed to get order")
-					alarm.Slack(context.Background(), "failed to get order")
-					continue
-				}
-				if order.Action != dao.OrderActionToEVM {
-					fields := map[string]interface{}{
-						"orderID": orderID,
-						"action":  order.Action,
-					}
-					log.Logger().WithFields(fields).Error("order action not match")
-					alarm.Slack(context.Background(), "order action not match")
-					continue
-				}
-				if order.Stage != dao.OrderStag1 {
-					fields := map[string]interface{}{
-						"orderID": orderID,
-						"stage":   order.Stage,
-					}
-					log.Logger().WithFields(fields).Error("order stage not match")
-					alarm.Slack(context.Background(), "order stage not match")
-					continue
-				}
-				if order.Status != dao.OrderStatusPending {
-					fields := map[string]interface{}{
-						"orderID": orderID,
-						"status":  order.Status,
-					}
-					log.Logger().WithFields(fields).Error("order status not pending")
-					alarm.Slack(context.Background(), "order status not pending")
-					continue
-				}
+			_, afterAmount := fees(new(big.Float).SetUint64(relayAmount), FeeRate)
+			// convert token to float like 0.089
+			afterAmountFloat := new(big.Float).Quo(afterAmount, big.NewFloat(1e6))
+			order := &dao.Order{
+				OrderIDFromContract: orderID,
+				SrcChain:            strconv.FormatUint(srcChain, 10),
+				SrcToken:            srcToken.String(),
+				Sender:              sender.String(),
+				InAmount:            strconv.FormatUint(inAmount, 10),
+				RelayToken:          params.USDTOfTON,
+				RelayAmount:         afterAmountFloat.String(),
+				DstChain:            strconv.FormatUint(dstChain, 10),
+				DstToken:            dstToken,
+				Receiver:            receiver,
+				Action:              dao.OrderActionToEVM,
+				Stage:               dao.OrderStag1,
+				Status:              dao.OrderStatusConfirmed,
+			}
 
-				_, afterAmount := fees(new(big.Int).SetUint64(amount), FeeRate)
+			if err := order.Create(); err != nil {
+				log.Logger().WithField("order", utils.JSON(order)).WithField("error", err).Error("failed to create order")
+				alarm.Slack(context.Background(), "failed to update order status")
+				continue
+			}
 
-				update := &dao.Order{
-					ID:       order.ID,
-					InAmount: afterAmount.String(),
-					Status:   dao.OrderStatusConfirmed,
+			if err := filterLog.UpdateLatestLogID(lg.Id); err != nil {
+				fields := map[string]interface{}{
+					"chainID":     params.ChainIDOfChainPool,
+					"topic":       params.OnReceivedTopic,
+					"latestLogID": lg.Id,
+					"error":       err.Error(),
 				}
-				if err := dao.NewOrder().Updates(update); err != nil {
-					fields := map[string]interface{}{
-						"orderID": orderID,
-						"update":  utils.JSON(update),
-						"error":   err.Error(),
-					}
-					log.Logger().WithFields(fields).Error("failed to update order status")
-					alarm.Slack(context.Background(), "failed to update order status")
-					return err
-				}
-			} else if strings.Contains(strings.ToLower(externalOut.DstAddr.String()), EventIDEVMToTON) {
-				orderID, err := slice.LoadUInt(64)
-				if err != nil {
-					log.Logger().WithField("error", err.Error()).Error("failed to load order id")
-					alarm.Slack(context.Background(), "failed to load order id from")
-					continue
-				}
-
-				order, err := dao.NewOrderWithID(orderID).First()
-				if err != nil {
-					fields := map[string]interface{}{
-						"orderID": orderID,
-						"error":   err.Error(),
-					}
-					log.Logger().WithFields(fields).Error("failed to get order")
-					alarm.Slack(context.Background(), "failed to get order")
-					continue
-				}
-				if order.Action != dao.OrderActionFromEVM {
-					fields := map[string]interface{}{
-						"orderID": orderID,
-						"action":  order.Action,
-					}
-					log.Logger().WithFields(fields).Error("order action not match")
-					alarm.Slack(context.Background(), "order action not match")
-					continue
-				}
-				if order.Stage != dao.OrderStag2 {
-					fields := map[string]interface{}{
-						"orderID": orderID,
-						"stage":   order.Stage,
-					}
-					log.Logger().WithFields(fields).Error("order stage not match")
-					alarm.Slack(context.Background(), "order stage not match")
-					continue
-				}
-				if order.Status != dao.OrderStatusPending {
-					fields := map[string]interface{}{
-						"orderID": orderID,
-						"status":  order.Status,
-					}
-					log.Logger().WithFields(fields).Error("order status not pending")
-					alarm.Slack(context.Background(), "order status not pending")
-					continue
-				}
-				update := &dao.Order{
-					ID:     order.ID,
-					Status: dao.OrderStatusConfirmed,
-				}
-				if err := dao.NewOrder().Updates(update); err != nil {
-					fields := map[string]interface{}{
-						"orderID": orderID,
-						"update":  utils.JSON(update),
-						"error":   err.Error(),
-					}
-					log.Logger().WithFields(fields).Error("failed to update order status")
-					alarm.Slack(context.Background(), "failed to update order status")
-					return err
-				}
+				log.Logger().WithFields(fields).Error("failed to update filter log")
+				alarm.Slack(context.Background(), "failed to update filter log")
+				continue
 			}
 		}
 
-		// update last processed lt and save it in db
-		if err := filterLog.UpdateLatestLogID(t.LT); err != nil {
-			fields := map[string]interface{}{
-				"chainID":     params.ChainIDOfChainPool,
-				"topic":       params.OnReceivedTopic,
-				"latestLogID": t.LT,
-				"error":       err.Error(),
-			}
-			log.Logger().WithFields(fields).Error("failed to update filter log")
-			alarm.Slack(context.Background(), "failed to update filter log")
-			return err
-		}
-		lastProcessedLT = t.LT
+		time.Sleep(10 * time.Second)
 	}
-
-	return errors.New("transaction listening unexpectedly finished")
 }
 
+// HandleConfirmedOrdersOfFirstStageFromTONToEVM
+// action=1, stage=1, status=2 ==> stage=2, status=1
 func HandleConfirmedOrdersOfFirstStageFromTONToEVM() {
 	order := dao.Order{
 		SrcChain: params.TONChainID,
@@ -328,28 +237,27 @@ func HandleConfirmedOrdersOfFirstStageFromTONToEVM() {
 					id = o.ID + 1
 				}
 
-				amountFloat, ok := new(big.Float).SetString(o.InAmount)
-				if !ok {
-					fields := map[string]interface{}{
-						"orderId": o.ID,
-						"amount":  o.InAmount,
-						"error":   err,
-					}
-					log.Logger().WithFields(fields).Error("failed to parse string to big float")
-					alarm.Slack(context.Background(), "failed to parse string to big float")
-					continue
-				}
-				amountFloat = new(big.Float).Quo(amountFloat, big.NewFloat(1e6)) // todo
+				//amountFloat, ok := new(big.Float).SetString(o.RelayAmount)
+				//if !ok {
+				//	fields := map[string]interface{}{
+				//		"orderId": o.ID,
+				//		"amount":  o.InAmount,
+				//		"error":   err,
+				//	}
+				//	log.Logger().WithFields(fields).Error("failed to parse string to big float")
+				//	alarm.Slack(context.Background(), "failed to parse string to big float")
+				//	continue
+				//}
 				request := &butter.RouterAndSwapRequest{
 					//FromChainID:     o.SrcChain,
 					FromChainID: params.ChainIDOfChainPool, // todo
 					ToChainID:   o.DstChain,
 					//Amount:          o.InAmount,  //
-					Amount:          amountFloat.String(), // todo
+					Amount:          o.RelayAmount, // todo
 					TokenInAddress:  params.USDTOfChainPool,
 					TokenOutAddress: o.DstToken,
-					Kind:            SwapType,
-					Slippage:        strconv.FormatUint(o.Slippage/3, 10), // todo
+					Type:            SwapType,
+					Slippage:        o.Slippage / 3 * 2, // todo
 					Entrance:        Entrance,
 					//From:            o.Sender,
 					From:     Sender, // todo
@@ -362,12 +270,24 @@ func HandleConfirmedOrdersOfFirstStageFromTONToEVM() {
 					continue
 				}
 
-				chainInfo, err := dao.NewSupportedChainWithChainID(params.ChainIDOfChainPool).First()
-				if err != nil {
-					log.Logger().WithField("chainID", params.ChainIDOfChainPool).WithField("error", err.Error()).Error("failed to get chain info")
-					alarm.Slack(context.Background(), "failed to get chain info")
-					time.Sleep(5 * time.Second)
-					continue
+				chainInfo := &dao.SupportedChain{}
+				if isMultiChainPool && o.SrcChain == params.ChainIDOfEthereum {
+					chainInfo, err = dao.NewSupportedChainWithChainID(params.ChainIDOfEthereum).First()
+					if err != nil {
+						log.Logger().WithField("chainID", params.ChainIDOfChainPool).WithField("error", err.Error()).Error("failed to get chain info")
+						alarm.Slack(context.Background(), "failed to get chain info")
+						time.Sleep(5 * time.Second)
+						continue
+
+					}
+				} else {
+					chainInfo, err = dao.NewSupportedChainWithChainID(params.ChainIDOfChainPool).First()
+					if err != nil {
+						log.Logger().WithField("chainID", params.ChainIDOfChainPool).WithField("error", err.Error()).Error("failed to get chain info")
+						alarm.Slack(context.Background(), "failed to get chain info")
+						time.Sleep(5 * time.Second)
+						continue
+					}
 				}
 
 				multiplier, err := strconv.ParseFloat(chainInfo.GasLimitMultiplier, 64)
@@ -462,6 +382,8 @@ func HandleConfirmedOrdersOfFirstStageFromTONToEVM() {
 	}
 }
 
+// HandlePendingOrdersOfSecondStageFromTONToEVM
+// action=1, stage=2, status=1 ==> status=2/3
 func HandlePendingOrdersOfSecondStageFromTONToEVM() {
 	order := dao.Order{
 		SrcChain: params.TONChainID,
@@ -491,15 +413,26 @@ func HandlePendingOrdersOfSecondStageFromTONToEVM() {
 					id = o.ID + 1
 				}
 
-				chainInfo, err := dao.NewSupportedChainWithChainID(params.ChainIDOfChainPool).First()
-				if err != nil {
-					log.Logger().WithField("chainID", o.DstChain).WithField("error", err.Error()).Error("failed to get chain info")
-					alarm.Slack(context.Background(), "failed to get chain info")
-					time.Sleep(5 * time.Second)
-					continue
+				chainInfo := &dao.SupportedChain{}
+				if isMultiChainPool && o.SrcChain == params.ChainIDOfEthereum {
+					chainInfo, err = dao.NewSupportedChainWithChainID(params.ChainIDOfEthereum).First()
+					if err != nil {
+						log.Logger().WithField("chainID", params.ChainIDOfChainPool).WithField("error", err.Error()).Error("failed to get chain info")
+						alarm.Slack(context.Background(), "failed to get chain info")
+						time.Sleep(5 * time.Second)
+						continue
+
+					}
+				} else {
+					chainInfo, err = dao.NewSupportedChainWithChainID(params.ChainIDOfChainPool).First()
+					if err != nil {
+						log.Logger().WithField("chainID", params.ChainIDOfChainPool).WithField("error", err.Error()).Error("failed to get chain info")
+						alarm.Slack(context.Background(), "failed to get chain info")
+						time.Sleep(5 * time.Second)
+						continue
+					}
 				}
 
-				// todo call NewCaller
 				transactor, err := tx.NewTransactor(chainInfo.ChainRPC, chainInfo.ChainPoolContract, 0)
 				if err != nil {
 					fields := map[string]interface{}{
@@ -557,6 +490,13 @@ func HandlePendingOrdersOfSecondStageFromTONToEVM() {
 	}
 }
 
+// HandlePendingOrdersOfFirstStageFromEVM filter the OnReceived event log.
+// If this log is found, update order status to confirmed
+// action = 2, stage = 1, status = 1 ==> status = 2
+//func HandlePendingOrdersOfFirstStageFromEVM() {}
+
+// HandleConfirmedOrdersOfFirstStageFromEVMToTON
+// action = 2, stage = 1, status = 2 ==> stage = 2, status = 1
 func HandleConfirmedOrdersOfFirstStageFromEVMToTON() {
 	order := dao.Order{
 		DstChain: params.TONChainID,
@@ -685,5 +625,138 @@ func HandleConfirmedOrdersOfFirstStageFromEVMToTON() {
 			}
 			time.Sleep(10 * time.Second)
 		}
+	}
+}
+
+// HandlePendingOrdersOfSecondSStageFromEVMToTON
+// action = 2, stage = 2, status = 1 ==> status = 2
+func HandlePendingOrdersOfSecondSStageFromEVMToTON() {
+	filterLog := dao.NewFilterLog(params.TONChainID, EventIDEVMToTON)
+	for {
+		gotLog, err := filterLog.First()
+		if err != nil {
+			fields := map[string]interface{}{
+				"chainID": params.TONChainID,
+				"topic":   EventIDEVMToTON,
+				"error":   err.Error(),
+			}
+			log.Logger().WithFields(fields).Error("failed to get filter log info")
+			alarm.Slack(context.Background(), "failed to get filter log info")
+			time.Sleep(5 * time.Second)
+			continue
+		}
+
+		logs, err := filter.GetLogs(gotLog.LatestLogID, params.TONChainID, EventIDEVMToTON, uint8(20))
+		if err != nil {
+			fields := map[string]interface{}{
+				"id":      gotLog.LatestLogID,
+				"chainID": params.TONChainID,
+				"topic":   EventIDEVMToTON,
+				"limit":   uint8(20),
+				"error":   err.Error(),
+			}
+			log.Logger().WithFields(fields).Error("failed to get logs")
+			alarm.Slack(context.Background(), "failed to get logs")
+			continue
+		}
+
+		for _, lg := range logs {
+			if lg.Id <= gotLog.LatestLogID {
+				continue
+			}
+
+			body := &cell.Cell{}
+			slice := body.BeginParse()
+			if slice == nil {
+				continue
+			}
+			if err := json.Unmarshal([]byte(fmt.Sprintf(`"%s"`, lg.LogData)), &body); err != nil {
+				log.Logger().WithField("error", err.Error()).Error("failed to unmarshal data")
+				alarm.Slack(context.Background(), "failed to unmarshal data")
+				continue
+			}
+
+			orderID, err := slice.LoadUInt(64)
+			if err != nil {
+				log.Logger().WithField("error", err.Error()).Error("failed to load order id")
+				alarm.Slack(context.Background(), "failed to load order id from")
+				continue
+			}
+
+			order, err := dao.NewOrderWithID(orderID).First()
+			if err != nil {
+				fields := map[string]interface{}{
+					"orderID": orderID,
+					"error":   err.Error(),
+				}
+				log.Logger().WithFields(fields).Error("failed to get order")
+				alarm.Slack(context.Background(), "failed to get order")
+				continue
+			}
+			if order.DstChain != params.TONChainID {
+				fields := map[string]interface{}{
+					"orderID": orderID,
+					"action":  order.Action,
+				}
+				log.Logger().WithFields(fields).Error("order dst chain not match")
+				alarm.Slack(context.Background(), "order dst chain not match")
+				continue
+			}
+			if order.Action != dao.OrderActionFromEVM {
+				fields := map[string]interface{}{
+					"orderID": orderID,
+					"action":  order.Action,
+				}
+				log.Logger().WithFields(fields).Error("order action not match")
+				alarm.Slack(context.Background(), "order action not match")
+				continue
+			}
+			if order.Stage != dao.OrderStag2 {
+				fields := map[string]interface{}{
+					"orderID": orderID,
+					"stage":   order.Stage,
+				}
+				log.Logger().WithFields(fields).Error("order stage not match")
+				alarm.Slack(context.Background(), "order stage not match")
+				continue
+			}
+			if order.Status != dao.OrderStatusPending {
+				fields := map[string]interface{}{
+					"orderID": orderID,
+					"status":  order.Status,
+				}
+				log.Logger().WithFields(fields).Error("order status not pending")
+				alarm.Slack(context.Background(), "order status not pending")
+				continue
+			}
+			update := &dao.Order{
+				ID:     order.ID,
+				Status: dao.OrderStatusConfirmed,
+			}
+			if err := dao.NewOrder().Updates(update); err != nil {
+				fields := map[string]interface{}{
+					"orderID": orderID,
+					"update":  utils.JSON(update),
+					"error":   err.Error(),
+				}
+				log.Logger().WithFields(fields).Error("failed to update order status")
+				alarm.Slack(context.Background(), "failed to update order status")
+				continue
+			}
+
+			if err := filterLog.UpdateLatestLogID(lg.Id); err != nil {
+				fields := map[string]interface{}{
+					"chainID":     params.ChainIDOfChainPool,
+					"topic":       params.OnReceivedTopic,
+					"latestLogID": lg.Id,
+					"error":       err.Error(),
+				}
+				log.Logger().WithFields(fields).Error("failed to update filter log")
+				alarm.Slack(context.Background(), "failed to update filter log")
+				continue
+			}
+		}
+
+		time.Sleep(10 * time.Second)
 	}
 }

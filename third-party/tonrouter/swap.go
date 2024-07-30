@@ -5,16 +5,17 @@ import (
 	"fmt"
 	uhttp "github.com/mapprotocol/fe-backend/utils/http"
 	"github.com/mapprotocol/fe-backend/utils/reqerror"
+	"github.com/spf13/viper"
 	"strconv"
 )
-
-const Domain = ""
 
 const SuccessCode = 0
 
 const (
 	PathBridgeSwap = "/bridger/swap"
 )
+
+var Domain string
 
 type BridgeSwapResponse struct {
 	Errno   int    `json:"errno"`
@@ -36,6 +37,10 @@ type BridgeSwapRequest struct {
 	TokenOutAddress string `json:"tokenOutAddress"`
 	Receiver        string `json:"receiver"`
 	OrderID         uint64 `json:"orderId"`
+}
+
+func init() {
+	Domain = viper.GetStringMapString("endpoints")["filter"]
 }
 
 func BridgeSwap(request *BridgeSwapRequest) (*TxParams, error) {

@@ -16,6 +16,8 @@ const successCode = 200
 
 const projectID = 7
 
+var Domain string
+
 type GetLogsResponse struct {
 	Code    int    `json:"code"`
 	Message string `json:"message"`
@@ -41,9 +43,13 @@ type GetLogsResponseItem struct {
 	TxTimestamp     int    `json:"tx_timestamp"`
 }
 
+func init() {
+	Domain = viper.GetStringMapString("endpoints")["filter"]
+}
+
 func GetLogs(id uint64, chainID, topic string, limit uint8) ([]*GetLogsResponseItem, error) {
 	params := fmt.Sprintf("id=%d&project_id=%d&chain_id=%s&topic=%s&limit=%d", id, projectID, chainID, topic, limit)
-	url := fmt.Sprintf("%s%s?%s", viper.GetStringMap("endpoints")["filter"], pathGetLogs, params)
+	url := fmt.Sprintf("%s%s?%s", Domain, pathGetLogs, params)
 	ret, err := uhttp.Get(url, nil, nil)
 	if err != nil {
 		return nil, reqerror.NewExternalRequestError(

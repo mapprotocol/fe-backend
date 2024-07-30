@@ -5,14 +5,15 @@ import (
 	"fmt"
 	uhttp "github.com/mapprotocol/fe-backend/utils/http"
 	"github.com/mapprotocol/fe-backend/utils/reqerror"
+	"github.com/spf13/viper"
 	"strconv"
 )
-
-const Domain = ""
 
 const SuccessCode = 0
 
 const PathRouteAndSwap = "/routeAndSwap"
+
+var Domain string
 
 type RouterAndSwapRequest struct {
 	FromChainID     string `json:"fromChainId"`
@@ -20,8 +21,8 @@ type RouterAndSwapRequest struct {
 	Amount          string `json:"amount"`
 	TokenInAddress  string `json:"tokenInAddress"`
 	TokenOutAddress string `json:"tokenOutAddress"`
-	Kind            string `json:"type"`
-	Slippage        string `json:"slippage"`
+	Type            string `json:"type"`
+	Slippage        uint64 `json:"slippage"`
 	Entrance        string `json:"entrance"`
 	From            string `json:"from"`
 	Receiver        string `json:"receiver"`
@@ -44,6 +45,10 @@ type TxData struct {
 	Data    string `json:"data"`
 	Value   string `json:"value"`
 	ChainId string `json:"chainId"`
+}
+
+func init() {
+	Domain = viper.GetStringMapString("endpoints")["butter"]
 }
 
 func RouterAndSwap(request *RouterAndSwapRequest) (*TxData, error) {

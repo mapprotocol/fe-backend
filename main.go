@@ -105,17 +105,16 @@ func runBTCTask() {
 
 func runTONTask() {
 	go func() {
-		var err error
 		defer func() {
 			stack := string(debug.Stack())
-			log.Logger().WithField("error", err).WithField("stack", stack).Error("failed to HandlePendingOrdersOfFirstStageFromTONToEVM")
+			log.Logger().WithField("stack", stack).Error("failed to HandlePendingOrdersOfFirstStageFromTONToEVM")
 
 			if r := recover(); r != nil {
 				log.Logger().WithField("error", r).Error("failed to recover HandlePendingOrdersOfFirstStageFromTONToEVM")
 			}
 		}()
 
-		err = task.HandlePendingOrdersOfFirstStageFromTONToEVM()
+		task.HandlePendingOrdersOfFirstStageFromTONToEVM()
 	}()
 
 	go func() {
@@ -157,4 +156,16 @@ func runTONTask() {
 		task.HandleConfirmedOrdersOfFirstStageFromEVMToTON()
 	}()
 
+	go func() {
+		defer func() {
+			stack := string(debug.Stack())
+			log.Logger().WithField("stack", stack).Error("failed to HandlePendingOrdersOfSecondSStageFromEVMToTON")
+
+			if r := recover(); r != nil {
+				log.Logger().WithField("error", r).Error("failed to recover HandlePendingOrdersOfSecondSStageFromEVMToTON")
+			}
+		}()
+
+		task.HandlePendingOrdersOfSecondSStageFromEVMToTON()
+	}()
 }

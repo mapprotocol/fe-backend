@@ -1,7 +1,8 @@
 package params
 
-const ChainIDOfChainPool = "137"
 const ChainIDOfTon = "1360104473493505"
+const ChainIDOfEthereum = "1"
+const ChainIDOfChainPool = "137"
 
 const OnReceivedTopic = "0xb64bae28c2d475ff4dc2c0e2f1e6220a7388d2633f485d9a050ca92854ec5cb7"
 const SwapLogTopic = "0xc0470ccf"

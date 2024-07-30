@@ -7,7 +7,6 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
-	"github.com/mapprotocol/fe-backend/bindings/ferouter"
 	"math/big"
 )
 
@@ -15,14 +14,12 @@ var senderAddress common.Address
 var senderPrivateKey *ecdsa.PrivateKey
 
 type Transactor struct {
-	endpoint            string
-	client              *ethclient.Client
-	address             common.Address
-	privateKey          *ecdsa.PrivateKey
-	gasLimitMultiplier  float64
-	chainPoolContract   common.Address
-	chainPoolTransactor *ferouter.FerouterTransactor
-	chainPoolFilter     *ferouter.FerouterFilterer
+	endpoint           string
+	client             *ethclient.Client
+	address            common.Address
+	privateKey         *ecdsa.PrivateKey
+	gasLimitMultiplier float64
+	chainPoolContract  common.Address
 }
 
 func InitTransactor(privateKey string) {
@@ -46,19 +43,14 @@ func NewTransactor(endpoint, chainPoolContract string, gasLimitMultiplier float6
 	}
 
 	chainPoolAddress := common.HexToAddress(chainPoolContract)
-	chainPoolTransactor, err := ferouter.NewFerouterTransactor(chainPoolAddress, client)
-	if err != nil {
-		return nil, err
-	}
 
 	return &Transactor{
-		endpoint:            endpoint,
-		client:              client,
-		address:             senderAddress,
-		privateKey:          senderPrivateKey,
-		gasLimitMultiplier:  multiplier,
-		chainPoolContract:   chainPoolAddress,
-		chainPoolTransactor: chainPoolTransactor,
+		endpoint:           endpoint,
+		client:             client,
+		address:            senderAddress,
+		privateKey:         senderPrivateKey,
+		gasLimitMultiplier: multiplier,
+		chainPoolContract:  chainPoolAddress,
 	}, nil
 }
 
