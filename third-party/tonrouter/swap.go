@@ -3,6 +3,7 @@ package tonrouter
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/mapprotocol/fe-backend/resource/log"
 	uhttp "github.com/mapprotocol/fe-backend/utils/http"
 	"github.com/mapprotocol/fe-backend/utils/reqerror"
 	"github.com/spf13/viper"
@@ -39,16 +40,17 @@ type BridgeSwapRequest struct {
 	OrderID         uint64 `json:"orderId"`
 }
 
-func init() {
-	Domain = viper.GetStringMapString("endpoints")["filter"]
+func Init() {
+	Domain = viper.GetStringMapString("endpoints")["tonrouter"]
 }
 
-func BridgeSwap(request *BridgeSwapRequest) (*TxParams, error) {
-	params, err := uhttp.URLEncode(request) // todo
-	if err != nil {
-		return nil, err
-	}
+func BridgeSwap(req *BridgeSwapRequest) (*TxParams, error) {
+	params := fmt.Sprintf(
+		"amount=%s&slippage=%d&tokenOutAddress=%s&receiver=%s&orderId=%d",
+		req.Amount, req.Slippage, req.TokenOutAddress, req.Receiver, req.OrderID,
+	)
 	url := fmt.Sprintf("%s%s?%s", Domain, PathBridgeSwap, params)
+	log.Logger().Debug(fmt.Sprintf("bridge swap url: %s", url))
 	ret, err := uhttp.Get(url, nil, nil)
 	if err != nil {
 		return nil, reqerror.NewExternalRequestError(

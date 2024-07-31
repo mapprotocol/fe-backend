@@ -60,8 +60,8 @@ func NewOrderWithID(id uint64) *Order {
 	return &Order{ID: id}
 }
 
-func NewOrderWithSender(sender string) *Order {
-	return &Order{Sender: sender}
+func NewOrderWithOrderIDFromContract(OrderIDFromContract uint64) *Order {
+	return &Order{OrderIDFromContract: OrderIDFromContract}
 }
 
 func (o *Order) TableName() string {

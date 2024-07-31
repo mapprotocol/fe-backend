@@ -3,6 +3,7 @@ package butter
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/mapprotocol/fe-backend/resource/log"
 	uhttp "github.com/mapprotocol/fe-backend/utils/http"
 	"github.com/mapprotocol/fe-backend/utils/reqerror"
 	"github.com/spf13/viper"
@@ -47,16 +48,17 @@ type TxData struct {
 	ChainId string `json:"chainId"`
 }
 
-func init() {
+func Init() {
 	Domain = viper.GetStringMapString("endpoints")["butter"]
 }
 
-func RouterAndSwap(request *RouterAndSwapRequest) (*TxData, error) {
-	params, err := uhttp.URLEncode(request) // todo
-	if err != nil {
-		return nil, err
-	}
+func RouteAndSwap(req *RouterAndSwapRequest) (*TxData, error) {
+	params := fmt.Sprintf(
+		"fromChainId=%s&toChainId=%s&amount=%s&tokenInAddress=%s&tokenOutAddress=%s&type=%s&slippage=%d&entrance=%s&from=%s&receiver=%s",
+		req.FromChainID, req.ToChainID, req.Amount, req.TokenInAddress, req.TokenOutAddress, req.Type, req.Slippage, req.Entrance, req.From, req.Receiver,
+	)
 	url := fmt.Sprintf("%s%s?%s", Domain, PathRouteAndSwap, params)
+	log.Logger().Debug(fmt.Sprintf("route and swap url: %s", url))
 	ret, err := uhttp.Get(url, nil, nil)
 	if err != nil {
 		return nil, reqerror.NewExternalRequestError(

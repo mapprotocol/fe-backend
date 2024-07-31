@@ -1,8 +1,17 @@
 package params
 
 const (
-	TONChainID = "1360104473493505" // common.BytesToAddress([]byte("TON-Chain-ID")).Big()
+	TONChainID = "1360104473493505"
 )
 
-const USDTOfTON = "EQCxE6mUtQJKFnGfaROTKOt1lZbDiiX1kCixRv7Nw2Id_sDs" // todo
-const USDTDecimalOfTON = 6                                           // todo
+const NoneAddress = "NONE"
+
+const (
+	USDTOfTON   = "EQCxE6mUtQJKFnGfaROTKOt1lZbDiiX1kCixRv7Nw2Id_sDs"
+	NativeOfTON = "0x0000000000000000000000000000000000000000"
+)
+
+const (
+	DecimalOfTON     = 1e18
+	USDTDecimalOfTON = 1e6
+)

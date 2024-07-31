@@ -3,6 +3,7 @@ package filter
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/mapprotocol/fe-backend/resource/log"
 	"github.com/spf13/viper"
 	"strconv"
 
@@ -43,13 +44,14 @@ type GetLogsResponseItem struct {
 	TxTimestamp     int    `json:"tx_timestamp"`
 }
 
-func init() {
+func Init() {
 	Domain = viper.GetStringMapString("endpoints")["filter"]
 }
 
 func GetLogs(id uint64, chainID, topic string, limit uint8) ([]*GetLogsResponseItem, error) {
 	params := fmt.Sprintf("id=%d&project_id=%d&chain_id=%s&topic=%s&limit=%d", id, projectID, chainID, topic, limit)
 	url := fmt.Sprintf("%s%s?%s", Domain, pathGetLogs, params)
+	log.Logger().Debug(fmt.Sprintf("filter logs url: %s", url))
 	ret, err := uhttp.Get(url, nil, nil)
 	if err != nil {
 		return nil, reqerror.NewExternalRequestError(

@@ -13,6 +13,8 @@ type ChainPool struct {
 	ChainID            string    `gorm:"column:chain_id;type:varchar(255)" json:"chain_id"`
 	ChainName          string    `gorm:"column:chain_name;type:varchar(255)" json:"chain_name"`
 	ChainRPC           string    `gorm:"column:chain_rpc;type:varchar(255)" json:"chain_rpc"`
+	USDTContract       string    `gorm:"column:usdt_contract;type:varchar(255)" json:"usdt_contract"`
+	FeRouterContract   string    `gorm:"column:fe_router_contract;type:varchar(255)" json:"fe_router_contract"`
 	ChainPoolContract  string    `gorm:"column:chain_pool_contract;type:varchar(255)" json:"chain_pool_contract"`
 	GasLimitMultiplier string    `gorm:"column:gas_limit_multiplier;type:varchar(255)" json:"gas_limit_multiplier"`
 	CreatedAt          time.Time `gorm:"column:created_at;type:datetime" json:"created_at"`

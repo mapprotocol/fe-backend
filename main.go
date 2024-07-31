@@ -2,6 +2,9 @@ package main
 
 import (
 	"github.com/mapprotocol/fe-backend/resource/tonclient"
+	"github.com/mapprotocol/fe-backend/third-party/butter"
+	"github.com/mapprotocol/fe-backend/third-party/filter"
+	"github.com/mapprotocol/fe-backend/third-party/tonrouter"
 	blog "log"
 	"os"
 	"os/signal"
@@ -28,10 +31,15 @@ func main() {
 
 	//task.InitMempoolClient(viper.GetString("network"))
 
-	tx.InitTransactor(viper.GetStringMapString("chainpool")["senderprivatekey"])
+	tx.InitTransactor(viper.GetStringMapString("ChainPool")["senderprivatekey"])
 
 	tonConfig := viper.GetStringMapString("ton")
 	tonclient.Init(tonConfig["words"], tonConfig["password"])
+
+	filter.Init()
+	butter.Init()
+	tonrouter.Init()
+	task.Init()
 
 	runTask()
 	//runBTCTask()
@@ -48,17 +56,16 @@ func main() {
 
 func runTask() {
 	go func() {
-		var err error
 		defer func() {
 			stack := string(debug.Stack())
-			log.Logger().WithField("error", err).WithField("stack", stack).Error("failed to HandlePendingOrdersOfFirstStageFromEVM")
+			log.Logger().WithField("stack", stack).Error("failed to HandlePendingOrdersOfFirstStageFromEVM")
 
 			if r := recover(); r != nil {
 				log.Logger().WithField("error", r).Error("failed to recover HandlePendingOrdersOfFirstStageFromEVM")
 			}
 		}()
 
-		err = task.HandlePendingOrdersOfFirstStageFromEVM()
+		task.HandlePendingOrdersOfFirstStageFromEVM()
 	}()
 }
 

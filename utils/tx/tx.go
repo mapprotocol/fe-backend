@@ -5,7 +5,7 @@ import (
 	"crypto/ecdsa"
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi"
-	"github.com/mapprotocol/fe-backend/bindings/ferouter"
+	"github.com/mapprotocol/fe-backend/params"
 	"github.com/mapprotocol/fe-backend/utils"
 	"math/big"
 	"strings"
@@ -22,6 +22,18 @@ const (
 	NonceTooLow = "nonce too low"
 )
 
+var (
+	feRouterABI abi.ABI
+)
+
+func init() {
+	var err error
+	feRouterABI, err = abi.JSON(strings.NewReader(params.FeRouterABI))
+	if err != nil {
+		panic(err)
+	}
+}
+
 func (t *Transactor) DeliverAndSwap(orderID [32]byte, initiator common.Address, token common.Address, amount *big.Int, swapData []byte, bridgeData []byte, feeData []byte, value *big.Int) (common.Hash, error) {
 	var txHash common.Hash
 
@@ -31,7 +43,7 @@ func (t *Transactor) DeliverAndSwap(orderID [32]byte, initiator common.Address, 
 			return common.Hash{}, err
 		}
 
-		input, err := pack(ferouter.FerouterMetaData.ABI, "deliverAndSwap", orderID, initiator, token, amount, swapData, bridgeData, feeData)
+		input, err := pack(feRouterABI, "deliverAndSwap", orderID, initiator, token, amount, swapData, bridgeData, feeData)
 		if err != nil {
 			log.Logger().Error("failed to pack params")
 			return common.Hash{}, err
@@ -154,12 +166,8 @@ func (t *Transactor) estimateGas(to common.Address, input []byte) (*big.Int, uin
 	return gasPrice, gasLimit, nil
 }
 
-func pack(abiStr, method string, args ...interface{}) ([]byte, error) {
-	parsed, err := abi.JSON(strings.NewReader(abiStr))
-	if err != nil {
-		return nil, err
-	}
-	input, err := parsed.Pack(method, args...) // todo do once
+func pack(parsedABI abi.ABI, method string, args ...interface{}) ([]byte, error) {
+	input, err := parsedABI.Pack(method, args...)
 	if err != nil {
 		return nil, err
 	}

@@ -10,7 +10,8 @@ import (
 )
 
 const (
-	EventNameOnReceived = "OnReceived"
+	EventNameOnReceived     = "OnReceived"
+	EventNameDeliverAndSwap = "DeliverAndSwap"
 )
 
 const (
@@ -52,6 +53,15 @@ type OnReceivedEventParams struct {
 	Slippage             uint64
 }
 
+// DeliverAndSwapEventParams represents a DeliverAndSwap event raised by the fe router contract.
+// Solidity: event DeliverAndSwap(bytes32 orderId, bytes32 bridgeId, address token, uint256 amount)
+type DeliverAndSwapEventParams struct {
+	OrderId  [32]byte
+	BridgeId [32]byte
+	Token    common.Address
+	Amount   *big.Int
+}
+
 func DecodeData(data string) (*SwapAndBridgeFunctionParams, error) {
 	bs := common.Hex2Bytes(strings.TrimPrefix(data, "0x"))
 
@@ -86,6 +96,14 @@ func UnpackLog(a abi.ABI, event string, ret interface{}, data []byte) error {
 func UnpackOnReceived(data []byte) (*OnReceivedEventParams, error) {
 	ret := &OnReceivedEventParams{}
 	if err := UnpackLog(feRouterABI, EventNameOnReceived, ret, data); err != nil {
+		return nil, err
+	}
+	return ret, nil
+}
+
+func UnpackDeliverAndSwap(data []byte) (*DeliverAndSwapEventParams, error) {
+	ret := &DeliverAndSwapEventParams{}
+	if err := UnpackLog(feRouterABI, EventNameDeliverAndSwap, ret, data); err != nil {
 		return nil, err
 	}
 	return ret, nil

@@ -83,7 +83,7 @@ func TestRouterAndSwap(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := RouterAndSwap(tt.args.request)
+			got, err := RouteAndSwap(tt.args.request)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("RouterAndSwap() error = %v, wantErr %v", err, tt.wantErr)
 				return
