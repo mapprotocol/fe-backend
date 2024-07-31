@@ -13,7 +13,7 @@ import (
 	"testing"
 )
 
-func TestDecodeData(t *testing.T) {
+func TestDecodeData1(t *testing.T) {
 	type args struct {
 		data string
 	}

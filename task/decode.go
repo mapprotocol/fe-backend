@@ -3,7 +3,6 @@ package task
 import (
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/mapprotocol/fe-backend/bindings/router"
 	"github.com/mapprotocol/fe-backend/params"
 	"math/big"
 	"strings"
@@ -20,7 +19,8 @@ const (
 )
 
 var (
-	feRouterABI, _ = abi.JSON(strings.NewReader(params.FeRouterABI))
+	feRouterABI, _     = abi.JSON(strings.NewReader(params.FeRouterABI))
+	ButterRouterABI, _ = abi.JSON(strings.NewReader(params.ButterRouterV3))
 )
 
 // SwapAndBridgeFunctionParams
@@ -65,12 +65,7 @@ type DeliverAndSwapEventParams struct {
 func DecodeData(data string) (*SwapAndBridgeFunctionParams, error) {
 	bs := common.Hex2Bytes(strings.TrimPrefix(data, "0x"))
 
-	getAbi, err := router.RouterMetaData.GetAbi() // todo
-	if err != nil {
-		return nil, err
-	}
-
-	swapAndBridge := getAbi.Methods[MethodNameSwapAndBridge]
+	swapAndBridge := ButterRouterABI.Methods[MethodNameSwapAndBridge]
 	args, err := swapAndBridge.Inputs.Unpack(bs[4:])
 	if err != nil {
 		return nil, err
