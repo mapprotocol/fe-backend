@@ -4,6 +4,8 @@ import (
 	"github.com/fvbock/endless"
 	"github.com/gin-gonic/gin"
 	"github.com/mapprotocol/fe-backend/logic"
+	"github.com/mapprotocol/fe-backend/third-party/butter"
+	"github.com/mapprotocol/fe-backend/third-party/tonrouter"
 	"github.com/spf13/viper"
 
 	"github.com/mapprotocol/fe-backend/config"
@@ -20,6 +22,9 @@ func main() {
 	// init db
 	dbConf := viper.GetStringMapString("database")
 	db.Init(dbConf["user"], dbConf["password"], dbConf["host"], dbConf["port"], dbConf["name"])
+
+	butter.Init()
+	tonrouter.Init()
 
 	logic.InitNetworkParams(viper.GetString("network"))
 

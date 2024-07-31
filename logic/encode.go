@@ -13,11 +13,8 @@ const (
 	MethodNameOnReceived = "onReceived"
 )
 
-const CallbackParam = "callbackParam"
-
 var (
 	feRouterABI      = abi.ABI{}
-	callbackParamABI = abi.ABI{}
 	swapCallbackArgs = abi.Arguments{}
 )
 
@@ -70,14 +67,17 @@ type SwapCallbackParams struct {
 	Data              []byte         //  packed onReceived function params
 }
 
-// OnReceivedFunctionParams
-// Solidity: function onReceived(uint256 _amount, bytes32 _orderId, address _token, address _from, bytes _to) returns()
-type OnReceivedFunctionParams struct {
-	Amount  *big.Int
-	OrderId [32]byte
-	Token   common.Address
-	From    common.Address
-	To      []byte
+type ReceiverParam struct {
+	OrderId        [32]byte
+	SrcChain       *big.Int
+	SrcToken       []byte
+	Sender         []byte
+	InAmount       string
+	ChainPoolToken common.Address
+	DstChain       *big.Int
+	DstToken       []byte
+	Receiver       []byte
+	Slippage       uint64
 }
 
 func PackInput(abi abi.ABI, abiMethod string, params ...interface{}) ([]byte, error) {
@@ -89,14 +89,9 @@ func PackInput(abi abi.ABI, abiMethod string, params ...interface{}) ([]byte, er
 }
 
 // PackOnReceived pack onReceived function params
-// amount: token amount
-// orderId: order id
-// token: token address
-// from: sender address
-// to: receiver address on bitcoin
-// Solidity: function onReceived(uint256 _amount, bytes32 _orderId, address _token, address _from, bytes _to) returns()
-func PackOnReceived(amount *big.Int, orderId [32]byte, token common.Address, from common.Address, to []byte) ([]byte, error) {
-	return PackInput(feRouterABI, MethodNameOnReceived, amount, orderId, token, from, to)
+// Solidity: function onReceived(uint256 _amount, (bytes32,uint256,address,bytes,uint256,uint256,address,bytes) _param) returns()
+func PackOnReceived(amount *big.Int, params ReceiverParam) ([]byte, error) {
+	return PackInput(feRouterABI, MethodNameOnReceived, amount, params)
 }
 
 func EncodeSwapCallbackParams(feRouter, receiver common.Address, data []byte) (string, error) {

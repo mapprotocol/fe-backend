@@ -97,7 +97,7 @@ func Route(c *gin.Context) {
 	switch req.Action {
 	case dao.OrderActionToEVM:
 		if req.FromChainID == constants.TONChainID {
-			ret, code = logic.GetTONToEVMRoute(req)
+			ret, code = logic.GetTONToEVMRoute(req, slippage)
 			if code != resp.CodeSuccess {
 				resp.Error(c, code)
 				return
@@ -126,7 +126,8 @@ func Swap(c *gin.Context) {
 		resp.ParameterErr(c, "missing srcChain")
 		return
 	}
-	if _, ok := new(big.Int).SetString(req.SrcChain, 10); !ok {
+	srcChain, ok := new(big.Int).SetString(req.SrcChain, 10)
+	if !ok {
 		resp.ParameterErr(c, "invalid srcChain")
 		return
 	}
@@ -147,16 +148,17 @@ func Swap(c *gin.Context) {
 		resp.ParameterErr(c, "invalid amount")
 		return
 	}
-	if req.Decimal <= 0 {
-		resp.ParameterErr(c, "missing decimal")
-		return
-	}
+	//if req.Decimal <= 0 {
+	//	resp.ParameterErr(c, "missing decimal")
+	//	return
+	//}
 
 	if utils.IsEmpty(req.DstChain) {
 		resp.ParameterErr(c, "missing dstChain")
 		return
 	}
-	if _, ok := new(big.Int).SetString(req.DstChain, 10); !ok {
+	dstChain, ok := new(big.Int).SetString(req.DstChain, 10)
+	if !ok {
 		resp.ParameterErr(c, "invalid dstChain")
 		return
 	}
@@ -165,6 +167,10 @@ func Swap(c *gin.Context) {
 	//	return
 	//}
 
+	if utils.IsEmpty(req.Receiver) {
+		resp.ParameterErr(c, "missing receiver")
+		return
+	}
 	if utils.IsEmpty(req.Hash) {
 		resp.ParameterErr(c, "missing hash")
 		return
@@ -187,14 +193,23 @@ func Swap(c *gin.Context) {
 		resp.ParameterErr(c, "invalid amount")
 		return
 	}
-	exp := new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(req.Decimal)), nil)
-	amount := new(big.Float).Mul(amountBigFloat, new(big.Float).SetInt(exp))
-	amountBigInt, _ := amount.Int(nil)
 
-	ret, code := logic.Swap(req.SrcChain, req.SrcToken, req.Sender, amountBigInt, req.DstChain, req.Receiver, req.Hash, slippage)
-	if code != resp.CodeSuccess {
-		resp.Error(c, code)
-		return
+	code := resp.CodeSuccess
+	ret := &entity.SwapResponse{}
+
+	switch req.SrcChain {
+	case constants.TONChainID:
+		ret, code = logic.GetSwapFromTON(req.Sender, amountBigFloat, req.DstChain, req.Receiver, req.Hash)
+		if code != resp.CodeSuccess {
+			resp.Error(c, code)
+			return
+		}
+	default:
+		ret, code = logic.GetSwapFromEVM(srcChain, req.SrcToken, req.Sender, req.Amount, dstChain, req.DstToken, req.Receiver, req.Hash, slippage)
+		if code != resp.CodeSuccess {
+			resp.Error(c, code)
+			return
+		}
 	}
 	resp.Success(c, ret)
 }

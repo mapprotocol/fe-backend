@@ -10,16 +10,16 @@ GET
 
 ### request params
 
-| parameter       | type   | required | default | description                                                      |
-|-----------------|--------|----------|---------|------------------------------------------------------------------|
-| fromChainId     | string | Yes      |         |                                                                  |
-| toChainId       | string | Yes      |         |                                                                  |
-| amount          | string | Yes      |         |                                                                  |
-| tokenInAddress  | string | Yes      |         |                                                                  |
-| tokenOutAddress | string | Yes      |         |                                                                  |
-| type            | string | Yes      |         |                                                                  |
-| slippage        | string | Yes      |         | slippage of swap, a integer in rang [0, 5000], e.g, 100 means 1% |
-| action          | number | Yes      |         | 1: to evm, 2: from evm                                           |
+| parameter       | type   | required | default | description                                                        |
+|-----------------|--------|----------|---------|--------------------------------------------------------------------|
+| fromChainId     | string | Yes      |         | action: 1， fromChainId: 1360104473493505                           |
+| toChainId       | string | Yes      |         | action: 2， toChainId: 1360104473493505                             |
+| amount          | string | Yes      |         |                                                                    |
+| tokenInAddress  | string | Yes      |         |                                                                    |
+| tokenOutAddress | string | Yes      |         |                                                                    |
+| type            | string | Yes      |         |                                                                    |
+| slippage        | string | Yes      |         | slippage of swap, a integer in rang [300, 5000], e.g, 300 means 3% |
+| action          | number | Yes      |         | 1: to evm, 2: from evm                                             |
 
 ### response params
 
@@ -169,18 +169,18 @@ GET
 
 ### request params
 
-| parameter | type   | required | default | description                                                      |
-|-----------|--------|----------|---------|------------------------------------------------------------------|
-| srcChain  | string | Yes      |         |                                                                  |
-| srcToken  | string | Yes      |         |                                                                  |
-| sender    | string | Yes      |         |                                                                  |
-| amount    | string | Yes      |         |                                                                  |
-| decimal   | number | Yes      |         |                                                                  |
-| dstChain  | string | Yes      |         |                                                                  |
-| dstToken  | string | Yes      |         |                                                                  |
-| receiver  | string | Yes      |         |                                                                  |
-| hash      | string | Yes      |         | the route hash returned by /api/v1/route                         |
-| slippage  | string | Yes      |         | slippage of swap, a integer in rang [0, 5000], e.g, 100 means 1% |
+| parameter | type   | required | default | description                                                        |
+|-----------|--------|----------|---------|--------------------------------------------------------------------|
+| srcChain  | string | Yes      |         |                                                                    |
+| srcToken  | string | Yes      |         |                                                                    |
+| sender    | string | Yes      |         |                                                                    |
+| amount    | string | Yes      |         |                                                                    |
+| decimal   | number | Yes      |         |                                                                    |
+| dstChain  | string | Yes      |         |                                                                    |
+| dstToken  | string | Yes      |         |                                                                    |
+| receiver  | string | Yes      |         |                                                                    |
+| hash      | string | Yes      |         | the route hash returned by /api/v1/route                           |
+| slippage  | string | Yes      |         | slippage of swap, a integer in rang [300, 5000], e.g, 300 means 3% |
 
 ### response params
 
@@ -478,13 +478,14 @@ curl --location 'http://127.0.0.1:8181/api/v1/order/list?sender=tb1p862kth24h9gv
 
 ## 接口调用顺序
 
-### btc to evm:
+### ton to evm:
 
 1. /api/v1/route
-2. /api/v1/order/create
+2. /api/v1/swap --> tx data
+3. send tx to ton
 
-### evm to btc:
+### evm to ton
 
 1. /api/v1/route
-2. /api/v1/swap 该接口会创建一个 order 并构建 swap 交易的 data
-3. /api/v1/update
+2. /api/v1/swap --> tx data
+3. send tx to evm

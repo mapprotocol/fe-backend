@@ -14,7 +14,8 @@ const (
 )
 
 const (
-	CodeOrderNotFound = 4001
+	CodeOrderNotFound = iota + 4001
+	CodeInsufficientLiquidity
 )
 
 const (
@@ -31,7 +32,8 @@ const (
 )
 
 const (
-	MsgOrderNotFound = "order not found"
+	MsgOrderNotFound         = "order not found"
+	MsgInsufficientLiquidity = "insufficient liquidity"
 )
 
 var code2msg = map[int]string{
@@ -43,4 +45,5 @@ var code2msg = map[int]string{
 	CodeTONRouteServerError:       MsgTONRouteServerError,
 	CodeTONRouteNotAvailableRoute: MsgTONRouteNotAvailableRoute,
 	CodeOrderNotFound:             MsgOrderNotFound,
+	CodeInsufficientLiquidity:     MsgInsufficientLiquidity,
 }

@@ -1,6 +1,9 @@
 package reqerror
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
 type ExternalRequestError struct {
 	Path    string
@@ -39,6 +42,7 @@ func (e *ExternalRequestError) Error() string {
 	if e.Err != nil {
 		msg += fmt.Sprintf("error: %s", e.Err.Error())
 	}
+	msg = strings.TrimSuffix(msg, ", ")
 	msg += "]"
 	return msg
 }

@@ -60,19 +60,19 @@ func CreateOrder(srcChain, srcToken, sender, amount string, dstChain, dstToken, 
 	}
 
 	order := &dao.Order{
-		SrcChain:          srcChain,
-		SrcToken:          srcToken,
-		Sender:            sender,
-		InAmount:          amount,
-		Relayer:           addressStr,
-		RelayerPrivateKey: privateKeyStr,
-		DstChain:          dstChain,
-		DstToken:          dstToken,
-		Receiver:          receiver,
-		Action:            action,
-		Stage:             dao.OrderStag1,
-		Status:            dao.OrderStatusPending,
-		Slippage:          slippage,
+		SrcChain:   srcChain,
+		SrcToken:   srcToken,
+		Sender:     sender,
+		InAmount:   amount,
+		Relayer:    addressStr,
+		RelayerKey: privateKeyStr,
+		DstChain:   dstChain,
+		DstToken:   dstToken,
+		Receiver:   receiver,
+		Action:     action,
+		Stage:      dao.OrderStag1,
+		Status:     dao.OrderStatusPending,
+		Slippage:   slippage,
 	}
 	orderID, err := order.Create()
 	if err != nil {

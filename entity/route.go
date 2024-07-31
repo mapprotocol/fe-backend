@@ -16,7 +16,7 @@ type SwapRequest struct {
 	SrcToken string `form:"srcToken"`
 	Sender   string `form:"sender"`
 	Amount   string `form:"amount"`
-	Decimal  uint8  `form:"decimal"`
+	//Decimal  uint8  `form:"decimal"`
 	DstChain string `form:"dstChain"`
 	DstToken string `form:"dstToken"`
 	Receiver string `form:"receiver"`
