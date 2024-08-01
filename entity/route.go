@@ -25,15 +25,14 @@ type SwapRequest struct {
 }
 
 type RouteResponse struct {
-	Hash        string `json:"hash"`
-	TokenIn     Token  `json:"tokenIn"`
-	TokenOut    Token  `json:"tokenOut"`
-	AmountIn    string `json:"amountIn"`
-	AmountOut   string `json:"amountOut"`
-	Path        []Path `json:"path"`
-	GasFee      Fee    `json:"gasFee"`
-	BridgeFee   Fee    `json:"bridgeFee"`
-	ProtocolFee Fee    `json:"protocolFee"`
+	Hash      string `json:"hash"`
+	TokenIn   Token  `json:"tokenIn"`
+	TokenOut  Token  `json:"tokenOut"`
+	AmountIn  string `json:"amountIn"`
+	AmountOut string `json:"amountOut"`
+	Path      []Path `json:"path"`
+	GasFee    Fee    `json:"gasFee"`
+	BridgeFee Fee    `json:"bridgeFee"`
 }
 
 type SwapResponse struct {

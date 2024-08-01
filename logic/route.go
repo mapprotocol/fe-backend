@@ -20,6 +20,7 @@ import (
 )
 
 var isMultiChainPool = false
+var feeRate = big.NewFloat(70) // 70/10000
 
 func init() {
 	isMultiChainPool = viper.GetBool("isMultiChainPool")
@@ -54,8 +55,18 @@ func GetTONToEVMRoute(req *entity.RouteRequest, slippage uint64) (ret []*entity.
 			"error":   err,
 		}
 		log.Logger().WithFields(params).Error("failed to request ton route")
-		return ret, resp.CodeInternalServerError
+		return ret, resp.CodeTONRouteServerError
 	}
+	tokenAmountOut, ok := new(big.Float).SetString(tonRoute.SrcChain.TokenAmountOut)
+	if !ok {
+		params := map[string]interface{}{
+			"request": utils.JSON(tonRequest),
+			"amount":  tonRoute.SrcChain.TokenAmountOut,
+		}
+		log.Logger().WithFields(params).Error("failed to parse token amount out")
+		return ret, resp.CodeTONRouteServerError
+	}
+
 	in := tonRoute.SrcChain.Route[0].Path[0].TokenIn
 	tonTokenIn = entity.Token{
 		ChainId:  tonRoute.SrcChain.ChainId,
@@ -74,6 +85,15 @@ func GetTONToEVMRoute(req *entity.RouteRequest, slippage uint64) (ret []*entity.
 		Decimals: out.Decimals,
 		Symbol:   out.Symbol,
 		Icon:     in.Image,
+	}
+
+	gasFee := entity.Fee{
+		Amount: tonRoute.GasFee.Amount,
+		Symbol: tonRoute.GasFee.Symbol,
+	}
+	bridgeFee := entity.Fee{
+		Amount: calcBridgeFee(tokenAmountOut, feeRate).Text('f', 6),
+		Symbol: constants.BridgeFeeSymbol,
 	}
 
 	request := &butter.RouteRequest{
@@ -143,18 +163,8 @@ func GetTONToEVMRoute(req *entity.RouteRequest, slippage uint64) (ret []*entity.
 					TokenOut:  butterDstChainTokenOut,
 				},
 			},
-			GasFee: entity.Fee{
-				Amount: r.GasFee.Amount,
-				Symbol: r.GasFee.Symbol,
-			},
-			BridgeFee: entity.Fee{
-				Amount: r.BridgeFee.Amount,
-				Symbol: r.BridgeFee.Symbol,
-			},
-			ProtocolFee: entity.Fee{
-				Amount: "0",
-				Symbol: "USDT",
-			},
+			GasFee:    gasFee,
+			BridgeFee: bridgeFee,
 		}
 		ret = append(ret, n)
 	}
@@ -207,6 +217,16 @@ func GetEVMToTONRoute(req *entity.RouteRequest, slippage uint64) (ret []*entity.
 		tonRoute, ok := tonRoutes[r.Hash]
 		if !ok {
 			continue
+		}
+
+		amountOut, ok := new(big.Float).SetString(r.DstChain.TotalAmountOut)
+		if !ok {
+			params := map[string]interface{}{
+				"request": utils.JSON(tonRequest),
+				"amount":  r.DstChain.TotalAmountOut,
+			}
+			log.Logger().WithFields(params).Error("failed to parse token amount out")
+			return ret, resp.CodeTONRouteServerError
 		}
 
 		in := tonRoute.SrcChain.Route[0].Path[0].TokenIn
@@ -280,12 +300,8 @@ func GetEVMToTONRoute(req *entity.RouteRequest, slippage uint64) (ret []*entity.
 				Symbol: r.GasFee.Symbol,
 			},
 			BridgeFee: entity.Fee{
-				Amount: r.BridgeFee.Amount,
-				Symbol: r.BridgeFee.Symbol,
-			},
-			ProtocolFee: entity.Fee{
-				Amount: "0",
-				Symbol: "USDT",
+				Amount: calcBridgeFee(amountOut, feeRate).Text('f', 6),
+				Symbol: constants.BridgeFeeSymbol,
 			},
 		}
 		ret = append(ret, n)
@@ -506,4 +522,11 @@ func getUSDTDecimalOfChainPool(chain string) (decimal *big.Float) {
 		decimal = big.NewFloat(constants.USDTDecimalOfChainPool) // todo
 	}
 	return decimal
+}
+
+func calcBridgeFee(amount, feeRate *big.Float) (feeAmount *big.Float) {
+	feeAmount = new(big.Float).Mul(amount, feeRate)
+	feeAmount = new(big.Float).Quo(feeAmount, big.NewFloat(10000))
+	log.Logger().WithField("amount", amount).WithField("feeRate", feeRate).WithField("feeAmount", feeAmount).Info("calc bridge fee")
+	return feeAmount
 }

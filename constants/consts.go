@@ -33,3 +33,5 @@ const (
 	ExchangeNameButter        = "Butter"
 	ExchangeNameFlushExchange = "MAP FE"
 )
+
+const BridgeFeeSymbol = "USDT"
