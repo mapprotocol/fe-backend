@@ -15,6 +15,7 @@ const SuccessCode = 0
 const PathRouteAndSwap = "/routeAndSwap"
 
 var Domain string
+var entrance string
 
 type RouterAndSwapRequest struct {
 	FromChainID     string `json:"fromChainId"`
@@ -50,12 +51,13 @@ type TxData struct {
 
 func Init() {
 	Domain = viper.GetStringMapString("endpoints")["butter"]
+	entrance = viper.GetStringMapString("butter")["entrance"]
 }
 
 func RouteAndSwap(req *RouterAndSwapRequest) (*TxData, error) {
 	params := fmt.Sprintf(
 		"fromChainId=%s&toChainId=%s&amount=%s&tokenInAddress=%s&tokenOutAddress=%s&type=%s&slippage=%d&entrance=%s&from=%s&receiver=%s",
-		req.FromChainID, req.ToChainID, req.Amount, req.TokenInAddress, req.TokenOutAddress, req.Type, req.Slippage, req.Entrance, req.From, req.Receiver,
+		req.FromChainID, req.ToChainID, req.Amount, req.TokenInAddress, req.TokenOutAddress, req.Type, req.Slippage, entrance, req.From, req.Receiver,
 	)
 	url := fmt.Sprintf("%s%s?%s", Domain, PathRouteAndSwap, params)
 	log.Logger().Debug(fmt.Sprintf("route and swap url: %s", url))
