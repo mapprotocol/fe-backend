@@ -12,6 +12,6 @@ const (
 )
 
 const (
-	DecimalOfTON     = 1e18
-	USDTDecimalOfTON = 1e6
+	InAmountDecimalOfTON = 1e10
+	USDTDecimalOfTON     = 1e6
 )

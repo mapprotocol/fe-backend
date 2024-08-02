@@ -186,23 +186,22 @@ func HandlePendingOrdersOfFirstStageFromTONToEVM() {
 			_, afterAmount := deductFees(new(big.Float).SetUint64(relayAmount), FeeRate)
 			// convert token to float like 0.089
 			afterAmountFloat := new(big.Float).Quo(afterAmount, big.NewFloat(params.USDTDecimalOfTON))
-			//inAmountFloat := new(big.Float).Quo(new(big.Float).SetInt(inAmount), big.NewFloat(params.DecimalOfTON))
+			inAmountFloat := new(big.Float).Quo(new(big.Float).SetUint64(inAmount), big.NewFloat(params.InAmountDecimalOfTON))
 			order := &dao.Order{
 				OrderIDFromContract: orderID,
 				SrcChain:            strconv.FormatUint(srcChain, 10),
 				SrcToken:            scrTokenStr,
 				Sender:              sender.String(),
-				//InAmount:            inAmountFloat.Text('f', 0),
-				InAmount:    strconv.FormatUint(inAmount, 10),
-				RelayToken:  params.USDTOfTON,
-				RelayAmount: afterAmountFloat.String(),
-				DstChain:    strconv.FormatUint(dstChain, 10),
-				DstToken:    dstToken,
-				Receiver:    receiver,
-				Action:      dao.OrderActionToEVM,
-				Stage:       dao.OrderStag1,
-				Status:      dao.OrderStatusConfirmed,
-				Slippage:    slippage,
+				InAmount:            inAmountFloat.Text('f', -1),
+				RelayToken:          params.USDTOfTON,
+				RelayAmount:         afterAmountFloat.String(),
+				DstChain:            strconv.FormatUint(dstChain, 10),
+				DstToken:            dstToken,
+				Receiver:            receiver,
+				Action:              dao.OrderActionToEVM,
+				Stage:               dao.OrderStag1,
+				Status:              dao.OrderStatusConfirmed,
+				Slippage:            slippage,
 			}
 
 			if err := order.Create(); err != nil {
