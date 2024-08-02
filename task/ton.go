@@ -139,8 +139,7 @@ func HandlePendingOrdersOfFirstStageFromTONToEVM() {
 				alarm.Slack(context.Background(), "failed to load rc token")
 				continue
 			}
-			//inAmount, err := from.LoadBigUInt(128)
-			inAmount, err := slice.LoadUInt(64)
+			inAmount, err := from.LoadUInt(64)
 			if err != nil {
 				log.Logger().WithField("error", err.Error()).Error("failed to load amount in")
 				alarm.Slack(context.Background(), "failed to load amount in")

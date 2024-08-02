@@ -6,8 +6,11 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/mapprotocol/fe-backend/dao"
+	"github.com/mapprotocol/fe-backend/params"
 	"log"
 	"math/big"
+	"strconv"
 	"testing"
 
 	"github.com/xssnick/tonutils-go/address"
@@ -199,7 +202,7 @@ func TestTonFilterEvents(t *testing.T) {
 
 	// address on which we are accepting payments
 	//treasuryAddress := address.MustParseAddr("EQCcRLZA4yLYKJOQExatRMokKXv92kHyeZF7SKjG8TQO4kAI")
-	treasuryAddress := address.MustParseAddr("EQAe8Lq5uwe_OTE3qh0iircglVnsETikIPK6Qp4DoKa9sWQ6")
+	treasuryAddress := address.MustParseAddr("EQBM9zTT58eBMeArcb3dX8xtH1kBcPVZg5D_Ef6PRCZ6lMve")
 
 	acc, err := api.GetAccount(context.Background(), master, treasuryAddress)
 	if err != nil {
@@ -212,7 +215,7 @@ func TestTonFilterEvents(t *testing.T) {
 	// After each processed transaction, save lt to your db, to continue after restart
 	log.Println("last tx lt: ", acc.LastTxLT)
 	//lastProcessedLT := acc.LastTxLT
-	lastProcessedLT := uint64(47839075000001)
+	lastProcessedLT := uint64(48112392000001)
 	// channel with new transactions
 	transactions := make(chan *tlb.Transaction)
 
@@ -249,6 +252,12 @@ func TestTonFilterEvents(t *testing.T) {
 			if payload == nil {
 				continue
 			}
+			data, err := payload.MarshalJSON()
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Log("data: ", hex.EncodeToString(data))
+
 			slice := payload.BeginParse()
 			if slice == nil {
 				continue
@@ -428,4 +437,96 @@ func TestName(t *testing.T) {
 	}
 	amountFloat = new(big.Float).Quo(amountFloat, big.NewFloat(1e6))
 	t.Log(amountFloat)
+}
+
+func TestParseTONToEVMEvent(t *testing.T) {
+	data := "2274653663636b45424177454165414143474559414142644964756745414450427877454341476341424e55434141414141594153327746486b55726d2b33474f766675536c4570535232536e457a7530472b5632576d582b695a5764467941414141414a55432b51414179454147414141414141414141414f4e7a6b2f6f3764344a724d36746f726e4e4f506376464a7347392f4141414141414141414141414141414141414141414141414141414a776e746822"
+	logData, err := hex.DecodeString(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	body := &cell.Cell{}
+	if err := json.Unmarshal(logData, &body); err != nil {
+		t.Fatal(err)
+	}
+	slice := body.BeginParse()
+	orderID, err := slice.LoadUInt(64)
+	if err != nil {
+		t.Fatal(err)
+	}
+	from, err := slice.LoadRef()
+	if err != nil {
+		t.Fatal(err)
+	}
+	to, err := slice.LoadRef()
+	if err != nil {
+		t.Fatal(err)
+	}
+	srcChain, err := from.LoadUInt(64)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sender, err := from.LoadAddr()
+	if err != nil {
+		t.Fatal(err)
+	}
+	srcToken, err := from.LoadAddr()
+	if err != nil {
+		t.Fatal(err)
+	}
+	inAmount, err := from.LoadBigInt(64)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Log(orderID, srcChain, sender, srcToken, inAmount)
+	slippage, err := from.LoadUInt(16)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	dstChain, err := to.LoadUInt(64)
+	if err != nil {
+		t.Fatal(err)
+	}
+	receiverBigInt, err := to.LoadBigUInt(160)
+	if err != nil {
+		t.Fatal(err)
+	}
+	receiver := "0x" + hex.EncodeToString(receiverBigInt.Bytes())
+	tokenOut, err := to.LoadBigUInt(160)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dstToken := "0x" + hex.EncodeToString(tokenOut.Bytes())
+	relayAmount, err := slice.LoadUInt(32)
+	if err != nil {
+		t.Fatal(err)
+	}
+	scrTokenStr := srcToken.String()
+	if scrTokenStr == params.NoneAddress {
+		scrTokenStr = params.NativeOfTON
+	}
+	_, afterAmount := deductFees(new(big.Float).SetUint64(relayAmount), FeeRate)
+	// convert token to float like 0.089
+	afterAmountFloat := new(big.Float).Quo(afterAmount, big.NewFloat(params.USDTDecimalOfTON))
+	inAmountFloat := new(big.Float).Quo(new(big.Float).SetInt(inAmount), big.NewFloat(params.InAmountDecimalOfTON))
+	//inAmountFloat := new(big.Float).Quo(new(big.Float).SetUint64(inAmount), big.NewFloat(params.InAmountDecimalOfTON))
+	order := &dao.Order{
+		OrderIDFromContract: orderID,
+		SrcChain:            strconv.FormatUint(srcChain, 10),
+		SrcToken:            scrTokenStr,
+		Sender:              sender.String(),
+		InAmount:            inAmountFloat.Text('f', -1),
+		RelayToken:          params.USDTOfTON,
+		RelayAmount:         afterAmountFloat.String(),
+		DstChain:            strconv.FormatUint(dstChain, 10),
+		DstToken:            dstToken,
+		Receiver:            receiver,
+		Action:              dao.OrderActionToEVM,
+		Stage:               dao.OrderStag1,
+		Status:              dao.OrderStatusConfirmed,
+		Slippage:            slippage,
+	}
+	t.Logf("order: %+v\n", order)
 }
