@@ -129,6 +129,9 @@ type GetRouteResponse struct {
 }
 
 type GetRouteData struct {
+	SrcChain struct {
+		TotalAmountOut string `json:"totalAmountOut"`
+	} `json:"srcChain"`
 	DstChain struct {
 		TotalAmountOut string `json:"totalAmountOut"`
 	} `json:"dstChain"`
@@ -207,18 +210,23 @@ func GetRouteAmountOut(hash string) (*big.Float, error) {
 			reqerror.WithPublicError(response.Message),
 		)
 	}
-	if utils.IsEmpty(response.Data.DstChain.TotalAmountOut) {
+
+	totalAmountOut := response.Data.DstChain.TotalAmountOut
+	if utils.IsEmpty(totalAmountOut) {
+		totalAmountOut = response.Data.SrcChain.TotalAmountOut
+	}
+	if utils.IsEmpty(totalAmountOut) {
 		return nil, reqerror.NewExternalRequestError(
 			url,
 			reqerror.WithError(errors.New("total amount out is empty")),
 		)
 	}
 
-	amountOut, ok := new(big.Float).SetString(response.Data.DstChain.TotalAmountOut)
+	amountOut, ok := new(big.Float).SetString(totalAmountOut)
 	if !ok {
 		return nil, reqerror.NewExternalRequestError(
 			url,
-			reqerror.WithError(fmt.Errorf("invalid total amount out: %s", response.Data.DstChain.TotalAmountOut)),
+			reqerror.WithError(fmt.Errorf("invalid total amount out: %s", totalAmountOut)),
 		)
 	}
 	return amountOut, nil
