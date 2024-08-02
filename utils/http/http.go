@@ -11,7 +11,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-const defaultHTTPTimeout = 20 * time.Second
+const defaultHTTPTimeout = 30 * time.Second
 
 func Request(url, method string, headers http.Header, body io.Reader, timeout ...time.Duration) ([]byte, error) {
 	client := http.Client{

@@ -34,6 +34,8 @@ var BTCToken = entity.Token{
 	Symbol:   "BTC",
 }
 
+var USDTLimit = big.NewFloat(5)
+
 func GetTONToEVMRoute(req *entity.RouteRequest, slippage uint64) (ret []*entity.RouteResponse, msg string, code int) {
 	var (
 		tonTokenIn  entity.Token
@@ -64,10 +66,11 @@ func GetTONToEVMRoute(req *entity.RouteRequest, slippage uint64) (ret []*entity.
 	tokenAmountOut, ok := new(big.Float).SetString(tonRoute.SrcChain.TokenAmountOut)
 	if !ok {
 		params := map[string]interface{}{
-			"request": utils.JSON(tonRequest),
-			"amount":  tonRoute.SrcChain.TokenAmountOut,
+			"request":  utils.JSON(tonRequest),
+			"srcChain": utils.JSON(tonRoute.SrcChain),
+			"amount":   tonRoute.SrcChain.TokenAmountOut,
 		}
-		log.Logger().WithFields(params).Error("failed to parse token amount out")
+		log.Logger().WithFields(params).Error("failed to parse ton src chain token amount out")
 		return ret, "", resp.CodeTONRouteServerError
 	}
 
@@ -211,12 +214,13 @@ func GetEVMToTONRoute(req *entity.RouteRequest, slippage uint64) (ret []*entity.
 		return ret, "", resp.CodeButterNotAvailableRoute
 	}
 
+	isSameChain := request.FromChainID == request.ToChainID
 	tonRequest := &tonrouter.RouteRequest{
 		TokenInAddress:  constants.USDTOfTON,
 		TokenOutAddress: req.TokenOutAddress,
 		Slippage:        slippage,
 	}
-	tonRoutes, err := getTONRoutes(tonRequest, butterRoutes) // todo skip error ?
+	tonRoutes, err := getTONRoutes(tonRequest, butterRoutes, isSameChain) // todo skip error ?
 	if err != nil {
 		return ret, "", resp.CodeTONRouteServerError
 	}
@@ -231,13 +235,16 @@ func GetEVMToTONRoute(req *entity.RouteRequest, slippage uint64) (ret []*entity.
 			continue
 		}
 
+		if isSameChain {
+			r.DstChain = r.SrcChain
+		}
 		amountOut, ok := new(big.Float).SetString(r.DstChain.TotalAmountOut)
 		if !ok {
 			params := map[string]interface{}{
 				"request": utils.JSON(tonRequest),
 				"amount":  r.DstChain.TotalAmountOut,
 			}
-			log.Logger().WithFields(params).Error("failed to parse token amount out")
+			log.Logger().WithFields(params).Error("failed to parse butter total amount out")
 			return ret, "", resp.CodeTONRouteServerError
 		}
 
@@ -335,6 +342,10 @@ func GetSwapFromTON(sender string, dstChain, receiver, hash string) (ret *entity
 		}
 		return ret, "", resp.CodeInternalServerError
 	}
+	if amountOut.Cmp(USDTLimit) == -1 {
+		return ret, "", resp.CodeAmountTooFew
+	}
+
 	balance, err := getChainPoolBalance(dstChain)
 	if err != nil {
 		log.Logger().WithField("error", err).Error("failed to get ton router balance")
@@ -389,6 +400,9 @@ func GetSwapFromEVM(srcChain *big.Int, srcToken, sender, amount string, dstChain
 			return nil, ext.PublicError(), resp.CodeExternalServerError
 		}
 		return nil, "", resp.CodeInternalServerError
+	}
+	if amountOut.Cmp(USDTLimit) == -1 {
+		return ret, "", resp.CodeAmountTooFew
 	}
 	balance, err := tonrouter.Balance()
 	if err != nil {
@@ -474,7 +488,7 @@ func GetSwapFromEVM(srcChain *big.Int, srcToken, sender, amount string, dstChain
 	return ret, "", resp.CodeSuccess
 }
 
-func getTONRoutes(tonRequest *tonrouter.RouteRequest, routes []*butter.RouteResponseData) (map[string]*tonrouter.RouteData, error) {
+func getTONRoutes(tonRequest *tonrouter.RouteRequest, routes []*butter.RouteResponseData, isSameChain bool) (map[string]*tonrouter.RouteData, error) {
 	if len(routes) == 0 {
 		return make(map[string]*tonrouter.RouteData), nil
 	}
@@ -486,6 +500,11 @@ func getTONRoutes(tonRequest *tonrouter.RouteRequest, routes []*butter.RouteResp
 	for _, r := range routes {
 		if r == nil {
 			continue
+		}
+
+		amountOut := r.DstChain.TotalAmountOut
+		if isSameChain {
+			amountOut = r.SrcChain.TotalAmountOut
 		}
 
 		wg.Add(1)
@@ -505,7 +524,7 @@ func getTONRoutes(tonRequest *tonrouter.RouteRequest, routes []*butter.RouteResp
 			}
 
 			result.Store(hash, tonRoute)
-		}(r.Hash, r.DstChain.TotalAmountOut, tonRequest)
+		}(r.Hash, amountOut, tonRequest)
 	}
 
 	wg.Wait()
