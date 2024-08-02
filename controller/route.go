@@ -91,13 +91,18 @@ func Route(c *gin.Context) {
 		return
 	}
 
+	msg := ""
 	code := resp.CodeSuccess
 	ret := make([]*entity.RouteResponse, 0)
 
 	switch req.Action {
 	case dao.OrderActionToEVM:
 		if req.FromChainID == constants.TONChainID {
-			ret, code = logic.GetTONToEVMRoute(req, slippage)
+			ret, msg, code = logic.GetTONToEVMRoute(req, slippage)
+			if code == resp.CodeExternalServerError {
+				resp.ExternalServerError(c, msg)
+				return
+			}
 			if code != resp.CodeSuccess {
 				resp.Error(c, code)
 				return
@@ -105,7 +110,11 @@ func Route(c *gin.Context) {
 		}
 	case dao.OrderActionFromEVM:
 		if req.ToChainID == constants.TONChainID {
-			ret, code = logic.GetEVMToTONRoute(req, slippage)
+			ret, msg, code = logic.GetEVMToTONRoute(req, slippage)
+			if code == resp.CodeExternalServerError {
+				resp.ExternalServerError(c, msg)
+				return
+			}
 			if code != resp.CodeSuccess {
 				resp.Error(c, code)
 				return
@@ -188,24 +197,27 @@ func Swap(c *gin.Context) {
 		return
 	}
 
-	amountBigFloat, ok := new(big.Float).SetString(req.Amount)
-	if !ok {
-		resp.ParameterErr(c, "invalid amount")
-		return
-	}
-
+	msg := ""
 	code := resp.CodeSuccess
 	ret := &entity.SwapResponse{}
 
 	switch req.SrcChain {
 	case constants.TONChainID:
-		ret, code = logic.GetSwapFromTON(req.Sender, amountBigFloat, req.DstChain, req.Receiver, req.Hash)
+		ret, msg, code = logic.GetSwapFromTON(req.Sender, req.DstChain, req.Receiver, req.Hash)
+		if code == resp.CodeExternalServerError {
+			resp.ExternalServerError(c, msg)
+			return
+		}
 		if code != resp.CodeSuccess {
 			resp.Error(c, code)
 			return
 		}
 	default:
-		ret, code = logic.GetSwapFromEVM(srcChain, req.SrcToken, req.Sender, req.Amount, dstChain, req.DstToken, req.Receiver, req.Hash, slippage)
+		ret, msg, code = logic.GetSwapFromEVM(srcChain, req.SrcToken, req.Sender, req.Amount, dstChain, req.DstToken, req.Receiver, req.Hash, slippage)
+		if code == resp.CodeExternalServerError {
+			resp.ExternalServerError(c, msg)
+			return
+		}
 		if code != resp.CodeSuccess {
 			resp.Error(c, code)
 			return

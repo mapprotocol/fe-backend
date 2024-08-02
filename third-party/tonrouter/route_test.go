@@ -1,9 +1,19 @@
 package tonrouter
 
 import (
+	"fmt"
 	"github.com/mapprotocol/fe-backend/utils"
+	"math/big"
+	"reflect"
 	"testing"
 )
+
+func TestMain(m *testing.M) {
+	//endpoint = os.Getenv("BUTTER_ENDPOINT")
+	endpoint = "https://ton-router-test.chainservice.io"
+	fmt.Println("============================== ", endpoint)
+	m.Run()
+}
 
 func TestRoute(t *testing.T) {
 	type args struct {
@@ -274,6 +284,58 @@ func TestBridgeRoute(t *testing.T) {
 				return
 			}
 			t.Logf("BridgeRoute() got = %v", utils.JSON(got))
+		})
+	}
+}
+
+func TestGetRouteAmountOut(t *testing.T) {
+	type args struct {
+		hash string
+	}
+	tests := []struct {
+		name    string
+		args    args
+		want    *big.Float
+		wantErr bool
+	}{
+		{
+			name: "t-1",
+
+			args: args{
+				hash: "0x9ba8a9525ef4658c24541cf889089a9cbb9251cdd446bfdd4178ace32fe42bc7",
+			},
+			want:    big.NewFloat(0.128110533),
+			wantErr: false,
+		},
+		{
+			name: "t-2",
+
+			args: args{
+				hash: "0xb5e62d3729298b58def20c7474dfd0bf756481ad1b6f25efcb17cd2b93623fc3",
+			},
+			want:    big.NewFloat(0.128110164),
+			wantErr: false,
+		},
+		{
+			name: "t-3",
+
+			args: args{
+				hash: "0x0",
+			},
+			want:    nil,
+			wantErr: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := GetRouteAmountOut(tt.args.hash)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("GetRouteAmountOut() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("GetRouteAmountOut() got = %v, want %v", got, tt.want)
+			}
 		})
 	}
 }

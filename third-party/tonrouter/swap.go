@@ -3,6 +3,7 @@ package tonrouter
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/mapprotocol/fe-backend/resource/log"
 	uhttp "github.com/mapprotocol/fe-backend/utils/http"
 	"github.com/mapprotocol/fe-backend/utils/reqerror"
 	"strconv"
@@ -30,7 +31,7 @@ type TxParams struct {
 func BridgeSwap(request *BridgeSwapRequest) (*TxParams, error) {
 	params := fmt.Sprintf("sender=%s&receiver=%s&hash=%s", request.Sender, request.Receiver, request.Hash)
 	url := fmt.Sprintf("%s%s?%s", endpoint, PathBridgeSwap, params)
-	fmt.Println("============================== url: ", url)
+	log.Logger().Debugf("ton swap url: %s", url)
 	ret, err := uhttp.Get(url, nil, nil)
 	if err != nil {
 		return nil, reqerror.NewExternalRequestError(
@@ -40,13 +41,18 @@ func BridgeSwap(request *BridgeSwapRequest) (*TxParams, error) {
 	}
 	response := BridgeSwapResponse{}
 	if err := json.Unmarshal(ret, &response); err != nil {
-		return nil, err
+		return nil, reqerror.NewExternalRequestError(
+			url,
+			reqerror.WithMessage(string(ret)),
+			reqerror.WithError(err),
+		)
 	}
 	if response.Errno != SuccessCode {
 		return nil, reqerror.NewExternalRequestError(
 			url,
 			reqerror.WithCode(strconv.Itoa(response.Errno)),
 			reqerror.WithMessage(response.Message),
+			reqerror.WithPublicError(response.Message),
 		)
 	}
 	return response.Data, nil

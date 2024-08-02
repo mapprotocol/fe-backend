@@ -38,3 +38,9 @@ func WithError(err error) ErrorOption {
 		ere.Err = err
 	}
 }
+
+func WithPublicError(err string) ErrorOption {
+	return func(ere *ExternalRequestError) {
+		ere.PublicErr = err
+	}
+}

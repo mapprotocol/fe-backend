@@ -1,18 +1,20 @@
 package tonrouter
 
 import (
+	"math/big"
+	"reflect"
 	"testing"
 )
 
 func TestBalance(t *testing.T) {
 	tests := []struct {
 		name    string
-		want    string
+		want    *big.Float
 		wantErr bool
 	}{
 		{
 			name:    "t-1",
-			want:    "0.071713",
+			want:    big.NewFloat(3.628543),
 			wantErr: false,
 		},
 	}
@@ -23,7 +25,7 @@ func TestBalance(t *testing.T) {
 				t.Errorf("Balance() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
-			if got != tt.want {
+			if !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("Balance() got = %v, want %v", got, tt.want)
 			}
 		})

@@ -65,3 +65,11 @@ func ParameterErr(c *gin.Context, msg string) {
 		Data: EmptyStruct,
 	})
 }
+
+func ExternalServerError(c *gin.Context, msg string) {
+	c.JSON(http.StatusOK, Response{
+		Code: CodeExternalServerError,
+		Msg:  msg,
+		Data: EmptyStruct,
+	})
+}

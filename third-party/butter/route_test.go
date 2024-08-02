@@ -1,9 +1,19 @@
 package butter
 
 import (
+	"fmt"
 	"github.com/mapprotocol/fe-backend/utils"
 	"testing"
 )
+
+func TestMain(m *testing.M) {
+	//endpoint = os.Getenv("BUTTER_ENDPOINT")
+	//entrance = os.Getenv("BUTTER_ENTRANCE")
+	entrance = "Butter%2B"
+	endpoint = "https://bs-router-test.chainservice.io"
+	fmt.Println("============================== ", endpoint)
+	m.Run()
+}
 
 func TestRoute(t *testing.T) {
 	type args struct {
@@ -91,6 +101,39 @@ func TestRoute(t *testing.T) {
 			//	t.Errorf("Route() got = %v, want %v", got, tt.want)
 			//}
 			t.Logf("Route() got = %v", utils.JSON(got))
+		})
+	}
+}
+
+func TestGetRouteAmountOut(t *testing.T) {
+	type args struct {
+		hash string
+	}
+	tests := []struct {
+		name    string
+		args    args
+		want    string
+		wantErr bool
+	}{
+		{
+			name: "t-1",
+			args: args{
+				hash: "0x3e3d2ce68ef065372714e33e91503eaad101a277abc2fc531185cff4b0effca4",
+			},
+			want:    "3127.78751",
+			wantErr: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := GetRouteAmountOut(tt.args.hash)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("GetRouteAmountOut() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if got != tt.want {
+				t.Errorf("GetRouteAmountOut() got = %v, want %v", got, tt.want)
+			}
 		})
 	}
 }

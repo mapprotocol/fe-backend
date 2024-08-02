@@ -2,16 +2,18 @@ package reqerror
 
 import (
 	"fmt"
+	"github.com/mapprotocol/fe-backend/utils"
 	"strings"
 )
 
 type ExternalRequestError struct {
-	Path    string
-	Method  string
-	Param   string
-	Code    string
-	Message string
-	Err     error
+	Path      string
+	Method    string
+	Param     string
+	Code      string
+	Message   string
+	Err       error
+	PublicErr string
 }
 
 func NewExternalRequestError(path string, opts ...ErrorOption) *ExternalRequestError {
@@ -22,6 +24,13 @@ func NewExternalRequestError(path string, opts ...ErrorOption) *ExternalRequestE
 		o(&ext)
 	}
 	return &ext
+}
+
+func (e *ExternalRequestError) HasPublicError() bool {
+	return !utils.IsEmpty(e.PublicErr)
+}
+func (e *ExternalRequestError) PublicError() string {
+	return e.PublicErr
 }
 
 func (e *ExternalRequestError) Error() string {

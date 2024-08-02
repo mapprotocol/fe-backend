@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/mapprotocol/fe-backend/resource/log"
 	uhttp "github.com/mapprotocol/fe-backend/utils/http"
 	"github.com/mapprotocol/fe-backend/utils/reqerror"
 	"strconv"
@@ -42,7 +43,7 @@ func Swap(request *SwapRequest) (*TxData, error) { // todo checkout code
 		request.From, request.Receiver, request.Hash, request.Slippage, request.CallData,
 	)
 	url := fmt.Sprintf("%s%s?%s", endpoint, PathSwap, params)
-	fmt.Println("============================== swap url: ", url)
+	log.Logger().Debugf("butter swap url: %s", url)
 	ret, err := uhttp.Get(url, nil, nil)
 	if err != nil {
 		return nil, reqerror.NewExternalRequestError(
@@ -52,13 +53,18 @@ func Swap(request *SwapRequest) (*TxData, error) { // todo checkout code
 	}
 	response := SwapResponse{}
 	if err := json.Unmarshal(ret, &response); err != nil {
-		return nil, err
+		return nil, reqerror.NewExternalRequestError(
+			url,
+			reqerror.WithMessage(string(ret)),
+			reqerror.WithError(err),
+		)
 	}
 	if response.Errno != SuccessCode {
 		return nil, reqerror.NewExternalRequestError(
 			url,
 			reqerror.WithCode(strconv.Itoa(response.Errno)),
 			reqerror.WithMessage(response.Message),
+			reqerror.WithPublicError(response.Message),
 		)
 	}
 	if len(response.Data) == 0 {
@@ -67,6 +73,7 @@ func Swap(request *SwapRequest) (*TxData, error) { // todo checkout code
 			reqerror.WithCode(strconv.Itoa(response.Errno)),
 			reqerror.WithMessage(response.Message),
 			reqerror.WithError(ErrNotFoundTxData),
+			reqerror.WithPublicError(ErrNotFoundTxData.Error()),
 		)
 	}
 	return response.Data[0], nil

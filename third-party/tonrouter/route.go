@@ -2,11 +2,14 @@ package tonrouter
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"github.com/mapprotocol/fe-backend/resource/log"
 	"github.com/mapprotocol/fe-backend/utils"
 	uhttp "github.com/mapprotocol/fe-backend/utils/http"
 	"github.com/mapprotocol/fe-backend/utils/reqerror"
 	"github.com/spf13/viper"
+	"math/big"
 	"strconv"
 )
 
@@ -15,6 +18,7 @@ const SuccessCode = 0
 const (
 	PathRoute       = "/route"
 	PathBridgeRoute = "/route/bridge"
+	PathGetRoute    = "/route/hash"
 	PathBridgeSwap  = "/swap/bridge"
 	PathBalance     = "/jetton/router/balance"
 )
@@ -47,6 +51,16 @@ type BridgeRouteResponse struct {
 	Errno   int          `json:"errno"`
 	Message string       `json:"message"`
 	Data    []*RouteData `json:"data"`
+}
+
+type GetRouteResponse struct {
+	Errno   int    `json:"errno"`
+	Message string `json:"message"`
+	Data    struct {
+		SrcChain struct {
+			TokenAmountOut string `json:"tokenAmountOut"`
+		} `json:"srcChain"`
+	} `json:"data"`
 }
 
 type RouteData struct {
@@ -117,7 +131,7 @@ func Route(request *RouteRequest) (*RouteData, error) {
 		request.TokenInAddress, request.TokenOutAddress, request.Amount, request.Slippage,
 	)
 	url := fmt.Sprintf("%s%s?%s", endpoint, PathRoute, params)
-	fmt.Println("============================== route url: ", url)
+	log.Logger().Debugf("ton route url: %s", url)
 	ret, err := uhttp.Get(url, nil, nil)
 	if err != nil {
 		return nil, reqerror.NewExternalRequestError(
@@ -127,7 +141,11 @@ func Route(request *RouteRequest) (*RouteData, error) {
 	}
 	response := RouteResponse{}
 	if err := json.Unmarshal(ret, &response); err != nil {
-		return nil, err
+		return nil, reqerror.NewExternalRequestError(
+			url,
+			reqerror.WithMessage(string(ret)),
+			reqerror.WithError(err),
+		)
 	}
 	if response.Errno != SuccessCode {
 		return nil, reqerror.NewExternalRequestError(
@@ -145,7 +163,7 @@ func BridgeRoute(request *BridgeRouteRequest) (*RouteData, error) {
 		request.ToChainID, request.TokenInAddress, request.TokenOutAddress, request.Amount, request.TonSlippage, request.Slippage,
 	)
 	url := fmt.Sprintf("%s%s?%s", endpoint, PathBridgeRoute, params)
-	fmt.Println("============================== route url: ", url)
+	log.Logger().Debugf("ton bridge route url: %s", url)
 	ret, err := uhttp.Get(url, nil, nil)
 	if err != nil {
 		return nil, reqerror.NewExternalRequestError(
@@ -155,7 +173,11 @@ func BridgeRoute(request *BridgeRouteRequest) (*RouteData, error) {
 	}
 	response := BridgeRouteResponse{}
 	if err := json.Unmarshal(ret, &response); err != nil {
-		return nil, err
+		return nil, reqerror.NewExternalRequestError(
+			url,
+			reqerror.WithMessage(string(ret)),
+			reqerror.WithError(err),
+		)
 	}
 	if response.Errno != SuccessCode {
 		return nil, reqerror.NewExternalRequestError(
@@ -165,4 +187,48 @@ func BridgeRoute(request *BridgeRouteRequest) (*RouteData, error) {
 		)
 	}
 	return response.Data[0], nil
+}
+
+func GetRouteAmountOut(hash string) (*big.Float, error) {
+	url := fmt.Sprintf("%s%s/%s", endpoint, PathGetRoute, hash)
+	log.Logger().Debugf("ton get route amount out url: %s", url)
+	ret, err := uhttp.Get(url, nil, nil)
+	if err != nil {
+		return nil, reqerror.NewExternalRequestError(
+			url,
+			reqerror.WithError(err),
+		)
+	}
+
+	response := GetRouteResponse{}
+	if err := json.Unmarshal(ret, &response); err != nil {
+		return nil, reqerror.NewExternalRequestError(
+			url,
+			reqerror.WithMessage(string(ret)),
+			reqerror.WithError(err),
+		)
+	}
+	if response.Errno != SuccessCode {
+		return nil, reqerror.NewExternalRequestError(
+			url,
+			reqerror.WithCode(strconv.Itoa(response.Errno)),
+			reqerror.WithMessage(response.Message),
+			reqerror.WithPublicError(response.Message),
+		)
+	}
+	if utils.IsEmpty(response.Data.SrcChain.TokenAmountOut) {
+		return nil, reqerror.NewExternalRequestError(
+			url,
+			reqerror.WithError(errors.New("token amount out is empty")),
+		)
+	}
+
+	amountOut, ok := new(big.Float).SetString(response.Data.SrcChain.TokenAmountOut)
+	if !ok {
+		return nil, reqerror.NewExternalRequestError(
+			url,
+			reqerror.WithError(fmt.Errorf("invalid token amount out: %s", response.Data.SrcChain.TokenAmountOut)),
+		)
+	}
+	return amountOut, nil
 }

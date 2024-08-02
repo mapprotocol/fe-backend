@@ -7,7 +7,8 @@ const (
 )
 
 const (
-	CodeButterServerError = iota + 50001
+	CodeExternalServerError = iota + 50001
+	CodeButterServerError
 	CodeButterNotAvailableRoute
 	CodeTONRouteServerError
 	CodeTONRouteNotAvailableRoute

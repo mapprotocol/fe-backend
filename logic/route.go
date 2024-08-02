@@ -2,7 +2,6 @@ package logic
 
 import (
 	"encoding/hex"
-	"fmt"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/mapprotocol/fe-backend/bindings/erc20"
@@ -14,6 +13,7 @@ import (
 	"github.com/mapprotocol/fe-backend/third-party/butter"
 	"github.com/mapprotocol/fe-backend/third-party/tonrouter"
 	"github.com/mapprotocol/fe-backend/utils"
+	"github.com/mapprotocol/fe-backend/utils/reqerror"
 	"github.com/spf13/viper"
 	"math/big"
 	"sync"
@@ -34,7 +34,7 @@ var BTCToken = entity.Token{
 	Symbol:   "BTC",
 }
 
-func GetTONToEVMRoute(req *entity.RouteRequest, slippage uint64) (ret []*entity.RouteResponse, code int) {
+func GetTONToEVMRoute(req *entity.RouteRequest, slippage uint64) (ret []*entity.RouteResponse, msg string, code int) {
 	var (
 		tonTokenIn  entity.Token
 		tonTokenOut entity.Token
@@ -55,7 +55,11 @@ func GetTONToEVMRoute(req *entity.RouteRequest, slippage uint64) (ret []*entity.
 			"error":   err,
 		}
 		log.Logger().WithFields(params).Error("failed to request ton route")
-		return ret, resp.CodeTONRouteServerError
+		ext, ok := err.(*reqerror.ExternalRequestError)
+		if ok && ext.HasPublicError() {
+			return nil, ext.PublicError(), resp.CodeExternalServerError
+		}
+		return ret, "", resp.CodeTONRouteServerError
 	}
 	tokenAmountOut, ok := new(big.Float).SetString(tonRoute.SrcChain.TokenAmountOut)
 	if !ok {
@@ -64,7 +68,7 @@ func GetTONToEVMRoute(req *entity.RouteRequest, slippage uint64) (ret []*entity.
 			"amount":  tonRoute.SrcChain.TokenAmountOut,
 		}
 		log.Logger().WithFields(params).Error("failed to parse token amount out")
-		return ret, resp.CodeTONRouteServerError
+		return ret, "", resp.CodeTONRouteServerError
 	}
 
 	in := tonRoute.SrcChain.Route[0].Path[0].TokenIn
@@ -113,7 +117,11 @@ func GetTONToEVMRoute(req *entity.RouteRequest, slippage uint64) (ret []*entity.
 			"error":   err,
 		}
 		log.Logger().WithFields(params).Error("failed to request butter route")
-		return ret, resp.CodeInternalServerError
+		ext, ok := err.(*reqerror.ExternalRequestError)
+		if ok && ext.HasPublicError() {
+			return nil, ext.PublicError(), resp.CodeExternalServerError
+		}
+		return ret, "", resp.CodeInternalServerError
 	}
 	ret = make([]*entity.RouteResponse, 0, len(butterRoutes))
 	for _, r := range butterRoutes {
@@ -168,10 +176,10 @@ func GetTONToEVMRoute(req *entity.RouteRequest, slippage uint64) (ret []*entity.
 		}
 		ret = append(ret, n)
 	}
-	return ret, resp.CodeSuccess
+	return ret, "", resp.CodeSuccess
 }
 
-func GetEVMToTONRoute(req *entity.RouteRequest, slippage uint64) (ret []*entity.RouteResponse, code int) {
+func GetEVMToTONRoute(req *entity.RouteRequest, slippage uint64) (ret []*entity.RouteResponse, msg string, code int) {
 	var (
 		tonTokenIn  entity.Token
 		tonTokenOut entity.Token
@@ -193,10 +201,14 @@ func GetEVMToTONRoute(req *entity.RouteRequest, slippage uint64) (ret []*entity.
 			"error":   err,
 		}
 		log.Logger().WithFields(params).Error("failed to request butter route")
-		return ret, resp.CodeInternalServerError
+		ext, ok := err.(*reqerror.ExternalRequestError)
+		if ok && ext.HasPublicError() {
+			return nil, ext.PublicError(), resp.CodeExternalServerError
+		}
+		return ret, "", resp.CodeInternalServerError
 	}
 	if len(butterRoutes) == 0 {
-		return ret, resp.CodeButterNotAvailableRoute
+		return ret, "", resp.CodeButterNotAvailableRoute
 	}
 
 	tonRequest := &tonrouter.RouteRequest{
@@ -206,10 +218,10 @@ func GetEVMToTONRoute(req *entity.RouteRequest, slippage uint64) (ret []*entity.
 	}
 	tonRoutes, err := getTONRoutes(tonRequest, butterRoutes) // todo skip error ?
 	if err != nil {
-		return ret, resp.CodeTONRouteServerError
+		return ret, "", resp.CodeTONRouteServerError
 	}
 	if len(tonRoutes) != len(butterRoutes) {
-		return ret, resp.CodeTONRouteServerError
+		return ret, "", resp.CodeTONRouteServerError
 	}
 
 	ret = make([]*entity.RouteResponse, 0, len(butterRoutes))
@@ -226,7 +238,7 @@ func GetEVMToTONRoute(req *entity.RouteRequest, slippage uint64) (ret []*entity.
 				"amount":  r.DstChain.TotalAmountOut,
 			}
 			log.Logger().WithFields(params).Error("failed to parse token amount out")
-			return ret, resp.CodeTONRouteServerError
+			return ret, "", resp.CodeTONRouteServerError
 		}
 
 		in := tonRoute.SrcChain.Route[0].Path[0].TokenIn
@@ -306,19 +318,35 @@ func GetEVMToTONRoute(req *entity.RouteRequest, slippage uint64) (ret []*entity.
 		}
 		ret = append(ret, n)
 	}
-	return ret, resp.CodeSuccess
+	return ret, "", resp.CodeSuccess
 }
 
-func GetSwapFromTON(sender string, amountBigFloat *big.Float, dstChain, receiver, hash string) (ret *entity.SwapResponse, code int) {
-	// todo 通过 hash 获取 TON 上兑换出的 USDT 数量
-	balanceFloat, err := getChainPoolBalance(dstChain)
+func GetSwapFromTON(sender string, dstChain, receiver, hash string) (ret *entity.SwapResponse, msg string, code int) {
+	amountOut, err := tonrouter.GetRouteAmountOut(hash)
+	if err != nil {
+		params := map[string]interface{}{
+			"hash":  hash,
+			"error": err,
+		}
+		log.Logger().WithFields(params).Error("failed to request ton get route")
+		ext, ok := err.(*reqerror.ExternalRequestError)
+		if ok && ext.HasPublicError() {
+			return nil, ext.PublicError(), resp.CodeExternalServerError
+		}
+		return ret, "", resp.CodeInternalServerError
+	}
+	balance, err := getChainPoolBalance(dstChain)
 	if err != nil {
 		log.Logger().WithField("error", err).Error("failed to get ton router balance")
-		return ret, resp.CodeInternalServerError
+		return ret, "", resp.CodeInternalServerError
 	}
-	if amountBigFloat.Cmp(balanceFloat) == 1 {
-		log.Logger().WithField("amount", amountBigFloat).WithField("balance", balanceFloat).Info("amount is greater than balance")
-		return nil, resp.CodeInsufficientLiquidity // todo chain pool
+	if amountOut.Cmp(balance) == 1 {
+		params := map[string]interface{}{
+			"amount":  amountOut.Text('f', -1),
+			"balance": balance.Text('f', -1),
+		}
+		log.Logger().WithFields(params).Info("amount is greater than balance")
+		return nil, "", resp.CodeInsufficientLiquidity // todo chain pool
 	}
 
 	request := &tonrouter.BridgeSwapRequest{
@@ -332,8 +360,12 @@ func GetSwapFromTON(sender string, amountBigFloat *big.Float, dstChain, receiver
 			"request": utils.JSON(request),
 			"error":   err,
 		}
-		log.Logger().WithFields(params).Error("failed to request butter swap")
-		return ret, resp.CodeInternalServerError
+		log.Logger().WithFields(params).Error("failed to request ton bridge swap")
+		ext, ok := err.(*reqerror.ExternalRequestError)
+		if ok && ext.HasPublicError() {
+			return nil, ext.PublicError(), resp.CodeExternalServerError
+		}
+		return ret, "", resp.CodeInternalServerError
 	}
 	ret = &entity.SwapResponse{
 		To:      txData.To,
@@ -341,10 +373,41 @@ func GetSwapFromTON(sender string, amountBigFloat *big.Float, dstChain, receiver
 		Value:   txData.Value,
 		ChainId: constants.TONChainID,
 	}
-	return ret, resp.CodeSuccess
+	return ret, "", resp.CodeSuccess
 }
 
-func GetSwapFromEVM(srcChain *big.Int, srcToken, sender, amount string, dstChain *big.Int, dstToken, receiver, hash string, slippage uint64) (ret *entity.SwapResponse, code int) {
+func GetSwapFromEVM(srcChain *big.Int, srcToken, sender, amount string, dstChain *big.Int, dstToken, receiver, hash string, slippage uint64) (ret *entity.SwapResponse, msg string, code int) {
+	amountOut, err := butter.GetRouteAmountOut(hash)
+	if err != nil {
+		params := map[string]interface{}{
+			"hash":  hash,
+			"error": err,
+		}
+		log.Logger().WithFields(params).Error("failed to request butter get route")
+		ext, ok := err.(*reqerror.ExternalRequestError)
+		if ok && ext.HasPublicError() {
+			return nil, ext.PublicError(), resp.CodeExternalServerError
+		}
+		return nil, "", resp.CodeInternalServerError
+	}
+	balance, err := tonrouter.Balance()
+	if err != nil {
+		log.Logger().WithField("error", err).Error("failed to get ton router balance")
+		ext, ok := err.(*reqerror.ExternalRequestError)
+		if ok && ext.HasPublicError() {
+			return nil, ext.PublicError(), resp.CodeExternalServerError
+		}
+		return nil, "", resp.CodeInternalServerError
+	}
+	if amountOut.Cmp(balance) == 1 {
+		params := map[string]interface{}{
+			"amount":  amountOut.Text('f', -1),
+			"balance": balance.Text('f', -1),
+		}
+		log.Logger().WithFields(params).Info("amount is greater than balance")
+		return nil, "", resp.CodeInsufficientLiquidity // todo chain pool
+	}
+
 	chainPoolToken := constants.USDTOfChainPoll
 	if isMultiChainPool && dstChain.String() == constants.ChainIDOfEthereum {
 		chainPoolToken = constants.USDTOfEthereum
@@ -361,7 +424,6 @@ func GetSwapFromEVM(srcChain *big.Int, srcToken, sender, amount string, dstChain
 		Receiver:       []byte(receiver),
 		Slippage:       slippage,
 	}
-	fmt.Println("============================== ReceiverParam: ", utils.JSON(params))
 	packed, err := PackOnReceived(big.NewInt(0), params)
 	if err != nil {
 		params := map[string]interface{}{
@@ -369,7 +431,7 @@ func GetSwapFromEVM(srcChain *big.Int, srcToken, sender, amount string, dstChain
 			"error":  err,
 		}
 		log.Logger().WithFields(params).Error("failed to pack onReceived")
-		return ret, resp.CodeInternalServerError
+		return ret, "", resp.CodeInternalServerError
 	}
 	encodedCallback, err := EncodeSwapCallbackParams(common.HexToAddress(viper.GetString("feRouterContract")), common.HexToAddress(sender), packed) // todo sender
 	if err != nil {
@@ -380,7 +442,7 @@ func GetSwapFromEVM(srcChain *big.Int, srcToken, sender, amount string, dstChain
 			"error":    err,
 		}
 		log.Logger().WithFields(params).Error("failed to encode swap callback params")
-		return ret, resp.CodeInternalServerError
+		return ret, "", resp.CodeInternalServerError
 	}
 
 	request := &butter.SwapRequest{
@@ -397,7 +459,11 @@ func GetSwapFromEVM(srcChain *big.Int, srcToken, sender, amount string, dstChain
 			"error":   err,
 		}
 		log.Logger().WithFields(params).Error("failed to request butter swap")
-		return ret, resp.CodeInternalServerError
+		ext, ok := err.(*reqerror.ExternalRequestError)
+		if ok && ext.HasPublicError() {
+			return nil, ext.PublicError(), resp.CodeExternalServerError
+		}
+		return ret, "", resp.CodeInternalServerError
 	}
 	ret = &entity.SwapResponse{
 		To:      txData.To,
@@ -405,7 +471,7 @@ func GetSwapFromEVM(srcChain *big.Int, srcToken, sender, amount string, dstChain
 		Value:   txData.Value,
 		ChainId: txData.ChainId,
 	}
-	return ret, resp.CodeSuccess
+	return ret, "", resp.CodeSuccess
 }
 
 func getTONRoutes(tonRequest *tonrouter.RouteRequest, routes []*butter.RouteResponseData) (map[string]*tonrouter.RouteData, error) {
