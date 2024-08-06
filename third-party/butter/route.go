@@ -76,26 +76,6 @@ type RouteResponseData struct {
 		TotalAmountOut string `json:"totalAmountOut"`
 		Bridge         string `json:"bridge"`
 	} `json:"srcChain"`
-	BridgeChain struct {
-		ChainId string `json:"chainId"`
-		TokenIn struct {
-			Address  string `json:"address"`
-			Name     string `json:"name"`
-			Decimals int    `json:"decimals"`
-			Symbol   string `json:"symbol"`
-			Icon     string `json:"icon"`
-		} `json:"tokenIn"`
-		TokenOut struct {
-			Address  string `json:"address"`
-			Name     string `json:"name"`
-			Decimals int    `json:"decimals"`
-			Symbol   string `json:"symbol"`
-			Icon     string `json:"icon"`
-		} `json:"tokenOut"`
-		TotalAmountIn  string `json:"totalAmountIn"`
-		TotalAmountOut string `json:"totalAmountOut"`
-		Bridge         string `json:"bridge"`
-	} `json:"bridgeChain"`
 	DstChain struct {
 		ChainId string `json:"chainId"`
 		TokenIn struct {
@@ -116,10 +96,6 @@ type RouteResponseData struct {
 		TotalAmountOut string `json:"totalAmountOut"`
 		Bridge         string `json:"bridge"`
 	} `json:"dstChain"`
-	MinAmountOut struct {
-		Amount string `json:"amount"`
-		Symbol string `json:"symbol"`
-	} `json:"minAmountOut"`
 }
 
 type GetRouteResponse struct {
@@ -178,6 +154,22 @@ func Route(request *RouteRequest) ([]*RouteResponseData, error) {
 			reqerror.WithMessage(response.Message),
 			reqerror.WithPublicError(response.Message),
 		)
+	}
+	if response.Data == nil {
+		return nil, reqerror.NewExternalRequestError(
+			url,
+			reqerror.WithMessage(string(ret)),
+			reqerror.WithError(errors.New("data is empty")),
+		)
+	}
+	// For the route of the same chain exchange, butter only returns the data of src chain.
+	//So, the data of src chain is copied to dst chain here to be compatible with subsequent operations.
+	if request.FromChainID == request.ToChainID {
+		for _, data := range response.Data {
+			if data != nil {
+				data.DstChain = data.SrcChain
+			}
+		}
 	}
 	return response.Data, nil
 }
