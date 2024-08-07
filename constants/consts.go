@@ -10,6 +10,8 @@ const (
 	USDTDecimalOfEthereum  = 1e6
 )
 
+const USDTDecimalNumberOfChainPool = 6
+
 const WBTCOfChainPoll = "0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270" // todo
 
 const (
@@ -35,3 +37,8 @@ const (
 )
 
 const BridgeFeeSymbol = "USDT"
+
+const NativeSymbolOfChainPool = "MATIC" // todo
+
+const LocalRouteGasFee = "0.03"
+const LocalRouteHash = "0x0000000000000000000000000000000000000000000000000000000000022776"

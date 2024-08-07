@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/mapprotocol/fe-backend/constants"
 	"github.com/mapprotocol/fe-backend/resource/log"
 	"github.com/mapprotocol/fe-backend/utils"
 	uhttp "github.com/mapprotocol/fe-backend/utils/http"
@@ -42,21 +43,12 @@ type RouteResponse struct {
 }
 
 type RouteResponseData struct {
-	Diff      string `json:"diff"`
-	BridgeFee struct {
-		Amount string `json:"amount"`
-		Symbol string `json:"symbol"`
-	} `json:"bridgeFee"`
-	TradeType int `json:"tradeType"`
-	GasFee    struct {
+	GasFee struct {
 		Amount string `json:"amount"`
 		Symbol string `json:"symbol"`
 	} `json:"gasFee"`
-	GasEstimated  string `json:"gasEstimated"`
-	TimeEstimated int    `json:"timeEstimated"`
-	Hash          string `json:"hash"`
-	Timestamp     int64  `json:"timestamp"`
-	SrcChain      struct {
+	Hash     string `json:"hash"`
+	SrcChain struct {
 		ChainId string `json:"chainId"`
 		TokenIn struct {
 			Address  string `json:"address"`
@@ -126,6 +118,9 @@ func Init() {
 	}
 }
 func Route(request *RouteRequest) ([]*RouteResponseData, error) {
+	if request.FromChainID == request.ToChainID && request.TokenInAddress == request.TokenOutAddress {
+		return getLocalRoutes(request.Amount), nil
+	}
 	params := fmt.Sprintf(
 		"fromChainId=%s&toChainId=%s&tokenInAddress=%s&tokenOutAddress=%s&amount=%s&type=%s&slippage=%d&entrance=%s",
 		request.FromChainID, request.ToChainID, request.TokenInAddress, request.TokenOutAddress, request.Amount, request.Type, request.Slippage, entrance,
@@ -222,4 +217,74 @@ func GetRouteAmountOut(hash string) (*big.Float, error) {
 		)
 	}
 	return amountOut, nil
+}
+
+func getLocalRoutes(amount string) []*RouteResponseData {
+	chin := struct {
+		ChainId string `json:"chainId"`
+		TokenIn struct {
+			Address  string `json:"address"`
+			Name     string `json:"name"`
+			Decimals int    `json:"decimals"`
+			Symbol   string `json:"symbol"`
+			Icon     string `json:"icon"`
+		} `json:"tokenIn"`
+		TokenOut struct {
+			Address  string `json:"address"`
+			Name     string `json:"name"`
+			Decimals int    `json:"decimals"`
+			Symbol   string `json:"symbol"`
+			Icon     string `json:"icon"`
+		} `json:"tokenOut"`
+		TotalAmountIn  string `json:"totalAmountIn"`
+		TotalAmountOut string `json:"totalAmountOut"`
+		Bridge         string `json:"bridge"`
+	}{
+		ChainId: constants.ChainIDOfChainPool,
+		TokenIn: struct {
+			Address  string `json:"address"`
+			Name     string `json:"name"`
+			Decimals int    `json:"decimals"`
+			Symbol   string `json:"symbol"`
+			Icon     string `json:"icon"`
+		}{
+			Address:  constants.USDTOfChainPoll,
+			Name:     "Tether USD",
+			Decimals: constants.USDTDecimalNumberOfChainPool,
+			Symbol:   "USDT",
+			Icon:     "https://files.mapprotocol.io/bridge/usdt.png",
+		},
+		TokenOut: struct {
+			Address  string `json:"address"`
+			Name     string `json:"name"`
+			Decimals int    `json:"decimals"`
+			Symbol   string `json:"symbol"`
+			Icon     string `json:"icon"`
+		}{
+			Address:  constants.USDTOfChainPoll,
+			Name:     "Tether USD",
+			Decimals: constants.USDTDecimalNumberOfChainPool,
+			Symbol:   "USDT",
+			Icon:     "https://files.mapprotocol.io/bridge/usdt.png",
+		},
+		TotalAmountIn:  amount,
+		TotalAmountOut: amount,
+		Bridge:         constants.ExchangeNameFlushExchange,
+	}
+
+	routes := []*RouteResponseData{
+		{
+			GasFee: struct {
+				Amount string `json:"amount"`
+				Symbol string `json:"symbol"`
+			}{
+				Amount: constants.LocalRouteGasFee,
+				Symbol: constants.NativeSymbolOfChainPool,
+			},
+			Hash:     constants.LocalRouteHash,
+			SrcChain: chin,
+			DstChain: chin,
+		},
+	}
+	return routes
 }

@@ -3,6 +3,7 @@ package butter
 import (
 	"fmt"
 	"github.com/mapprotocol/fe-backend/utils"
+	"math/big"
 	"testing"
 )
 
@@ -112,7 +113,7 @@ func TestGetRouteAmountOut(t *testing.T) {
 	tests := []struct {
 		name    string
 		args    args
-		want    string
+		want    *big.Float
 		wantErr bool
 	}{
 		{
@@ -120,7 +121,7 @@ func TestGetRouteAmountOut(t *testing.T) {
 			args: args{
 				hash: "0x3e3d2ce68ef065372714e33e91503eaad101a277abc2fc531185cff4b0effca4",
 			},
-			want:    "3127.78751",
+			want:    big.NewFloat(3127.78751),
 			wantErr: false,
 		},
 	}

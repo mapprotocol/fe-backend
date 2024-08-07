@@ -10,6 +10,7 @@ import (
 	"github.com/mapprotocol/fe-backend/utils"
 	"math/big"
 	"strconv"
+	"strings"
 )
 
 const (
@@ -153,14 +154,16 @@ func Swap(c *gin.Context) {
 		resp.ParameterErr(c, "missing amount")
 		return
 	}
-	if _, err := strconv.ParseFloat(req.Amount, 64); err != nil {
+	amountBigFloat, ok := new(big.Float).SetString(req.Amount)
+	if !ok {
 		resp.ParameterErr(c, "invalid amount")
 		return
 	}
-	//if req.Decimal <= 0 {
-	//	resp.ParameterErr(c, "missing decimal")
-	//	return
-	//}
+
+	if req.Decimal <= 0 {
+		resp.ParameterErr(c, "missing decimal")
+		return
+	}
 
 	if utils.IsEmpty(req.DstChain) {
 		resp.ParameterErr(c, "missing dstChain")
@@ -213,14 +216,26 @@ func Swap(c *gin.Context) {
 			return
 		}
 	default:
-		ret, msg, code = logic.GetSwapFromEVM(srcChain, req.SrcToken, req.Sender, req.Amount, dstChain, req.DstToken, req.Receiver, req.Hash, slippage)
-		if code == resp.CodeExternalServerError {
-			resp.ExternalServerError(c, msg)
-			return
-		}
-		if code != resp.CodeSuccess {
-			resp.Error(c, code)
-			return
+		if strings.ToLower(req.Hash) == constants.LocalRouteHash {
+			exp := new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(req.Decimal)), nil)
+			amount := new(big.Float).Mul(amountBigFloat, new(big.Float).SetInt(exp))
+			amountBigInt, _ := amount.Int(nil)
+
+			ret, msg, code = logic.GetLocalRouteSwapFromEVM(srcChain, req.SrcToken, req.Sender, req.Amount, amountBigFloat, amountBigInt, dstChain, req.DstToken, req.Receiver, slippage)
+			if code != resp.CodeSuccess {
+				resp.Error(c, code)
+				return
+			}
+		} else {
+			ret, msg, code = logic.GetSwapFromEVM(srcChain, req.SrcToken, req.Sender, req.Amount, dstChain, req.DstToken, req.Receiver, req.Hash, slippage)
+			if code == resp.CodeExternalServerError {
+				resp.ExternalServerError(c, msg)
+				return
+			}
+			if code != resp.CodeSuccess {
+				resp.Error(c, code)
+				return
+			}
 		}
 	}
 	resp.Success(c, ret)

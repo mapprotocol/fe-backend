@@ -25,6 +25,7 @@ func main() {
 
 	butter.Init()
 	tonrouter.Init()
+	logic.Init()
 
 	logic.InitNetworkParams(viper.GetString("network"))
 

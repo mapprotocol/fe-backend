@@ -19,11 +19,20 @@ import (
 	"sync"
 )
 
-var isMultiChainPool = false
+var isMultiChainPool bool
+var feRouterContract string
+var feRouterAddress common.Address
+
 var feeRate = big.NewFloat(70) // 70/10000
 
-func init() {
+func Init() {
 	isMultiChainPool = viper.GetBool("isMultiChainPool")
+
+	feRouterContract = viper.GetString("feRouterContract")
+	if utils.IsEmpty(feRouterContract) {
+		panic("feRouterContract is empty")
+	}
+	feRouterAddress = common.HexToAddress(feRouterContract)
 }
 
 var BTCToken = entity.Token{
@@ -289,7 +298,7 @@ func GetEVMToTONRoute(req *entity.RouteRequest, slippage uint64) (ret []*entity.
 			AmountOut: tonRoute.SrcChain.TokenAmountOut,
 			Path: []entity.Path{
 				{
-					Name:      constants.ExchangeNameButter,
+					Name:      r.SrcChain.Bridge,
 					AmountIn:  r.SrcChain.TotalAmountIn,
 					AmountOut: r.DstChain.TotalAmountOut,
 					TokenIn:   butterSrcChainTokenIn,
@@ -443,10 +452,10 @@ func GetSwapFromEVM(srcChain *big.Int, srcToken, sender, amount string, dstChain
 		log.Logger().WithFields(params).Error("failed to pack onReceived")
 		return ret, "", resp.CodeInternalServerError
 	}
-	encodedCallback, err := EncodeSwapCallbackParams(common.HexToAddress(viper.GetString("feRouterContract")), common.HexToAddress(sender), packed) // todo sender
+	encodedCallback, err := EncodeSwapCallbackParams(feRouterAddress, common.HexToAddress(sender), packed) // todo sender
 	if err != nil {
 		params := map[string]interface{}{
-			"feRouter": viper.GetString("feRouterContract"),
+			"feRouter": feRouterContract,
 			"sender":   sender,
 			"packed":   hex.EncodeToString(packed),
 			"error":    err,
@@ -459,7 +468,7 @@ func GetSwapFromEVM(srcChain *big.Int, srcToken, sender, amount string, dstChain
 		Hash:     hash,
 		Slippage: slippage / 3 * 2,
 		From:     sender,
-		Receiver: viper.GetString("butterRouterContract"),
+		Receiver: sender, // todo sender
 		CallData: encodedCallback,
 	}
 	txData, err := butter.Swap(request)
@@ -480,6 +489,45 @@ func GetSwapFromEVM(srcChain *big.Int, srcToken, sender, amount string, dstChain
 		Data:    txData.Data,
 		Value:   txData.Value,
 		ChainId: txData.ChainId,
+	}
+	return ret, "", resp.CodeSuccess
+}
+
+func GetLocalRouteSwapFromEVM(srcChain *big.Int, srcToken, sender, amount string, amountBigFloat *big.Float, amountBigInt, dstChain *big.Int, dstToken, receiver string, slippage uint64) (ret *entity.SwapResponse, msg string, code int) {
+	if amountBigFloat.Cmp(USDTLimit) == -1 {
+		return ret, "", resp.CodeAmountTooFew
+	}
+
+	chainPoolToken := constants.USDTOfChainPoll
+	if isMultiChainPool && dstChain.String() == constants.ChainIDOfEthereum {
+		chainPoolToken = constants.USDTOfEthereum
+	}
+	params := ReceiverParam{
+		OrderId:        [32]byte{},
+		SrcChain:       srcChain,
+		SrcToken:       []byte(srcToken),
+		Sender:         []byte(sender),
+		InAmount:       amount,
+		ChainPoolToken: common.HexToAddress(chainPoolToken),
+		DstChain:       dstChain,
+		DstToken:       []byte(dstToken),
+		Receiver:       []byte(receiver),
+		Slippage:       slippage,
+	}
+	packed, err := PackOnReceived(amountBigInt, params)
+	if err != nil {
+		params := map[string]interface{}{
+			"params": utils.JSON(params),
+			"error":  err,
+		}
+		log.Logger().WithFields(params).Error("failed to pack onReceived")
+		return ret, "", resp.CodeInternalServerError
+	}
+	ret = &entity.SwapResponse{
+		To:      feRouterContract,
+		Data:    "0x" + hex.EncodeToString(packed),
+		Value:   "0x" + amountBigInt.Text(16),
+		ChainId: constants.ChainIDOfChainPool,
 	}
 	return ret, "", resp.CodeSuccess
 }

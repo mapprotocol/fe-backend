@@ -1,6 +1,7 @@
 package butter
 
 import (
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/mapprotocol/fe-backend/utils"
 	"testing"
 )
@@ -39,4 +40,8 @@ func TestSwap(t *testing.T) {
 			t.Logf("Swap() got = %v", utils.JSON(got))
 		})
 	}
+}
+
+func TestName(t *testing.T) {
+	t.Log(common.HexToHash("0x22776"))
 }
