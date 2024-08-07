@@ -526,7 +526,7 @@ func GetLocalRouteSwapFromEVM(srcChain *big.Int, srcToken, sender, amount string
 	ret = &entity.SwapResponse{
 		To:      feRouterContract,
 		Data:    "0x" + hex.EncodeToString(packed),
-		Value:   "0x" + amountBigInt.Text(16),
+		Value:   "0x0",
 		ChainId: constants.ChainIDOfChainPool,
 	}
 	return ret, "", resp.CodeSuccess
