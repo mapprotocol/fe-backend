@@ -141,9 +141,8 @@ func Swap(c *gin.Context) {
 		resp.ParameterErr(c, "invalid srcChain")
 		return
 	}
-
-	if !utils.IsValidEvmAddress(req.SrcToken) {
-		resp.ParameterErr(c, "invalid srcToken")
+	if utils.IsEmpty(req.SrcToken) {
+		resp.ParameterErr(c, "missing SrcToken")
 		return
 	}
 	//if !utils.IsValidEvmAddress(req.DstToken) {
