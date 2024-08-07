@@ -25,7 +25,6 @@ type RouterAndSwapRequest struct {
 	TokenOutAddress string `json:"tokenOutAddress"`
 	Type            string `json:"type"`
 	Slippage        uint64 `json:"slippage"`
-	Entrance        string `json:"entrance"`
 	From            string `json:"from"`
 	Receiver        string `json:"receiver"`
 }

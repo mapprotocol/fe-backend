@@ -28,3 +28,10 @@ func Uint64ToByte32(num uint64) [32]byte {
 func BytesToUint64(b []byte) uint64 {
 	return binary.BigEndian.Uint64(b)
 }
+
+func TrimHexPrefix(s string) string {
+	if len(s) >= 2 && (s[0:2] == "0x" || s[0:2] == "0X") {
+		return s[2:]
+	}
+	return s
+}

@@ -202,7 +202,6 @@ func HandleConfirmedOrdersOfFirstStageFromBTCToEVM() {
 					TokenOutAddress: o.DstToken,
 					Type:            SwapType,
 					Slippage:        o.Slippage, // todo
-					Entrance:        Entrance,
 					//From:            o.Sender,
 					From:     Sender, // todo
 					Receiver: o.Receiver,

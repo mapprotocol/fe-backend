@@ -3,6 +3,7 @@ package tx
 import (
 	"context"
 	"crypto/ecdsa"
+	"encoding/hex"
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/mapprotocol/fe-backend/params"
@@ -34,6 +35,36 @@ func init() {
 	}
 }
 
+func (t *Transactor) Deliver(orderID [32]byte, token common.Address, amount *big.Int, receiver common.Address) (common.Hash, error) {
+	var txHash common.Hash
+
+	for i := 0; i < RetryTimes; i++ {
+		opts, err := t.NewTransactOpts()
+		if err != nil {
+			return common.Hash{}, err
+		}
+
+		input, err := pack(feRouterABI, "deliver", orderID, token, amount, receiver)
+		if err != nil {
+			log.Logger().Error("failed to pack deliver params")
+			return common.Hash{}, err
+		}
+
+		log.Logger().WithField("nonce", opts.Nonce).Info("will send deliver transaction")
+		txHash, err = t.sendTransaction(t.privateKey, t.chainPoolContract, big.NewInt(0), input)
+		if err != nil {
+			if isNonceTooLow(err.Error()) {
+				log.Logger().WithField("nonce", opts.Nonce).Warn("send deliver transaction failed, nonce too low, will try again in 2 second")
+				time.Sleep(Interval)
+				continue
+			}
+			return common.Hash{}, err
+		}
+		break
+	}
+	return txHash, nil
+}
+
 func (t *Transactor) DeliverAndSwap(orderID [32]byte, initiator common.Address, token common.Address, amount *big.Int, swapData []byte, bridgeData []byte, feeData []byte, value *big.Int) (common.Hash, error) {
 	var txHash common.Hash
 
@@ -45,18 +76,18 @@ func (t *Transactor) DeliverAndSwap(orderID [32]byte, initiator common.Address, 
 
 		input, err := pack(feRouterABI, "deliverAndSwap", orderID, initiator, token, amount, swapData, bridgeData, feeData)
 		if err != nil {
-			log.Logger().Error("failed to pack params")
+			log.Logger().Error("failed to pack deliver and swap params")
 			return common.Hash{}, err
 		}
 		//opts.GasPrice = gasPrice
 		//opts.GasLimit = gasLimit
 		//opts.Value = value
 
-		log.Logger().WithField("nonce", opts.Nonce).Info("will send deliver and swap  transaction")
+		log.Logger().WithField("nonce", opts.Nonce).Info("will send deliver and swap transaction")
 		txHash, err = t.sendTransaction(t.privateKey, t.chainPoolContract, value, input)
 		if err != nil {
 			if isNonceTooLow(err.Error()) {
-				log.Logger().WithField("nonce", opts.Nonce).Warn("nonce too low, will try again in 2 second")
+				log.Logger().WithField("nonce", opts.Nonce).Warn("send deliver and swap transaction failed, nonce too low, will try again in 2 second")
 				time.Sleep(Interval)
 				continue
 			}
@@ -95,6 +126,7 @@ func (t *Transactor) sendTransaction(privateKey *ecdsa.PrivateKey, to common.Add
 		fields := map[string]interface{}{
 			"rpc":   t.endpoint,
 			"msg":   utils.JSON(msg),
+			"input": hex.EncodeToString(input),
 			"error": err,
 		}
 		log.Logger().WithFields(fields).Error("failed to estimate gas")
