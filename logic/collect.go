@@ -57,8 +57,8 @@ type CollectCfg struct {
 	HotWallet2              btcutil.Address // use for withdraw
 	HotWallet2Line          int64
 
-	StrHotWalletFee3Privkey string
-	HotWalletFee3           btcutil.Address // use for move tx fee (hot1 --> hot2)
+	StrFee3Privkey string
+	HotWalletFee3  btcutil.Address // use for move tx fee (hot1 --> hot2)
 
 	MaxTransferAmount int64
 }
@@ -587,7 +587,7 @@ func makeWithdrawTx0(feerate int64, tipper, sender btcutil.Address, senderPriv, 
 	feeOutList []*PrevOutPoint, items []*WithdrawOrder, btcApiClient *mempool.MempoolClient) (*wire.MsgTx, error) {
 
 	commitTx := wire.NewMsgTx(wire.TxVersion)
-	totalSenderAmount, totalAmount := btcutil.Amount(0), btcutil.Amount(0)
+	totalSenderAmount, totalFeeAmount := btcutil.Amount(0), btcutil.Amount(0)
 	TxPrevOutputFetcher := txscript.NewMultiPrevOutFetcher(nil)
 	pos := 0
 	tmpPrivs := make(map[int]*btcec.PrivateKey)
@@ -605,7 +605,6 @@ func makeWithdrawTx0(feerate int64, tipper, sender btcutil.Address, senderPriv, 
 		tmpPrivs[pos] = senderPriv
 		pos++
 		totalSenderAmount += btcutil.Amount(out.Value)
-		totalAmount += btcutil.Amount(out.Value)
 	}
 	time.Sleep(1 * time.Second) // limit rate
 	// handle the fee's utxo
@@ -620,7 +619,7 @@ func makeWithdrawTx0(feerate int64, tipper, sender btcutil.Address, senderPriv, 
 		commitTx.AddTxIn(in)
 		tmpPrivs[pos] = feePriv
 		pos++
-		totalAmount += btcutil.Amount(out.Value)
+		totalFeeAmount += btcutil.Amount(out.Value)
 	}
 
 	// handle the tx output
@@ -639,7 +638,7 @@ func makeWithdrawTx0(feerate int64, tipper, sender btcutil.Address, senderPriv, 
 	if int64(totalSenderAmount) < outAmount {
 		log.Logger().WithField("hotwallet2", totalSenderAmount).WithField("need", outAmount).
 			Error("low balance")
-		alarm.Slack(context.Background(), fmt.Sprintf("[hot-wallet2=%v,need=%v]:low balance", totalAmount, outAmount))
+		alarm.Slack(context.Background(), fmt.Sprintf("[hot-wallet2=%v,need=%v]:low balance", totalSenderAmount, outAmount))
 		return nil, localErr.LowBalanceInHotWallet2
 	}
 
@@ -659,7 +658,7 @@ func makeWithdrawTx0(feerate int64, tipper, sender btcutil.Address, senderPriv, 
 	commitTx.AddTxOut(wire.NewTxOut(0, changePkScript))
 	txsize := btcmempool.GetTxVirtualSize(btcutil.NewTx(commitTx))
 	fee := btcutil.Amount(txsize) * btcutil.Amount(feerate)
-	changeAmount := totalAmount - fee - totalSenderAmount
+	changeAmount := totalFeeAmount - fee
 
 	if changeAmount > 0 {
 		commitTx.TxOut[len(commitTx.TxOut)-1].Value = int64(changeAmount)
@@ -850,25 +849,27 @@ func makeHotWallet1ToHotWallet2Tx(feerate int64, cfg *CollectCfg, btcApiClient *
 	}
 	senderPriv, _ := btcec.PrivKeyFromBytes(privateKeyBytes)
 
-	privateKeyBytes, err = hex.DecodeString(cfg.StrHotWalletFee3Privkey)
+	sender, receiver, feeAddress := cfg.HotWallet1, cfg.HotWallet2, cfg.HotWalletFee3
+
+	privateKeyBytes, err = hex.DecodeString(cfg.StrFee3Privkey)
 	if err != nil {
 		panic(err)
 	}
 	feePriv, _ := btcec.PrivKeyFromBytes(privateKeyBytes)
 
 	// get the sender_address utxo
-	senderOutlist, err := gatherUTXO3(cfg.HotWallet1, btcApiClient)
+	senderOutlist, err := gatherUTXO3(sender, btcApiClient)
 	if err != nil {
 		return nil, err
 	}
 	// get the fee_address utxo
-	feeOutlist, err := gatherUTXO3(cfg.HotWalletFee3, btcApiClient)
+	feeOutlist, err := gatherUTXO3(feeAddress, btcApiClient)
 	if err != nil {
 		return nil, err
 	}
 
 	amount := cfg.MaxTransferAmount
-	tx, err := makeSimpleTx0(feerate, amount, cfg.HotWallet1, cfg.HotWallet2, cfg.HotWalletFee3, senderPriv, feePriv,
+	tx, err := makeSimpleTx0(feerate, amount, sender, receiver, feeAddress, senderPriv, feePriv,
 		senderOutlist, feeOutlist, btcApiClient)
 
 	return tx, err

@@ -405,7 +405,7 @@ func Test_makeTxhashAndSimpleTransfer(t *testing.T) {
 		return
 	}
 
-	feerate := int64(25)
+	feerate := int64(5)
 
 	tx, err := makeSimpleTx0(feerate, 500, sender, receiver, tipper, senderPriv, tipperPriv, senderOutlist, feeOutlist, client)
 	if err != nil {
@@ -463,7 +463,7 @@ func Test_withdraw(t *testing.T) {
 			Amount:   100,
 		})
 	}
-	feerate := int64(25)
+	feerate := int64(4)
 
 	tx, err := makeWithdrawTx1(feerate, tipper, sender, senderPriv, tipperPriv, items, client)
 	if err != nil {
