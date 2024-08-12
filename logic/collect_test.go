@@ -158,6 +158,7 @@ func Test_getFeerate(t *testing.T) {
 	}
 	fmt.Println("FastestFee:", fees.FastestFee, "HalfHourFee", fees.HalfHourFee)
 }
+
 func Test_01(t *testing.T) {
 	network := &chaincfg.MainNetParams
 	if testnet {
@@ -171,6 +172,7 @@ func Test_01(t *testing.T) {
 	fmt.Println("height", height.String())
 }
 func Test_02(t *testing.T) {
+	// send multi test
 	network := &chaincfg.MainNetParams
 	if testnet {
 		network = &chaincfg.TestNet3Params
@@ -481,8 +483,6 @@ func Test_withdraw(t *testing.T) {
 		return
 	}
 	fmt.Println("tx was on chain")
-}
-func Test_04(t *testing.T) {
 }
 
 func Test_channe01(t *testing.T) {
