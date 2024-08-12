@@ -10,17 +10,6 @@ import (
 	"testing"
 )
 
-func getTxOutByOutPoint(outPoint *wire.OutPoint, btcClient *mempool.MempoolClient) (*wire.TxOut, error) {
-	tx, err := btcClient.GetRawTransaction(&outPoint.Hash)
-	if err != nil {
-		return nil, err
-	}
-	if int(outPoint.Index) >= len(tx.TxOut) {
-		return nil, errors.New("err out point")
-	}
-	return tx.TxOut[outPoint.Index], nil
-}
-
 func makeSenderTx(feerate, sendAmount int64, sender, receiver, feeAddress btcutil.Address,
 	outLists []*PrevOutPoint, btcApiClient *mempool.MempoolClient) (*wire.MsgTx, error) {
 

@@ -45,7 +45,7 @@ func makeMultiAddressTx(feerate, amount int64, outList []*PrevOutPoint, sender b
 
 	// handle the every address's utxo
 	for _, out := range outList {
-		txOut, err := getTxOutByOutPoint2(out.Outpoint, btcApiClient)
+		txOut, err := getTxOutByOutPoint(out.Outpoint, btcApiClient)
 		if err != nil {
 			return nil, err
 		}

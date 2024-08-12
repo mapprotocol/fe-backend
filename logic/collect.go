@@ -115,7 +115,7 @@ func gatherUTXO3(sender btcutil.Address, client *mempool.MempoolClient) ([]*Prev
 	}
 	return outPointList, nil
 }
-func getTxOutByOutPoint2(outPoint *wire.OutPoint, btcClient *mempool.MempoolClient) (*wire.TxOut, error) {
+func getTxOutByOutPoint(outPoint *wire.OutPoint, btcClient *mempool.MempoolClient) (*wire.TxOut, error) {
 	tx, err := btcClient.GetRawTransaction(&outPoint.Hash)
 	if err != nil {
 		return nil, err
@@ -138,7 +138,7 @@ func makeCollectTx0(feerate int64, receiverAddress, feeAddress btcutil.Address, 
 	// handle the every address's utxo
 	for i, outs := range outLists {
 		for _, out := range outs {
-			txOut, err := getTxOutByOutPoint2(out.Outpoint, btcApiClient)
+			txOut, err := getTxOutByOutPoint(out.Outpoint, btcApiClient)
 			if err != nil {
 				return nil, err
 			}
@@ -594,7 +594,7 @@ func makeWithdrawTx0(feerate int64, tipper, sender btcutil.Address, senderPriv, 
 
 	// handle the sender's utxo
 	for _, out := range senderOutList {
-		txOut, err := getTxOutByOutPoint2(out.Outpoint, btcApiClient)
+		txOut, err := getTxOutByOutPoint(out.Outpoint, btcApiClient)
 		if err != nil {
 			return nil, err
 		}
@@ -610,7 +610,7 @@ func makeWithdrawTx0(feerate int64, tipper, sender btcutil.Address, senderPriv, 
 	time.Sleep(1 * time.Second) // limit rate
 	// handle the fee's utxo
 	for _, out := range feeOutList {
-		txOut, err := getTxOutByOutPoint2(out.Outpoint, btcApiClient)
+		txOut, err := getTxOutByOutPoint(out.Outpoint, btcApiClient)
 		if err != nil {
 			return nil, err
 		}
@@ -756,13 +756,13 @@ func makeSimpleTx0(feerate, amount int64, sender, receiver, tipper btcutil.Addre
 	feePriv *btcec.PrivateKey, senderOutList, feeOutList []*PrevOutPoint, btcApiClient *mempool.MempoolClient) (*wire.MsgTx, error) {
 
 	commitTx := wire.NewMsgTx(wire.TxVersion)
-	totalSenderAmount, totalAmount := btcutil.Amount(0), btcutil.Amount(0)
+	totalSenderAmount, TotalFeeAmount := btcutil.Amount(0), btcutil.Amount(0)
 	TxPrevOutputFetcher := txscript.NewMultiPrevOutFetcher(nil)
 	tmpPrivs, pos := make(map[int]*btcec.PrivateKey), 0
 
 	// handle the sender's utxo
 	for _, out := range senderOutList {
-		txOut, err := getTxOutByOutPoint2(out.Outpoint, btcApiClient)
+		txOut, err := getTxOutByOutPoint(out.Outpoint, btcApiClient)
 		if err != nil {
 			return nil, err
 		}
@@ -773,12 +773,11 @@ func makeSimpleTx0(feerate, amount int64, sender, receiver, tipper btcutil.Addre
 		tmpPrivs[pos] = senderPriv
 		pos++
 		totalSenderAmount += btcutil.Amount(out.Value)
-		totalAmount += btcutil.Amount(out.Value)
 	}
 	time.Sleep(1 * time.Second) // limit rate
 	// handle the fee's utxo
 	for _, out := range feeOutList {
-		txOut, err := getTxOutByOutPoint2(out.Outpoint, btcApiClient)
+		txOut, err := getTxOutByOutPoint(out.Outpoint, btcApiClient)
 		if err != nil {
 			return nil, err
 		}
@@ -788,7 +787,7 @@ func makeSimpleTx0(feerate, amount int64, sender, receiver, tipper btcutil.Addre
 		commitTx.AddTxIn(in)
 		tmpPrivs[pos] = feePriv
 		pos++
-		totalAmount += btcutil.Amount(out.Value)
+		TotalFeeAmount += btcutil.Amount(out.Value)
 	}
 
 	// handle the tx output
@@ -820,7 +819,7 @@ func makeSimpleTx0(feerate, amount int64, sender, receiver, tipper btcutil.Addre
 	commitTx.AddTxOut(wire.NewTxOut(0, changePkScript))
 	txsize := btcmempool.GetTxVirtualSize(btcutil.NewTx(commitTx))
 	fee := btcutil.Amount(txsize) * btcutil.Amount(feerate)
-	changeAmount := totalAmount - fee - totalSenderAmount
+	changeAmount := TotalFeeAmount - fee
 
 	if changeAmount > 0 {
 		commitTx.TxOut[len(commitTx.TxOut)-1].Value = int64(changeAmount)
