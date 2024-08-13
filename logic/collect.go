@@ -987,7 +987,10 @@ func RunCollect(cfg *CollectCfg) error {
 				if err != nil {
 					log.Logger().WithField("error", err).Info("set orders state failed")
 				}
-				setLatestCollectInfo(txHash)
+				err = setLatestCollectInfo(txHash)
+				if err != nil {
+					log.Logger().WithField("error", err).Info("set setLatestCollectInfo failed")
+				}
 			}
 		}
 		time.Sleep(30 * time.Minute)
@@ -1109,7 +1112,7 @@ func HotWalletBalanceTransfer(cfg *CollectCfg, client *mempool.MempoolClient) er
 	if err != nil {
 		log.Logger().WithField("error", err).Error("wait the tx on chain failed")
 	} else {
-		log.Logger().WithField("txhash", txHash.String()).Info("the tx was on chain")
+		log.Logger().WithField("txhash", txHash.String()).Info("the wallet balance transfer tx was on chain")
 	}
 	return err
 }
