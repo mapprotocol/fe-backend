@@ -169,18 +169,20 @@ GET
 
 ### request params
 
-| parameter | type   | required | default | description                                                        |
-|-----------|--------|----------|---------|--------------------------------------------------------------------|
-| srcChain  | string | Yes      |         |                                                                    |
-| srcToken  | string | Yes      |         |                                                                    |
-| sender    | string | Yes      |         |                                                                    |
-| amount    | string | Yes      |         |                                                                    |
-| decimal   | number | Yes      |         |                                                                    |
-| dstChain  | string | Yes      |         |                                                                    |
-| dstToken  | string | Yes      |         |                                                                    |
-| receiver  | string | Yes      |         |                                                                    |
-| hash      | string | Yes      |         | the route hash returned by /api/v1/route                           |
-| slippage  | string | Yes      |         | slippage of swap, a integer in rang [300, 5000], e.g, 300 means 3% |
+| parameter    | type   | required | default | description                                                        |
+|--------------|--------|----------|---------|--------------------------------------------------------------------|
+| srcChain     | string | Yes      |         |                                                                    |
+| srcToken     | string | Yes      |         |                                                                    |
+| sender       | string | Yes      |         |                                                                    |
+| amount       | string | Yes      |         |                                                                    |
+| decimal      | number | Yes      |         |                                                                    |
+| dstChain     | string | Yes      |         |                                                                    |
+| dstToken     | string | Yes      |         |                                                                    |
+| receiver     | string | Yes      |         |                                                                    |
+| feeCollector | string | No       |         |                                                                    |
+| feeRatio     | string | No       |         | 200 means 2%                                                       |
+| hash         | string | Yes      |         | the route hash returned by /api/v1/route                           |
+| slippage     | string | Yes      |         | slippage of swap, a integer in rang [300, 5000], e.g, 300 means 3% |
 
 ### response params
 
