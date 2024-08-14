@@ -10,9 +10,11 @@ import (
 )
 
 type BridgeSwapRequest struct {
-	Sender   string `json:"sender"`
-	Receiver string `json:"receiver"`
-	Hash     string `json:"hash"`
+	Sender       string `json:"sender"`
+	Receiver     string `json:"receiver"`
+	FeeCollector string `json:"feeCollector"`
+	FeeRatio     string `json:"feeRatio"`
+	Hash         string `json:"hash"`
 }
 
 type BridgeSwapResponse struct {
@@ -29,7 +31,10 @@ type TxParams struct {
 }
 
 func BridgeSwap(request *BridgeSwapRequest) (*TxParams, error) {
-	params := fmt.Sprintf("sender=%s&receiver=%s&hash=%s", request.Sender, request.Receiver, request.Hash)
+	params := fmt.Sprintf(
+		"sender=%s&receiver=%s&feeCollector=%s&feeRatio=%s&hash=%s",
+		request.Sender, request.Receiver, request.FeeCollector, request.FeeRatio, request.Hash,
+	)
 	url := fmt.Sprintf("%s%s?%s", endpoint, PathBridgeSwap, params)
 	log.Logger().Debugf("ton swap url: %s", url)
 	ret, err := uhttp.Get(url, nil, nil)

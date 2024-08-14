@@ -333,7 +333,7 @@ func GetEVMToTONRoute(req *entity.RouteRequest, slippage uint64) (ret []*entity.
 	return ret, "", resp.CodeSuccess
 }
 
-func GetSwapFromTON(sender string, dstChain, receiver, hash string) (ret *entity.SwapResponse, msg string, code int) {
+func GetSwapFromTON(sender string, dstChain, receiver, feeCollector, feeRatio, hash string) (ret *entity.SwapResponse, msg string, code int) {
 	amountOut, err := tonrouter.GetRouteAmountOut(hash)
 	if err != nil {
 		params := map[string]interface{}{
@@ -366,9 +366,11 @@ func GetSwapFromTON(sender string, dstChain, receiver, hash string) (ret *entity
 	}
 
 	request := &tonrouter.BridgeSwapRequest{
-		Sender:   sender,
-		Receiver: receiver,
-		Hash:     hash,
+		Sender:       sender,
+		Receiver:     receiver,
+		FeeCollector: feeCollector,
+		FeeRatio:     feeRatio,
+		Hash:         hash,
 	}
 	txData, err := tonrouter.BridgeSwap(request)
 	if err != nil {

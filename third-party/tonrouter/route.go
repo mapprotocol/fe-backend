@@ -16,11 +16,11 @@ import (
 const SuccessCode = 0
 
 const (
-	PathRoute       = "/route"
-	PathBridgeRoute = "/route/bridge"
-	PathGetRoute    = "/route/hash"
-	PathBridgeSwap  = "/swap/bridge"
-	PathBalance     = "/jetton/router/balance"
+	PathRoute       = "/v2/route"
+	PathBridgeRoute = "/v2/route/bridge"
+	PathGetRoute    = "/v2/route/hash"
+	PathBridgeSwap  = "/v2/swap/bridge"
+	PathBalance     = "/v2/jetton/router/balance"
 )
 
 var endpoint string
@@ -191,6 +191,7 @@ func BridgeRoute(request *BridgeRouteRequest) (*RouteData, error) {
 
 func GetRouteAmountOut(hash string) (*big.Float, error) {
 	url := fmt.Sprintf("%s%s/%s", endpoint, PathGetRoute, hash)
+	fmt.Println("============================== url: ", url)
 	log.Logger().Debugf("ton get route amount out url: %s", url)
 	ret, err := uhttp.Get(url, nil, nil)
 	if err != nil {

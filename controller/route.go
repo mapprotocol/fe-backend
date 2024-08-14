@@ -206,7 +206,7 @@ func Swap(c *gin.Context) {
 
 	switch req.SrcChain {
 	case constants.TONChainID:
-		ret, msg, code = logic.GetSwapFromTON(req.Sender, req.DstChain, req.Receiver, req.Hash)
+		ret, msg, code = logic.GetSwapFromTON(req.Sender, req.DstChain, req.Receiver, req.FeeCollector, req.FeeRatio, req.Hash)
 		if code == resp.CodeExternalServerError {
 			resp.ExternalServerError(c, msg)
 			return

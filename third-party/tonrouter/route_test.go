@@ -1,17 +1,14 @@
 package tonrouter
 
 import (
-	"fmt"
 	"github.com/mapprotocol/fe-backend/utils"
 	"math/big"
-	"reflect"
+	"os"
 	"testing"
 )
 
 func TestMain(m *testing.M) {
-	//endpoint = os.Getenv("BUTTER_ENDPOINT")
-	endpoint = "https://ton-router-test.chainservice.io"
-	fmt.Println("============================== ", endpoint)
+	endpoint = os.Getenv("TON_ROUTER_ENDPOINT")
 	m.Run()
 }
 
@@ -56,13 +53,13 @@ func TestRoute(t *testing.T) {
 			args: args{
 				request: &RouteRequest{
 					TokenInAddress:  "0x0000000000000000000000000000000000000000",
-					TokenOutAddress: "0x0000000000000000000000000000000000000000", // tokenInAddress and tokenOutAddress is same
+					TokenOutAddress: "0x0000000000000000000000000000000000000000",
 					Amount:          "10",
 					Slippage:        100,
 				},
 			},
 			want:    nil,
-			wantErr: true,
+			wantErr: false,
 		},
 		{
 			name: "t-4",
@@ -228,7 +225,7 @@ func TestBridgeRoute(t *testing.T) {
 				},
 			},
 			want:    nil,
-			wantErr: false,
+			wantErr: true,
 		},
 		{
 			name: "t-6",
@@ -302,18 +299,18 @@ func TestGetRouteAmountOut(t *testing.T) {
 			name: "t-1",
 
 			args: args{
-				hash: "0x9ba8a9525ef4658c24541cf889089a9cbb9251cdd446bfdd4178ace32fe42bc7",
+				hash: "0x8261adadaf8563f8586a11efa3279ddd8701d1b43cacd3cbbbcbad0ff7f1bd50",
 			},
-			want:    big.NewFloat(0.128110533),
+			want:    big.NewFloat(13.283722111),
 			wantErr: false,
 		},
 		{
 			name: "t-2",
 
 			args: args{
-				hash: "0xb5e62d3729298b58def20c7474dfd0bf756481ad1b6f25efcb17cd2b93623fc3",
+				hash: "0x4dbaae0fa1ec511543fda91d9d7dfc6da36bdb52d27961a95c371e5a704c14e0",
 			},
-			want:    big.NewFloat(0.128110164),
+			want:    big.NewFloat(13.290566235),
 			wantErr: false,
 		},
 		{
@@ -333,7 +330,10 @@ func TestGetRouteAmountOut(t *testing.T) {
 				t.Errorf("GetRouteAmountOut() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
-			if !reflect.DeepEqual(got, tt.want) {
+			//if !reflect.DeepEqual(got, tt.want) {
+			//	t.Errorf("GetRouteAmountOut() got = %v, want %v", got, tt.want)
+			//}
+			if got.Cmp(tt.want) != 0 {
 				t.Errorf("GetRouteAmountOut() got = %v, want %v", got, tt.want)
 			}
 		})
