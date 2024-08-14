@@ -234,7 +234,7 @@ func getOrders(limit int, network *chaincfg.Params) ([]*OrderItem, int64, error)
 	order := dao.Order{
 		Action: dao.OrderActionToEVM,
 		Stage:  dao.OrderStag2,
-		Status: dao.OrderStatusConfirmed,
+		Status: dao.OrderStatusTxConfirmed,
 	}
 	gotOrders, count, err := order.Find(nil, dao.Paginate(1, limit))
 	if err != nil {
@@ -255,7 +255,7 @@ func getOrders(limit int, network *chaincfg.Params) ([]*OrderItem, int64, error)
 			return nil, 0, err
 		}
 
-		privateKeyBytes, err := hex.DecodeString(o.RelayerPrivateKey)
+		privateKeyBytes, err := hex.DecodeString(o.RelayerKey)
 		if err != nil {
 			params := map[string]interface{}{
 				"order_id": o.ID,
@@ -266,11 +266,11 @@ func getOrders(limit int, network *chaincfg.Params) ([]*OrderItem, int64, error)
 		}
 		privakeKey, _ := btcec.PrivKeyFromBytes(privateKeyBytes)
 
-		amount, err := strconv.ParseInt(o.InAmount, 10, 64)
+		amount, err := strconv.ParseInt(o.InAmountSat, 10, 64)
 		if err != nil {
 			params := map[string]interface{}{
 				"order_id": o.ID,
-				"amount":   o.InAmount,
+				"amount":   o.InAmountSat,
 				"error":    err,
 			}
 			log.Logger().WithFields(params).Error("failed to parse amount")
@@ -319,6 +319,7 @@ func createLatestCollectInfo(txhash *chainhash.Hash, orders []*OrderItem) error 
 		collects = append(collects, &dao.Collect{
 			OrderID: o.OrderID,
 			TxHash:  txHash,
+			Status:  dao.OrderStatusTxPrepareSend,
 		})
 	}
 
@@ -333,17 +334,17 @@ func createLatestCollectInfo(txhash *chainhash.Hash, orders []*OrderItem) error 
 	return nil
 }
 
-func setLatestCollectInfo(txhash *chainhash.Hash) error {
+func setLatestCollectInfo(txhash *chainhash.Hash, state uint8) error {
 	collect := &dao.Collect{
 		TxHash: txhash.String(),
 	}
 	update := &dao.Collect{
-		Status: dao.CollectStatusConfirmed,
+		Status: state,
 	}
 	if err := collect.Updates(update); err != nil {
 		params := map[string]interface{}{
 			"tx_hash": txhash.String(),
-			"status":  dao.CollectStatusConfirmed,
+			"status":  state,
 			"error":   err,
 		}
 		log.Logger().WithFields(params).Error("failed to update collect status")
@@ -436,13 +437,15 @@ func checkLatestTx(client *mempool.MempoolClient) error {
 		log.Logger().WithField("error", err).Error("wait tx on chain failed")
 		return err
 	} else {
-		if err = setOrders(itmes, CollectFinish); err == nil {
-			err = setLatestCollectInfo(txhash)
+		if err = setOrders(itmes, dao.OrderStatusTxConfirmed); err == nil {
+			err = setLatestCollectInfo(txhash, dao.OrderStatusTxConfirmed)
 			if err != nil {
 				log.Logger().WithField("error", err).Error("set latest collect info failed in check process")
+				return err
 			}
 		} else {
 			log.Logger().WithField("error", err).Error("setOrders finish failed in check process")
+			return err
 		}
 	}
 	return nil
@@ -471,8 +474,8 @@ func withdrawOrdersInfos(items []*WithdrawOrder) string {
 func getWithdrawOrders(limit int, network *chaincfg.Params) ([]*WithdrawOrder, error) {
 	order := dao.Order{
 		Action: dao.OrderActionFromEVM,
-		Stage:  dao.OrderStag2,
-		Status: dao.OrderStatusConfirmed,
+		Stage:  dao.OrderStag1,
+		Status: dao.OrderStatusTxConfirmed,
 	}
 	gotOrders, _, err := order.Find(nil, dao.Paginate(1, limit))
 	if err != nil {
@@ -493,21 +496,30 @@ func getWithdrawOrders(limit int, network *chaincfg.Params) ([]*WithdrawOrder, e
 			return nil, err
 		}
 
-		amount, err := strconv.ParseInt(o.InAmount, 10, 64)
+		famount, err := strconv.ParseFloat(o.RelayAmount, 64)
 		if err != nil {
 			params := map[string]interface{}{
 				"order_id": o.ID,
-				"amount":   o.InAmount,
+				"amount":   o.RelayAmount,
 				"error":    err,
 			}
 			log.Logger().WithFields(params).Error("failed to parse amount")
 			return nil, err
 		}
-
+		amount, err := btcutil.NewAmount(famount)
+		if err != nil {
+			params := map[string]interface{}{
+				"order_id": o.ID,
+				"amount":   famount,
+				"error":    err,
+			}
+			log.Logger().WithFields(params).Error("failed to parse famount")
+			return nil, err
+		}
 		orders = append(orders, &WithdrawOrder{
 			OrderID:  o.ID,
 			Receiver: receiver,
-			Amount:   amount,
+			Amount:   int64(amount),
 		})
 	}
 
@@ -515,10 +527,11 @@ func getWithdrawOrders(limit int, network *chaincfg.Params) ([]*WithdrawOrder, e
 }
 
 // state = 1 | 2
+// 1 -- init. 2 -- send  3 onchain
 func getInitedWithdrawOrders(state uint8, limit int) ([]*chainhash.Hash, error) {
 	order := dao.Order{
 		Action: dao.OrderActionFromEVM,
-		Stage:  dao.OrderStag3,
+		Stage:  dao.OrderStag2,
 		Status: state,
 	}
 	gotOrders, _, err := order.Find(nil, dao.Paginate(1, limit))
@@ -535,14 +548,14 @@ func getInitedWithdrawOrders(state uint8, limit int) ([]*chainhash.Hash, error) 
 
 		hashes = append(hashes, txHash)
 	}
-	return nil, nil
+	return hashes, nil
 }
 
 // state = 1 & txhash
 func initWithdrawOrders(txhash *chainhash.Hash, ids []uint64) error {
 	update := &dao.Order{
-		Stage:     dao.OrderStag3,
-		Status:    dao.WithdrawStateInit,
+		Stage:     dao.OrderStag2,
+		Status:    dao.OrderStatusTxPrepareSend,
 		OutTxHash: txhash.String(),
 	}
 	if err := dao.NewOrder().UpdatesByIDs(ids, update); err != nil {
@@ -714,7 +727,7 @@ func checkWithdrawTxsState(cfg *CollectCfg) {
 
 	for {
 		log.Logger().Info("begin withdraw tx state check...")
-		hashs, err := getInitedWithdrawOrders(dao.WithdrawStateSend, 20) // todo update limit
+		hashs, err := getInitedWithdrawOrders(dao.OrderStatusTxSent, 20) // todo update limit
 		if err != nil {
 			log.Logger().WithField("error", err).Error("getInitedWithdrawOrders in check state failed")
 		} else {
@@ -725,7 +738,7 @@ func checkWithdrawTxsState(cfg *CollectCfg) {
 						Error("wait on chain failed [check state]")
 				} else {
 					log.Logger().WithField("hash", h.String()).Info("the hash was on chain")
-					err = updateWithdrawOrdersState(h, dao.WithdrawStateFinish)
+					err = updateWithdrawOrdersState(h, dao.OrderStatusTxConfirmed)
 					if err != nil {
 						log.Logger().WithField("hash", h.String()).WithField("error", err).Error("update the hash to finish state failed")
 					}
@@ -963,6 +976,14 @@ func RunCollect(cfg *CollectCfg) error {
 				alarm.Slack(context.Background(), "failed to make collect tx")
 				return err
 			}
+			txhash := tx.TxHash()
+			err = createLatestCollectInfo(&txhash, ords)
+			if err != nil {
+				log.Logger().WithField("error", err).Error("create latest collect info failed")
+				return err
+			}
+			log.Logger().Info("create latest collect info success")
+
 			txHash, err := client.BroadcastTx(tx)
 			if err != nil {
 				log.Logger().WithField("error", err).Error("failed to broadcast tx")
@@ -970,12 +991,11 @@ func RunCollect(cfg *CollectCfg) error {
 				return err
 			}
 			log.Logger().WithField("txhash", txHash.String()).Info("broadcast the collect tx")
-			err = createLatestCollectInfo(txHash, ords)
-			if err != nil {
-				log.Logger().WithField("error", err).Error("create latest collect info failed")
-				return err
+
+			if err = setLatestCollectInfo(txHash, dao.OrderStatusTxSent); err != nil {
+				log.Logger().WithField("error", err).Info("set setLatestCollectInfo failed")
 			}
-			log.Logger().Info("create latest collect info success")
+
 			err = waitTxOnChain(txHash, client)
 			if err != nil {
 				//fmt.Println("the collect tx on chain failed", err)
@@ -983,11 +1003,11 @@ func RunCollect(cfg *CollectCfg) error {
 				alarm.Slack(context.Background(), "the collect tx on chain failed")
 				return err
 			} else {
-				err = setOrders(ords, CollectFinish)
+				err = setOrders(ords, dao.OrderStatusTxConfirmed)
 				if err != nil {
 					log.Logger().WithField("error", err).Info("set orders state failed")
 				}
-				err = setLatestCollectInfo(txHash)
+				err = setLatestCollectInfo(txHash, dao.OrderStatusTxConfirmed)
 				if err != nil {
 					log.Logger().WithField("error", err).Info("set setLatestCollectInfo failed")
 				}
@@ -1031,9 +1051,9 @@ func btcWithdrawTxTransfer(cfg *CollectCfg, tipper, sender btcutil.Address, tipp
 			}
 			log.Logger().WithField("txhash", txHash.String()).Info("broadcast the withdraw tx")
 			//  2. update orders state to WithdrawStateSend
-			err = updateWithdrawOrdersState(&txhash1, dao.WithdrawStateSend)
+			err = updateWithdrawOrdersState(&txhash1, dao.OrderStatusTxSent)
 			if err != nil {
-				log.Logger().WithField("error", err).WithField("setstate", dao.WithdrawStateSend).Error("update state failed")
+				log.Logger().WithField("error", err).WithField("setstate", dao.OrderStatusTxSent).Error("update state failed")
 				return err
 			}
 		}
