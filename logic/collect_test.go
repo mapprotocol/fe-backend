@@ -11,6 +11,7 @@ import (
 	btcmempool "github.com/btcsuite/btcd/mempool"
 	"github.com/btcsuite/btcd/txscript"
 	"github.com/btcsuite/btcd/wire"
+	localErr "github.com/mapprotocol/fe-backend/resource/err"
 	"github.com/mapprotocol/fe-backend/third-party/mempool"
 	"sync"
 	"testing"
@@ -21,6 +22,70 @@ var (
 	testnet = true
 	priv1   = ""
 )
+
+func makeSimpleTx(feerate, amount int64, sender, receiver btcutil.Address, senderPriv *btcec.PrivateKey,
+	senderOutList []*PrevOutPoint, btcApiClient *mempool.MempoolClient) (*wire.MsgTx, error) {
+
+	commitTx := wire.NewMsgTx(wire.TxVersion)
+	totalSenderAmount := btcutil.Amount(0)
+	TxPrevOutputFetcher := txscript.NewMultiPrevOutFetcher(nil)
+
+	// handle the sender's utxo
+	for _, out := range senderOutList {
+		txOut, err := getTxOutByOutPoint(out.Outpoint, btcApiClient)
+		if err != nil {
+			return nil, err
+		}
+		TxPrevOutputFetcher.AddPrevOut(*out.Outpoint, txOut)
+		in := wire.NewTxIn(out.Outpoint, nil, nil)
+		in.Sequence = defaultSequenceNum
+		commitTx.AddTxIn(in)
+		totalSenderAmount += btcutil.Amount(out.Value)
+	}
+
+	// handle the tx output
+	PkScript0, err := txscript.PayToAddrScript(receiver)
+	if err != nil {
+		return nil, err
+	}
+	commitTx.AddTxOut(&wire.TxOut{
+		PkScript: PkScript0,
+		Value:    amount,
+	})
+	if int64(totalSenderAmount) < amount {
+		return nil, localErr.LowBalanceInHotWallet1
+	}
+	changePkScript, err := txscript.PayToAddrScript(sender)
+	if err != nil {
+		return nil, err
+	}
+	// make the change
+	commitTx.AddTxOut(wire.NewTxOut(0, changePkScript))
+	txsize := btcmempool.GetTxVirtualSize(btcutil.NewTx(commitTx))
+	fee := btcutil.Amount(txsize) * btcutil.Amount(feerate)
+	changeAmount := totalSenderAmount - fee - btcutil.Amount(amount)
+
+	if changeAmount > 0 {
+		commitTx.TxOut[len(commitTx.TxOut)-1].Value = int64(changeAmount)
+	} else {
+		return nil, localErr.LowFeeInHotWalletFee3
+	}
+	// make the signature
+	witnessList := make([]wire.TxWitness, len(commitTx.TxIn))
+	for i := range commitTx.TxIn {
+		txOut := TxPrevOutputFetcher.FetchPrevOutput(commitTx.TxIn[i].PreviousOutPoint)
+		witness, err := txscript.TaprootWitnessSignature(commitTx, txscript.NewTxSigHashes(commitTx, TxPrevOutputFetcher),
+			i, txOut.Value, txOut.PkScript, txscript.SigHashDefault, senderPriv)
+		if err != nil {
+			return nil, err
+		}
+		witnessList[i] = witness
+	}
+	for i := range witnessList {
+		commitTx.TxIn[i].Witness = witnessList[i]
+	}
+	return commitTx, nil
+}
 
 func makeTpAddress(privKey *btcec.PrivateKey, netParams *chaincfg.Params) (btcutil.Address, error) {
 	tapKey := txscript.ComputeTaprootKeyNoScript(privKey.PubKey())
@@ -365,12 +430,13 @@ func Test_fullCollection(t *testing.T) {
 }
 
 func Test_btc(t *testing.T) {
-	amount, err := btcutil.NewAmount(1.2)
+	amount, err := btcutil.NewAmount(1)
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
-	fmt.Println(int64(amount), amount)
+	amount2 := btcutil.Amount(10000)
+	fmt.Println(int64(amount), amount, amount2)
 }
 func Test_makeTxhashAndSimpleTransfer(t *testing.T) {
 	network := &chaincfg.MainNetParams
@@ -485,6 +551,48 @@ func Test_withdraw(t *testing.T) {
 	fmt.Println("tx was on chain")
 }
 
+func Test_SimpleTransfer(t *testing.T) {
+	network := &chaincfg.MainNetParams
+	if testnet {
+		network = &chaincfg.TestNet3Params
+	}
+	client := mempool.NewClient(network)
+	privateKeyBytes, err := hex.DecodeString("8b04a45a7f66395aa3f61fbd2bd1172b0a5f4e64891729dc9e49a9a9a6eb05fc")
+	if err != nil {
+		panic(err)
+	}
+	senderPriv, _ := btcec.PrivKeyFromBytes(privateKeyBytes)
+	sender, _ := btcutil.DecodeAddress("tb1p23dgrhckt9vr24yuqdl3yu2xwj8em3wmn40ly0dtuf0lk0kk80jqesjhk4", network)
+
+	receiver, _ := btcutil.DecodeAddress("tb1p4mflzqjxt7u6a55pz2tpepfygwtkm7gduxhxwumpga36yu8gd7hse02x58", network)
+
+	senderOutlist, err := gatherUTXO3(sender, client)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	feerate := int64(25)
+
+	tx, err := makeSimpleTx(feerate, 10000, sender, receiver, senderPriv, senderOutlist, client)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	fmt.Println("txhash1", tx.TxHash().String())
+	txHash, err := client.BroadcastTx(tx)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	fmt.Println("txhash2", txHash.String())
+	err = waitTxOnChain(txHash, client)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	fmt.Println("tx was on chain")
+}
 func Test_channe01(t *testing.T) {
 	ticker := time.NewTicker(10 * time.Second)
 	defer ticker.Stop()
