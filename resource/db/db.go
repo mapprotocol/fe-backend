@@ -25,6 +25,7 @@ func Init(user, password, host, port, name string) {
 				Colorful: false,
 			},
 		),
+		TranslateError: true,
 	})
 	if err != nil {
 		panic(err)

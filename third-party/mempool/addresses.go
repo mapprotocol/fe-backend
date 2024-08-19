@@ -48,6 +48,9 @@ func (c *MempoolClient) ListUnspent(address btcutil.Address) ([]*UnspentOutput, 
 		if err != nil {
 			return nil, err
 		}
+		if !utxo.Status.Confirmed {
+			continue
+		}
 		unspentOutputs = append(unspentOutputs, &UnspentOutput{
 			Outpoint: wire.NewOutPoint(txHash, uint32(utxo.Vout)),
 			Output:   wire.NewTxOut(utxo.Value, address.ScriptAddress()),

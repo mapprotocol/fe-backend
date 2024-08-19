@@ -21,10 +21,20 @@ const (
 	OrderStag2
 )
 
+//const (
+//	OrderStatusPending = iota + 1
+//	OrderStatusConfirmed
+//	OrderStatusFailed
+//)
+
+const Stage1StatusConfirmed = 1
+
 const (
-	OrderStatusPending = iota + 1
-	OrderStatusConfirmed
-	OrderStatusFailed
+	OrderStatusTxPrepareSend = iota + 1
+	OrderStatusTxSent
+	OrderStatusTxFailed
+	OrderStatusTxConfirmed
+	OrderStatusCompleted
 )
 
 type Order struct {

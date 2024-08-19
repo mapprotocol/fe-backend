@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/mapprotocol/fe-backend/dao"
 	"github.com/mapprotocol/fe-backend/params"
 	"log"
@@ -440,7 +441,7 @@ func TestName(t *testing.T) {
 }
 
 func TestParseTONToEVMEvent(t *testing.T) {
-	data := "2274653663636b45424177454165414143474559414142644964756745414450427877454341476341424e55434141414141594153327746486b55726d2b33474f766675536c4570535232536e457a7530472b5632576d582b695a5764467941414141414a55432b51414179454147414141414141414141414f4e7a6b2f6f3764344a724d36746f726e4e4f506376464a7347392f4141414141414141414141414141414141414141414141414141414a776e746822"
+	data := "2274653663636b4542417745416541414347455941414264496475674441464e4c6267454341476341424e5543414141414159414a315a73635866366e306a543454506833456446497a54775246714f54474b3056557a6274352b4f7469654141414141536f46386741417945414741414141414141414141695134446a366257657a3264486a4b3355595458302f4c6a6b5263394141414141414141414141414141414141414141414141414141442f4130487122"
 	logData, err := hex.DecodeString(data)
 	if err != nil {
 		t.Fatal(err)
@@ -455,11 +456,8 @@ func TestParseTONToEVMEvent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	from, err := slice.LoadRef()
-	if err != nil {
-		t.Fatal(err)
-	}
-	to, err := slice.LoadRef()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -485,6 +483,10 @@ func TestParseTONToEVMEvent(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	to, err := slice.LoadRef()
+	if err != nil {
+		t.Fatal(err)
+	}
 	dstChain, err := to.LoadUInt(64)
 	if err != nil {
 		t.Fatal(err)
@@ -493,11 +495,15 @@ func TestParseTONToEVMEvent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Log("======== receiver: ", common.BytesToAddress(receiverBigInt.Bytes()))
+
 	receiver := "0x" + hex.EncodeToString(receiverBigInt.Bytes())
 	tokenOut, err := to.LoadBigUInt(160)
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Log("======== tokenOut: ", common.BytesToAddress(tokenOut.Bytes()))
+
 	dstToken := "0x" + hex.EncodeToString(tokenOut.Bytes())
 	relayAmount, err := slice.LoadUInt(32)
 	if err != nil {
@@ -525,7 +531,7 @@ func TestParseTONToEVMEvent(t *testing.T) {
 		Receiver:            receiver,
 		Action:              dao.OrderActionToEVM,
 		Stage:               dao.OrderStag1,
-		Status:              dao.OrderStatusConfirmed,
+		Status:              dao.OrderStatusTxConfirmed,
 		Slippage:            slippage,
 	}
 	t.Logf("order: %+v\n", order)

@@ -29,7 +29,7 @@ func main() {
 	dbConfig := viper.GetStringMapString("database")
 	db.Init(dbConfig["user"], dbConfig["password"], dbConfig["host"], dbConfig["port"], dbConfig["name"])
 
-	//task.InitMempoolClient(viper.GetString("network"))
+	task.InitMempoolClient(viper.GetString("network"))
 
 	tx.InitTransactor(viper.GetStringMapString("ChainPool")["senderprivatekey"])
 
@@ -42,7 +42,7 @@ func main() {
 	task.Init()
 
 	runTask()
-	//runBTCTask()
+	runBTCTask()
 	runTONTask()
 
 	sigs := make(chan os.Signal, 1)

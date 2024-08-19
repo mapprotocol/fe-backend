@@ -4,9 +4,11 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	"github.com/mapprotocol/fe-backend/third-party/filter"
 	blog "log"
 	"math/big"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/btcsuite/btcd/btcutil"
@@ -19,7 +21,6 @@ import (
 	"github.com/mapprotocol/fe-backend/params"
 	"github.com/mapprotocol/fe-backend/resource/log"
 	"github.com/mapprotocol/fe-backend/third-party/butter"
-	"github.com/mapprotocol/fe-backend/third-party/filter"
 	"github.com/mapprotocol/fe-backend/third-party/mempool"
 	"github.com/mapprotocol/fe-backend/utils"
 	"github.com/mapprotocol/fe-backend/utils/alarm"
@@ -28,7 +29,6 @@ import (
 
 const (
 	SwapType = "exactIn"
-	Entrance = "Butter+"
 	Sender   = "0x0Eb16A9cFDf8e3A4471EF190eE63de5A24f38787"
 )
 
@@ -67,11 +67,17 @@ func InitMempoolClient(network string) {
 
 // HandlePendingOrdersOfFirstStageFromBTCToEVM filter pending orders of first stage and check relay address balance.
 // if balance is enough update order status to confirmed
+// action=1, stage=1, status=1(TxPrepareSend) ==> stage=1, status=4(TxConfirmed)
 func HandlePendingOrdersOfFirstStageFromBTCToEVM() {
-	order := dao.NewOrder()
+	order := dao.BitcoinOrder{
+		SrcChain: params.BTCChainID,
+		Action:   dao.OrderActionToEVM,
+		Stage:    dao.OrderStag1,
+		Status:   dao.OrderStatusTxPrepareSend,
+	}
 	for {
 		for id := uint64(1); ; {
-			orders, err := order.GetOldest10ByStatus(id, dao.OrderActionToEVM, dao.OrderStag1, dao.OrderStatusPending)
+			orders, err := order.GetOldest10ByID(id)
 			if err != nil {
 				log.Logger().WithField("error", err.Error()).Error("failed to get pending status order")
 				alarm.Slack(context.Background(), "failed to get pending status order")
@@ -90,28 +96,6 @@ func HandlePendingOrdersOfFirstStageFromBTCToEVM() {
 				if i == length-1 {
 					id = o.ID + 1
 				}
-				if o.InTxHash == "" {
-					continue
-				}
-
-				hash, err := chainhash.NewHashFromStr(o.InTxHash)
-				if err != nil {
-					log.Logger().WithField("txHash", o.InTxHash).WithField("error", err.Error()).Error("failed to creates a hash from a hash string")
-					alarm.Slack(context.Background(), "failed to creates a hash from a hash string")
-					continue
-				}
-
-				ret, err := btcApiClient.TransactionStatus(hash)
-				if err != nil {
-					log.Logger().WithField("error", err.Error()).Error("failed to get transaction status")
-					alarm.Slack(context.Background(), "failed to get transaction status")
-					continue
-				}
-				// todo tx failed
-				if !ret.Confirmed {
-					continue
-				}
-
 				relayer, err := btcutil.DecodeAddress(o.Relayer, netParams)
 				if err != nil {
 					log.Logger().WithField("relayer", o.Relayer).WithField("error", err.Error()).Error("failed to decode relayer")
@@ -125,22 +109,22 @@ func HandlePendingOrdersOfFirstStageFromBTCToEVM() {
 					alarm.Slack(context.Background(), "failed to list unspent")
 					continue
 				}
-				if len(utxo) != 1 {
-					//log.Logger().WithField("relayer", o.Relayer).Error("invalid utxo")
+				if len(utxo) != 1 { // todo get first utxo ?
+					log.Logger().WithField("relayer", o.Relayer).Debug("invalid utxo")
 					continue
 				}
 
-				//tx, err := btcApiClient.GetRawTransaction(hash)
-				//if err != nil {
-				//	log.Logger().WithField("hash", o.InTxHash).WithField("error", err.Error()).Error("failed to get raw transaction")
-				//	continue
-				//}
-				inAmount := int64(float64(utxo[0].Output.Value) * 0.997) // todo
-				update := &dao.Order{
-					Status:   dao.OrderStatusConfirmed,
-					InAmount: strconv.FormatInt(inAmount, 10),
+				inAmount := new(big.Float).Quo(new(big.Float).SetInt64(utxo[0].Output.Value), big.NewFloat(params.BTCDecimal))
+				_, afterAmount := deductFees(new(big.Float).SetInt64(utxo[0].Output.Value), FeeRate)
+				afterAmountFloat := new(big.Float).Quo(afterAmount, big.NewFloat(params.BTCDecimal))
+				update := &dao.BitcoinOrder{
+					InAmount:    inAmount.Text('f', -1),
+					InAmountSat: strconv.FormatInt(utxo[0].Output.Value, 10),
+					RelayToken:  params.BTCTokenAddress,
+					RelayAmount: afterAmountFloat.Text('f', 8),
+					Status:      dao.OrderStatusTxConfirmed,
 				}
-				if err := dao.NewOrderWithID(o.ID).Updates(update); err != nil {
+				if err := dao.NewBitcoinOrderWithID(o.ID).Updates(update); err != nil {
 					log.Logger().WithField("update", utils.JSON(update)).WithField("error", err.Error()).Error("failed to update order status")
 					alarm.Slack(context.Background(), "failed to update order status")
 					time.Sleep(5 * time.Second)
@@ -155,11 +139,17 @@ func HandlePendingOrdersOfFirstStageFromBTCToEVM() {
 
 // HandleConfirmedOrdersOfFirstStageFromBTCToEVM filter confirmed orders of first stage and send transaction to chain pool.
 // set order stage to stage2 and set status to pending
+// action=1, stage=1, status=4(TxConfirmed) ==> stage=2, status=1(TxPrepareSend) ==> stage=2, status=2(TxSent)
 func HandleConfirmedOrdersOfFirstStageFromBTCToEVM() {
-	order := dao.NewOrder()
+	order := dao.BitcoinOrder{
+		SrcChain: params.BTCChainID,
+		Action:   dao.OrderActionToEVM,
+		Stage:    dao.OrderStag1,
+		Status:   dao.OrderStatusTxConfirmed,
+	}
 	for {
 		for id := uint64(1); ; {
-			orders, err := order.GetOldest10ByStatus(id, dao.OrderActionToEVM, dao.OrderStag1, dao.OrderStatusConfirmed)
+			orders, err := order.GetOldest10ByID(id)
 			if err != nil {
 				// todo query parameters write to log
 				log.Logger().WithField("error", err.Error()).Error("failed to get confirmed status order")
@@ -170,7 +160,7 @@ func HandleConfirmedOrdersOfFirstStageFromBTCToEVM() {
 
 			length := len(orders)
 			if length == 0 {
-				log.Logger().Info("not found confirmed status order", "time", time.Now())
+				log.Logger().WithField("time", time.Now()).Info("not found confirmed status order")
 				time.Sleep(10 * time.Second)
 				break
 			}
@@ -179,104 +169,152 @@ func HandleConfirmedOrdersOfFirstStageFromBTCToEVM() {
 				if i == length-1 {
 					id = o.ID + 1
 				}
-				amount, ok := new(big.Int).SetString(o.InAmount, 10)
+
+				wbtc := params.WBTCOfChainPool
+				decimal := params.WBTCDecimalOfChainPool
+				chainID := params.ChainIDOfChainPool
+				chainInfo := &dao.ChainPool{}
+				if isMultiChainPool && o.SrcChain == params.ChainIDOfEthereum {
+					wbtc = params.WBTCOfEthereum
+					decimal = params.WBTCDecimalOfEthereum
+					chainID = params.ChainIDOfEthereum
+					chainInfo, err = dao.NewChainPoolWithChainID(params.ChainIDOfEthereum).First()
+					if err != nil {
+						log.Logger().WithField("chainID", params.ChainIDOfChainPool).WithField("error", err.Error()).Error("failed to get chain info")
+						alarm.Slack(context.Background(), "failed to get chain info")
+						time.Sleep(5 * time.Second)
+						continue
+
+					}
+				} else {
+					chainInfo, err = dao.NewChainPoolWithChainID(params.ChainIDOfChainPool).First()
+					if err != nil {
+						log.Logger().WithField("chainID", params.ChainIDOfChainPool).WithField("error", err.Error()).Error("failed to get chain info")
+						alarm.Slack(context.Background(), "failed to get chain info")
+						time.Sleep(5 * time.Second)
+						continue
+					}
+				}
+
+				multiplier, err := strconv.ParseFloat(chainInfo.GasLimitMultiplier, 64)
+				if err != nil {
+					fields := map[string]interface{}{
+						"chainID":            params.ChainIDOfChainPool,
+						"gasLimitMultiplier": chainInfo.GasLimitMultiplier,
+						"error":              err,
+					}
+					log.Logger().WithFields(fields).Error("failed to parse string to float")
+					alarm.Slack(context.Background(), "failed to parse string to float")
+					continue
+				}
+				transactor, err := tx.NewTransactor(chainInfo.ChainRPC, chainInfo.FeRouterContract, multiplier)
+				if err != nil {
+					fields := map[string]interface{}{
+						"chainID":            params.ChainIDOfChainPool,
+						"rpc":                chainInfo.ChainRPC,
+						"feRouterContract":   chainInfo.FeRouterContract,
+						"gasLimitMultiplier": chainInfo.GasLimitMultiplier,
+						"error":              err,
+					}
+					log.Logger().WithFields(fields).Error("failed to create transactor")
+					alarm.Slack(context.Background(), "failed to create transactor")
+					time.Sleep(5 * time.Second)
+					continue
+				}
+
+				orderID := utils.Uint64ToByte32(o.ID)
+				amount, ok := new(big.Rat).SetString(o.RelayAmount)
 				if !ok {
 					fields := map[string]interface{}{
 						"orderId": o.ID,
-						"amount":  o.InAmount,
+						"amount":  o.RelayAmount,
 						"error":   err,
 					}
 					log.Logger().WithFields(fields).Error("failed to parse string to big int")
 					alarm.Slack(context.Background(), "failed to parse string to big int")
 					continue
 				}
-				amount = new(big.Int).Quo(amount, big.NewInt(1e18)) // todo
+				amount = new(big.Rat).Mul(amount, new(big.Rat).SetFloat64(decimal))
+				amountInt := amount.Num()
 
-				request := &butter.RouterAndSwapRequest{
-					//FromChainID:     o.SrcChain,
-					FromChainID: params.ChainIDOfChainPool, // todo
-					ToChainID:   o.DstChain,
-					//Amount:          o.InAmount,  //
-					Amount:          amount.String(), // todo
-					TokenInAddress:  params.WBTCOfChainPool,
-					TokenOutAddress: o.DstToken,
-					Type:            SwapType,
-					Slippage:        o.Slippage, // todo
-					//From:            o.Sender,
-					From:     Sender, // todo
-					Receiver: o.Receiver,
-				}
-				data, err := butter.RouteAndSwap(request)
-				if err != nil {
-					log.Logger().WithField("error", err.Error()).Error("failed to create router and swap request")
-					alarm.Slack(context.Background(), "failed to create router and swap request")
-					continue
-				}
-
-				chainInfo, err := dao.NewChainPoolWithChainID(params.ChainIDOfChainPool).First()
-				if err != nil {
-					log.Logger().WithField("chainID", o.DstChain).WithField("error", err.Error()).Error("failed to get chain info")
-					alarm.Slack(context.Background(), "failed to get chain info")
-					time.Sleep(5 * time.Second)
-					continue
-				}
-
-				multiplier, err := strconv.ParseFloat(chainInfo.GasLimitMultiplier, 64)
-				if err != nil {
-					log.Logger().WithField("chainID", o.DstChain).WithField("error", err.Error()).Error("failed to parse string to float")
-					alarm.Slack(context.Background(), "failed to parse string to float")
-					time.Sleep(5 * time.Second)
-					continue
-				}
-				transactor, err := tx.NewTransactor(chainInfo.ChainRPC, chainInfo.FeRouterContract, multiplier)
-				if err != nil {
-					log.Logger().WithField("endpoint", chainInfo.ChainRPC).WithField("error", err.Error()).Error("failed to create transactor")
-					alarm.Slack(context.Background(), "failed to create transactor")
-					time.Sleep(5 * time.Second)
-					continue
-				}
-
-				decodeData, err := DecodeData(data.Data)
-				if err != nil {
-					log.Logger().WithField("data", data.Data).WithField("error", err.Error()).Error("failed to decode call data")
-					alarm.Slack(context.Background(), "failed to decode call data")
-					continue
-				}
-
-				orderID := utils.Uint64ToByte32(o.ID)
-				v := ""
-				if data.Value[:2] == "0x" || data.Value[:2] == "0X" {
-					v = data.Value[2:]
-				}
-				value, ok := new(big.Int).SetString(v, 16)
-				if !ok {
-					log.Logger().WithField("value", v).Error("failed to parse string to big int")
-					alarm.Slack(context.Background(), "failed to parse string to big int")
-					continue
-				}
-				hash, err := transactor.DeliverAndSwap(orderID, Initiator, common.HexToAddress(params.WBTCOfChainPool), amount, decodeData.SwapData, decodeData.BridgeData, decodeData.FeeData, value)
-				if err != nil {
-					fields := map[string]interface{}{
-						"orderID":    hex.EncodeToString(orderID[:]),
-						"initiator":  Initiator,
-						"token":      params.WBTCOfChainPool,
-						"amount":     value,
-						"SwapData":   hex.EncodeToString(decodeData.SwapData),
-						"BridgeData": hex.EncodeToString(decodeData.BridgeData),
-						"FeeData":    hex.EncodeToString(decodeData.FeeData),
-						"error":      err.Error(),
+				txHash := common.Hash{}
+				if o.DstChain == chainID && strings.ToLower(o.DstToken) == strings.ToLower(wbtc) {
+					update := &dao.BitcoinOrder{
+						Stage:  dao.OrderStag2,
+						Status: dao.OrderStatusTxPrepareSend,
 					}
-					log.Logger().WithFields(fields).Error("failed to send deliver and swap transaction")
-					alarm.Slack(context.Background(), "failed to send deliver and swap transaction")
-					continue
+					if err := dao.NewBitcoinOrderWithID(o.ID).Updates(update); err != nil {
+						log.Logger().WithField("update", utils.JSON(update)).WithField("error", err.Error()).Error("failed to update order status")
+						alarm.Slack(context.Background(), "failed to update order status")
+						time.Sleep(5 * time.Second)
+						continue
+					}
+
+					txHash, err = deliver(transactor, common.HexToAddress(wbtc), orderID, amountInt, common.HexToAddress(o.Receiver))
+					if err != nil {
+						time.Sleep(5 * time.Second)
+						continue
+					}
+				} else {
+					request := &butter.RouterAndSwapRequest{
+						//FromChainID:     o.SrcChain,
+						FromChainID: params.ChainIDOfChainPool, // todo
+						ToChainID:   o.DstChain,
+						//Amount:          o.InAmount,  //
+						Amount:          o.RelayAmount, // todo
+						TokenInAddress:  params.WBTCOfChainPool,
+						TokenOutAddress: o.DstToken,
+						Type:            SwapType,
+						Slippage:        o.Slippage / 3 * 2, // todo
+						//From:            o.Sender,
+						From:     Sender, // todo
+						Receiver: o.Receiver,
+					}
+					data, err := butter.RouteAndSwap(request)
+					if err != nil {
+						log.Logger().WithField("error", err.Error()).Error("failed to create router and swap request")
+						alarm.Slack(context.Background(), "failed to create router and swap request")
+						continue
+					}
+
+					decodeData, err := DecodeData(data.Data)
+					if err != nil {
+						log.Logger().WithField("data", data.Data).WithField("error", err.Error()).Error("failed to decode call data")
+						alarm.Slack(context.Background(), "failed to decode call data")
+						continue
+					}
+
+					value, ok := new(big.Int).SetString(utils.TrimHexPrefix(data.Value), 16)
+					if !ok {
+						log.Logger().WithField("value", utils.TrimHexPrefix(data.Value)).Error("failed to parse string to big int")
+						alarm.Slack(context.Background(), "failed to parse string to big int")
+						continue
+					}
+
+					update := &dao.BitcoinOrder{
+						Stage:  dao.OrderStag2,
+						Status: dao.OrderStatusTxPrepareSend,
+					}
+					if err := dao.NewBitcoinOrderWithID(o.ID).Updates(update); err != nil {
+						log.Logger().WithField("update", utils.JSON(update)).WithField("error", err.Error()).Error("failed to update order status")
+						alarm.Slack(context.Background(), "failed to update order status")
+						time.Sleep(5 * time.Second)
+						continue
+					}
+
+					txHash, err = deliverAndSwap(transactor, common.HexToAddress(wbtc), orderID, amountInt, decodeData, value)
+					if err != nil {
+						time.Sleep(5 * time.Second)
+						continue
+					}
 				}
 
-				update := &dao.Order{
+				update := &dao.BitcoinOrder{
 					Stage:     dao.OrderStag2,
-					Status:    dao.OrderStatusPending,
-					OutTxHash: hash.String(),
+					Status:    dao.OrderStatusTxSent,
+					OutTxHash: txHash.String(),
 				}
-				if err := dao.NewOrderWithID(o.ID).Updates(update); err != nil {
+				if err := dao.NewBitcoinOrderWithID(o.ID).Updates(update); err != nil {
 					log.Logger().WithField("update", utils.JSON(update)).WithField("error", err.Error()).Error("failed to update order status")
 					alarm.Slack(context.Background(), "failed to update order status")
 					time.Sleep(5 * time.Second)
@@ -291,11 +329,17 @@ func HandleConfirmedOrdersOfFirstStageFromBTCToEVM() {
 
 // HandlePendingOrdersOfSecondStageFromBTCToEVM filter pending orders of second stage and check transaction is confirmed.
 // if transaction is confirmed, update order status to confirmed.
+// action=1, stage=2, status=2(TxSent) ==> status=3(TxFailed)/4(TxConfirmed)
 func HandlePendingOrdersOfSecondStageFromBTCToEVM() {
-	order := dao.NewOrder()
+	order := dao.BitcoinOrder{
+		SrcChain: params.BTCChainID,
+		Action:   dao.OrderActionToEVM,
+		Stage:    dao.OrderStag2,
+		Status:   dao.OrderStatusTxSent,
+	}
 	for {
 		for id := uint64(1); ; {
-			orders, err := order.GetOldest10ByStatus(id, dao.OrderActionToEVM, dao.OrderStag2, dao.OrderStatusPending)
+			orders, err := order.GetOldest10ByID(id)
 			if err != nil {
 				log.Logger().WithField("error", err.Error()).Error("failed to get confirmed status order")
 				alarm.Slack(context.Background(), "failed to get confirmed status order")
@@ -350,13 +394,13 @@ func HandlePendingOrdersOfSecondStageFromBTCToEVM() {
 					continue
 				}
 
-				update := &dao.Order{
-					Status: dao.OrderStatusConfirmed,
+				update := &dao.BitcoinOrder{
+					Status: dao.OrderStatusTxConfirmed,
 				}
 				if status == types.ReceiptStatusFailed {
-					update.Status = dao.OrderStatusFailed
+					update.Status = dao.OrderStatusTxFailed
 				}
-				if err := dao.NewOrderWithID(o.ID).Updates(update); err != nil {
+				if err := dao.NewBitcoinOrderWithID(o.ID).Updates(update); err != nil {
 					log.Logger().WithField("update", utils.JSON(update)).WithField("error", err.Error()).Error("failed to update order status")
 					alarm.Slack(context.Background(), "failed to update order status")
 					time.Sleep(5 * time.Second)
@@ -368,55 +412,14 @@ func HandlePendingOrdersOfSecondStageFromBTCToEVM() {
 	}
 }
 
-//func HandlePendingOrdersOfFirstStageFromEVM() {
-//	order := dao.NewOrder()
-//	for {
-//		for id := uint64(1); ; {
-//			orders, err := order.GetOldest10ByStatus(id, dao.OrderActionFromEVM, dao.OrderStag1, dao.OrderStatusPending)
-//			if err != nil {
-//				log.Logger().WithField("error", err.Error()).Error("failed to get pending status order")
-//				alarm.Slack(context.Background(), "failed to get pending status order")
-//				time.Sleep(5 * time.Second)
-//				continue
-//			}
-//
-//			length := len(orders)
-//			if length == 0 {
-//				log.Logger().Info("not found pending status order", "time", time.Now())
-//				time.Sleep(10 * time.Second)
-//				break
-//			}
-//
-//			for i, o := range orders {
-//				if i == length-1 {
-//					id = o.ID + 1
-//				}
-//				filter.GetLogs(o.ID, o.DstChain, o.SrcToken, uint8(20))
-//
-//				update := &dao.Order{
-//					ID:       o.ID,
-//					Status:   dao.OrderStatusConfirmed,
-//					InAmount: "0", // todo
-//				}
-//				if err := dao.NewOrder().Updates(update); err != nil {
-//					log.Logger().WithField("update", utils.JSON(update)).WithField("error", err.Error()).Error("failed to update order status")
-//					alarm.Slack(context.Background(), "failed to update order status")
-//					time.Sleep(5 * time.Second)
-//					continue
-//				}
-//
-//			}
-//			time.Sleep( * time.Second)
-//		}
-//	}
-//}
-
 // HandlePendingOrdersOfFirstStageFromEVM filter the OnReceived event log.
 // If this log is found, update order status to confirmed
-// action = 2, stage = 1, status = 1 ==> status = 2
+// create order from evm ( action=2, stage=1, status=4(TxConfirmed))
 // todo multi chain pool
 func HandlePendingOrdersOfFirstStageFromEVM() {
-	filterLog := dao.NewFilterLog(params.ChainIDOfChainPool, params.OnReceivedTopic)
+	chainID := params.ChainIDOfChainPool
+	topic := params.OnReceivedTopic
+	filterLog := dao.NewFilterLog(chainID, topic)
 	for {
 		gotLog, err := filterLog.First()
 		if err != nil {
@@ -466,6 +469,7 @@ func HandlePendingOrdersOfFirstStageFromEVM() {
 				}
 				log.Logger().WithFields(fields).Error("failed to decode log data")
 				alarm.Slack(context.Background(), "failed to decode log data")
+				UpdateLogID(chainID, topic, lg.Id)
 				continue
 			}
 
@@ -480,14 +484,14 @@ func HandlePendingOrdersOfFirstStageFromEVM() {
 				}
 				log.Logger().WithFields(fields).Error("failed to unpack log data")
 				alarm.Slack(context.Background(), "failed to unpack log data")
+				UpdateLogID(chainID, topic, lg.Id)
 				continue
 			}
 
 			_, afterAmount := deductFees(new(big.Float).SetInt(onReceived.ChainPoolTokenAmount), FeeRate)
-			afterAmountFloat := new(big.Float).Quo(afterAmount, big.NewFloat(params.USDTDecimalOfChainPool))
-			order := dao.NewOrder()
 			if onReceived.DstChain.String() == params.TONChainID {
-				order = &dao.Order{
+				afterAmountFloat := new(big.Float).Quo(afterAmount, big.NewFloat(params.USDTDecimalOfChainPool))
+				order := &dao.Order{
 					OrderIDFromContract: onReceived.BridgeId,
 					SrcChain:            onReceived.SrcChain.String(),
 					SrcToken:            string(onReceived.SrcToken),
@@ -500,31 +504,63 @@ func HandlePendingOrdersOfFirstStageFromEVM() {
 					Receiver:            string(onReceived.Receiver),
 					Action:              dao.OrderActionFromEVM,
 					Stage:               dao.OrderStag1,
-					Status:              dao.OrderStatusConfirmed,
+					Status:              dao.OrderStatusTxConfirmed,
 					Slippage:            onReceived.Slippage,
+				}
+				if err := order.Create(); err != nil {
+					log.Logger().WithField("order", utils.JSON(order)).WithField("error", err).Error("failed to create order")
+					alarm.Slack(context.Background(), "failed to update order status")
+					UpdateLogID(chainID, topic, lg.Id)
+					continue
+				}
+			} else if onReceived.DstChain.String() == params.BTCChainID {
+				inAmount, err := strconv.ParseFloat(onReceived.InAmount, 10)
+				if err != nil {
+					log.Logger().WithField("amount", onReceived.InAmount).WithField("error", err.Error()).Error("failed to parse in amount")
+					alarm.Slack(context.Background(), "failed to parse in amount")
+					UpdateLogID(chainID, topic, lg.Id)
+					continue
+				}
+				inAmountSat, err := btcutil.NewAmount(inAmount)
+				if err != nil {
+					log.Logger().WithField("amount", onReceived.InAmount).WithField("error", err.Error()).Error("failed to convert in amount to satoshi")
+					alarm.Slack(context.Background(), "failed to convert in amount to satoshi")
+					UpdateLogID(chainID, topic, lg.Id)
+					continue
+				}
+
+				afterAmountFloat := new(big.Float).Quo(afterAmount, big.NewFloat(params.WBTCDecimalOfChainPool))
+				order := &dao.BitcoinOrder{
+					SrcChain:    onReceived.SrcChain.String(),
+					SrcToken:    string(onReceived.SrcToken),
+					Sender:      string(onReceived.Sender),
+					InAmount:    onReceived.InAmount,
+					InAmountSat: strconv.FormatInt(int64(inAmountSat), 10),
+					RelayToken:  params.WBTCOfChainPool,
+					RelayAmount: afterAmountFloat.String(),
+					DstChain:    onReceived.DstChain.String(),
+					DstToken:    string(onReceived.DstToken),
+					Receiver:    string(onReceived.Receiver),
+					Action:      dao.OrderActionFromEVM,
+					Stage:       dao.OrderStag1,
+					Status:      dao.OrderStatusTxConfirmed,
+					Slippage:    onReceived.Slippage,
 				}
 
 				if err := order.Create(); err != nil {
 					log.Logger().WithField("order", utils.JSON(order)).WithField("error", err).Error("failed to create order")
 					alarm.Slack(context.Background(), "failed to update order status")
+					UpdateLogID(chainID, topic, lg.Id)
 					continue
 				}
 			} else {
 				log.Logger().WithField("dstChain", onReceived.DstChain.String()).Error("unsupported dst chain")
 				alarm.Slack(context.Background(), fmt.Sprintf("unsupported dst chain: %s", onReceived.DstChain.String()))
-			}
-
-			if err := filterLog.UpdateLatestLogID(lg.Id); err != nil {
-				fields := map[string]interface{}{
-					"chainID":     params.ChainIDOfChainPool,
-					"topic":       params.OnReceivedTopic,
-					"latestLogID": lg.Id,
-					"error":       err.Error(),
-				}
-				log.Logger().WithFields(fields).Error("failed to update filter log")
-				alarm.Slack(context.Background(), "failed to update filter log")
+				UpdateLogID(chainID, topic, lg.Id)
 				continue
 			}
+
+			UpdateLogID(params.ChainIDOfChainPool, params.OnReceivedTopic, lg.Id)
 		}
 
 		time.Sleep(10 * time.Second)
@@ -584,7 +620,7 @@ func HandlePendingOrdersOfFirstStageFromEVM() {
 //					continue
 //				}
 //
-//				update := &dao.Order{
+//				update := &dao.BitcoinOrder{
 //					ID:        o.ID,
 //					Stage:     dao.OrderStag2,
 //					Status:    dao.OrderStatusPending,
@@ -645,7 +681,7 @@ func HandlePendingOrdersOfFirstStageFromEVM() {
 //				}
 //				// todo get block number to judge whether the transaction is confirmed
 //
-//				update := &dao.Order{
+//				update := &dao.BitcoinOrder{
 //					Status: dao.OrderStatusConfirmed,
 //				}
 //				if err := dao.NewOrderWithID(o.ID).Updates(update); err != nil {
@@ -682,6 +718,19 @@ func TransactionIsConfirmed(txHash string) (bool, error) {
 //	afterAmount = new(big.Int).Sub(amount, feeAmount)
 //	return feeAmount, afterAmount
 //}
+
+func UpdateLogID(chainID, topic string, logID uint64) {
+	if err := dao.NewFilterLog(chainID, topic).UpdateLatestLogID(logID); err != nil {
+		fields := map[string]interface{}{
+			"chainID":     chainID,
+			"topic":       topic,
+			"latestLogID": logID,
+			"error":       err.Error(),
+		}
+		log.Logger().WithFields(fields).Error("failed to update filter log")
+		alarm.Slack(context.Background(), "failed to update filter log")
+	}
+}
 
 func deductFees(amount, feeRate *big.Float) (feeAmount, afterAmount *big.Float) {
 	log.Logger().WithField("amount", amount).WithField("feeRate", feeRate).Info("before deduction of fees")
