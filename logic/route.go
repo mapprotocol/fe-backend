@@ -756,7 +756,7 @@ func GetSwapFromEVMToTON(srcChain *big.Int, srcToken, sender, amount string, dst
 	return ret, "", resp.CodeSuccess
 }
 
-func GetSwapFromBitcoinToEVM(srcChain, srcToken, sender string, amount *big.Float, dstChain, dstToken, receiver string, slippage uint64) (ret *entity.SwapResponse, msg string, code int) {
+func GetSwapFromBitcoinToEVM(srcChain, srcToken, sender string, amount *big.Float, amountBigInt *big.Int, dstChain, dstToken, receiver string, slippage uint64) (ret *entity.SwapResponse, msg string, code int) {
 	if amount.Cmp(WBTCLimit) == -1 {
 		return ret, "", resp.CodeAmountTooFew
 	}
@@ -814,7 +814,7 @@ func GetSwapFromBitcoinToEVM(srcChain, srcToken, sender string, amount *big.Floa
 	ret = &entity.SwapResponse{
 		To:      address.String(),
 		Data:    "",
-		Value:   amount.Text('f', -1),
+		Value:   "0x" + amountBigInt.Text(16),
 		ChainId: constants.BTCChainID,
 	}
 	return ret, "", resp.CodeSuccess

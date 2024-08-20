@@ -293,7 +293,11 @@ func Swap(c *gin.Context) {
 			return
 		}
 	} else if req.SrcChain == constants.BTCChainID {
-		ret, msg, code = logic.GetSwapFromBitcoinToEVM(req.SrcChain, req.SrcToken, req.Sender, amountBigFloat, req.DstChain, req.DstToken, req.Receiver, slippage)
+		exp := new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(req.Decimal)), nil)
+		amount := new(big.Float).Mul(amountBigFloat, new(big.Float).SetInt(exp))
+		amountBigInt, _ := amount.Int(nil)
+
+		ret, msg, code = logic.GetSwapFromBitcoinToEVM(req.SrcChain, req.SrcToken, req.Sender, amountBigFloat, amountBigInt, req.DstChain, req.DstToken, req.Receiver, slippage)
 		if code == resp.CodeExternalServerError {
 			resp.ExternalServerError(c, msg)
 			return
