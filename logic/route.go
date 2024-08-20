@@ -611,7 +611,11 @@ func GetSwapFromTONToEVM(sender string, dstChain, receiver, feeCollector, feeRat
 
 	balance, err := getChainPoolUSDTBalance(dstChain)
 	if err != nil {
-		log.Logger().WithField("error", err).Error("failed to get ton router balance")
+		params := map[string]interface{}{
+			"dstChain": dstChain,
+			"error":    err,
+		}
+		log.Logger().WithFields(params).Error("failed to get ton router balance")
 		return ret, "", resp.CodeInternalServerError
 	}
 	if amountOut.Cmp(balance) == 1 {
@@ -759,7 +763,11 @@ func GetSwapFromBitcoinToEVM(srcChain, srcToken, sender string, amount *big.Floa
 
 	balance, err := getChainPoolWBTCBalance(dstChain)
 	if err != nil {
-		log.Logger().WithField("error", err).Error("failed to get ton router balance")
+		params := map[string]interface{}{
+			"dstChain": dstChain,
+			"error":    err,
+		}
+		log.Logger().WithFields(params).Error("failed to get wbtc balance")
 		return ret, "", resp.CodeInternalServerError
 	}
 	if amount.Cmp(balance) == 1 {
@@ -1142,7 +1150,7 @@ func getChainPoolWBTCBalance(dstChain string) (balance *big.Float, err error) {
 	if err != nil {
 		params := map[string]interface{}{
 			"chainID":      chainInfo.ChainID,
-			"USDTContract": chainInfo.WBTCContract,
+			"WBTCContract": chainInfo.WBTCContract,
 			"error":        err,
 		}
 		log.Logger().WithFields(params).Error("failed to new erc20 caller")
@@ -1153,7 +1161,7 @@ func getChainPoolWBTCBalance(dstChain string) (balance *big.Float, err error) {
 	if err != nil {
 		params := map[string]interface{}{
 			"chainID":      chainInfo.ChainID,
-			"USDTContract": chainInfo.WBTCContract,
+			"WBTCContract": chainInfo.WBTCContract,
 			"account":      chainInfo.ChainPoolContract,
 			"error":        err,
 		}
