@@ -7,7 +7,6 @@ import (
 	"github.com/btcsuite/btcd/btcutil"
 	"github.com/btcsuite/btcd/chaincfg"
 	"github.com/btcsuite/btcd/txscript"
-	"github.com/mapprotocol/fe-backend/constants"
 	"gorm.io/gorm"
 	blog "log"
 
@@ -15,7 +14,6 @@ import (
 	"github.com/mapprotocol/fe-backend/entity"
 	"github.com/mapprotocol/fe-backend/resource/log"
 	"github.com/mapprotocol/fe-backend/resp"
-	"github.com/mapprotocol/fe-backend/utils"
 )
 
 var NetParams = &chaincfg.Params{}
@@ -38,53 +36,53 @@ func InitNetworkParams(network string) {
 	}
 }
 
-func CreateOrder(srcChain, srcToken, sender, amount string, dstChain, dstToken, receiver string, action uint8, slippage uint64) (ret *entity.CreateOrderResponse, code int) {
-	var (
-		addressStr    string
-		privateKeyStr string
-	)
-
-	if srcChain == constants.BTCChainID {
-		privateKey, err := generateKey()
-		if err != nil {
-			log.Logger().WithField("error", err).Error("failed to generate key")
-			return nil, resp.CodeInternalServerError
-		}
-		address, err := makeTaprootAddress(privateKey, NetParams)
-		if err != nil {
-			log.Logger().WithField("error", err).Error("failed to make address")
-			return nil, resp.CodeInternalServerError
-		}
-		addressStr = address.String()
-		privateKeyStr = string(privateKey.Serialize())
-	}
-
-	order := &dao.Order{
-		SrcChain:   srcChain,
-		SrcToken:   srcToken,
-		Sender:     sender,
-		InAmount:   amount,
-		Relayer:    addressStr,
-		RelayerKey: privateKeyStr,
-		DstChain:   dstChain,
-		DstToken:   dstToken,
-		Receiver:   receiver,
-		Action:     action,
-		Stage:      dao.OrderStag1,
-		Status:     dao.OrderStatusPending,
-		Slippage:   slippage,
-	}
-	orderID, err := order.Create()
-	if err != nil {
-		log.Logger().WithField("order", utils.JSON(order)).WithField("error", err).Error("failed to create order")
-		return nil, resp.CodeInternalServerError
-	}
-
-	return &entity.CreateOrderResponse{
-		OrderID: orderID,
-		Relayer: addressStr,
-	}, resp.CodeSuccess
-}
+//func CreateOrder(srcChain, srcToken, sender, amount string, dstChain, dstToken, receiver string, action uint8, slippage uint64) (ret *entity.CreateOrderResponse, code int) {
+//	var (
+//		addressStr    string
+//		privateKeyStr string
+//	)
+//
+//	if srcChain == constants.BTCChainID {
+//		privateKey, err := generateKey()
+//		if err != nil {
+//			log.Logger().WithField("error", err).Error("failed to generate key")
+//			return nil, resp.CodeInternalServerError
+//		}
+//		address, err := makeTaprootAddress(privateKey, NetParams)
+//		if err != nil {
+//			log.Logger().WithField("error", err).Error("failed to make address")
+//			return nil, resp.CodeInternalServerError
+//		}
+//		addressStr = address.String()
+//		privateKeyStr = string(privateKey.Serialize())
+//	}
+//
+//	order := &dao.Order{
+//		SrcChain:   srcChain,
+//		SrcToken:   srcToken,
+//		Sender:     sender,
+//		InAmount:   amount,
+//		Relayer:    addressStr,
+//		RelayerKey: privateKeyStr,
+//		DstChain:   dstChain,
+//		DstToken:   dstToken,
+//		Receiver:   receiver,
+//		Action:     action,
+//		Stage:      dao.OrderStag1,
+//		Status:     dao.OrderStatusPending,
+//		Slippage:   slippage,
+//	}
+//	orderID, err := order.Create()
+//	if err != nil {
+//		log.Logger().WithField("order", utils.JSON(order)).WithField("error", err).Error("failed to create order")
+//		return nil, resp.CodeInternalServerError
+//	}
+//
+//	return &entity.CreateOrderResponse{
+//		OrderID: orderID,
+//		Relayer: addressStr,
+//	}, resp.CodeSuccess
+//}
 
 func UpdateOrder(orderID uint64, txHash string) int {
 	order, err := dao.NewOrderWithID(orderID).First()

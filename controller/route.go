@@ -108,10 +108,33 @@ func Route(c *gin.Context) {
 				resp.Error(c, code)
 				return
 			}
+		} else if req.FromChainID == constants.BTCChainID {
+			ret, msg, code = logic.GetBitcoinToEVMRoute(req, slippage)
+			if code == resp.CodeExternalServerError {
+				resp.ExternalServerError(c, msg)
+				return
+			}
+			if code != resp.CodeSuccess {
+				resp.Error(c, code)
+				return
+			}
+		} else {
+			resp.ParameterErr(c, "invalid fromChainId")
+			return
 		}
 	case dao.OrderActionFromEVM:
 		if req.ToChainID == constants.TONChainID {
 			ret, msg, code = logic.GetEVMToTONRoute(req, slippage)
+			if code == resp.CodeExternalServerError {
+				resp.ExternalServerError(c, msg)
+				return
+			}
+			if code != resp.CodeSuccess {
+				resp.Error(c, code)
+				return
+			}
+		} else if req.ToChainID == constants.BTCChainID {
+			ret, msg, code = logic.GetEVMToBitcoinRoute(req, slippage)
 			if code == resp.CodeExternalServerError {
 				resp.ExternalServerError(c, msg)
 				return
@@ -204,9 +227,63 @@ func Swap(c *gin.Context) {
 	code := resp.CodeSuccess
 	ret := &entity.SwapResponse{}
 
-	switch req.SrcChain {
-	case constants.TONChainID:
-		ret, msg, code = logic.GetSwapFromTON(req.Sender, req.DstChain, req.Receiver, req.FeeCollector, req.FeeRatio, req.Hash)
+	//switch req.SrcChain {
+	//case constants.TONChainID:
+	//	ret, msg, code = logic.GetSwapFromTON(req.Sender, req.DstChain, req.Receiver, req.FeeCollector, req.FeeRatio, req.Hash)
+	//	if code == resp.CodeExternalServerError {
+	//		resp.ExternalServerError(c, msg)
+	//		return
+	//	}
+	//	if code != resp.CodeSuccess {
+	//		resp.Error(c, code)
+	//		return
+	//	}
+	//default:
+	//	if strings.ToLower(req.Hash) == constants.LocalRouteHash {
+	//		exp := new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(req.Decimal)), nil)
+	//		amount := new(big.Float).Mul(amountBigFloat, new(big.Float).SetInt(exp))
+	//		amountBigInt, _ := amount.Int(nil)
+	//
+	//		ret, msg, code = logic.GetLocalRouteSwapFromEVM(srcChain, req.SrcToken, req.Sender, req.Amount, amountBigFloat, amountBigInt, dstChain, req.DstToken, req.Receiver, slippage)
+	//		if code != resp.CodeSuccess {
+	//			resp.Error(c, code)
+	//			return
+	//		}
+	//	} else {
+	//		ret, msg, code = logic.GetSwapFromEVM(srcChain, req.SrcToken, req.Sender, req.Amount, dstChain, req.DstToken, req.Receiver, req.Hash, slippage)
+	//		if code == resp.CodeExternalServerError {
+	//			resp.ExternalServerError(c, msg)
+	//			return
+	//		}
+	//		if code != resp.CodeSuccess {
+	//			resp.Error(c, code)
+	//			return
+	//		}
+	//	}
+	//}
+
+	if strings.ToLower(req.Hash) == constants.LocalRouteHash {
+		exp := new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(req.Decimal)), nil)
+		amount := new(big.Float).Mul(amountBigFloat, new(big.Float).SetInt(exp))
+		amountBigInt, _ := amount.Int(nil)
+
+		if req.DstChain == constants.TONChainID {
+			ret, msg, code = logic.GetLocalRouteSwapFromEVMToTON(srcChain, req.SrcToken, req.Sender, req.Amount, amountBigFloat, amountBigInt, dstChain, req.DstToken, req.Receiver, slippage)
+			if code != resp.CodeSuccess {
+				resp.Error(c, code)
+				return
+			}
+		} else if req.DstChain == constants.BTCChainID {
+			ret, msg, code = logic.GetLocalRouteSwapFromEVMToBitcoin(srcChain, req.SrcToken, req.Sender, req.Amount, amountBigFloat, amountBigInt, dstChain, req.DstToken, req.Receiver, slippage)
+			if code != resp.CodeSuccess {
+				resp.Error(c, code)
+				return
+			}
+		}
+	}
+
+	if req.SrcChain == constants.TONChainID {
+		ret, msg, code = logic.GetSwapFromTONToEVM(req.Sender, req.DstChain, req.Receiver, req.FeeCollector, req.FeeRatio, req.Hash)
 		if code == resp.CodeExternalServerError {
 			resp.ExternalServerError(c, msg)
 			return
@@ -215,27 +292,36 @@ func Swap(c *gin.Context) {
 			resp.Error(c, code)
 			return
 		}
-	default:
-		if strings.ToLower(req.Hash) == constants.LocalRouteHash {
-			exp := new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(req.Decimal)), nil)
-			amount := new(big.Float).Mul(amountBigFloat, new(big.Float).SetInt(exp))
-			amountBigInt, _ := amount.Int(nil)
+	} else if req.SrcChain == constants.BTCChainID {
+		ret, msg, code = logic.GetSwapFromBitcoinToEVM(req.SrcChain, req.SrcToken, req.Sender, amountBigFloat, req.DstChain, req.DstToken, req.Receiver, slippage)
+		if code == resp.CodeExternalServerError {
+			resp.ExternalServerError(c, msg)
+			return
+		}
+		if code != resp.CodeSuccess {
+			resp.Error(c, code)
+			return
+		}
 
-			ret, msg, code = logic.GetLocalRouteSwapFromEVM(srcChain, req.SrcToken, req.Sender, req.Amount, amountBigFloat, amountBigInt, dstChain, req.DstToken, req.Receiver, slippage)
-			if code != resp.CodeSuccess {
-				resp.Error(c, code)
-				return
-			}
-		} else {
-			ret, msg, code = logic.GetSwapFromEVM(srcChain, req.SrcToken, req.Sender, req.Amount, dstChain, req.DstToken, req.Receiver, req.Hash, slippage)
-			if code == resp.CodeExternalServerError {
-				resp.ExternalServerError(c, msg)
-				return
-			}
-			if code != resp.CodeSuccess {
-				resp.Error(c, code)
-				return
-			}
+	} else if req.DstChain == constants.TONChainID {
+		ret, msg, code = logic.GetSwapFromEVMToTON(srcChain, req.SrcToken, req.Sender, req.Amount, dstChain, req.DstToken, req.Receiver, req.Hash, slippage)
+		if code == resp.CodeExternalServerError {
+			resp.ExternalServerError(c, msg)
+			return
+		}
+		if code != resp.CodeSuccess {
+			resp.Error(c, code)
+			return
+		}
+	} else if req.DstChain == constants.BTCChainID {
+		ret, msg, code = logic.GetSwapFromEVMToBitcoin(srcChain, req.SrcToken, req.Sender, req.Amount, dstChain, req.DstToken, req.Receiver, req.Hash, slippage)
+		if code == resp.CodeExternalServerError {
+			resp.ExternalServerError(c, msg)
+			return
+		}
+		if code != resp.CodeSuccess {
+			resp.Error(c, code)
+			return
 		}
 	}
 	resp.Success(c, ret)

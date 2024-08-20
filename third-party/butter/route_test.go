@@ -1,18 +1,15 @@
 package butter
 
 import (
-	"fmt"
 	"github.com/mapprotocol/fe-backend/utils"
 	"math/big"
+	"os"
 	"testing"
 )
 
 func TestMain(m *testing.M) {
-	//endpoint = os.Getenv("BUTTER_ENDPOINT")
-	//entrance = os.Getenv("BUTTER_ENTRANCE")
-	entrance = "Butter%2B"
-	endpoint = "https://bs-router-test.chainservice.io"
-	fmt.Println("============================== ", endpoint)
+	endpoint = os.Getenv("BUTTER_ENDPOINT")
+	entrance = os.Getenv("BUTTER_ENTRANCE")
 	m.Run()
 }
 
