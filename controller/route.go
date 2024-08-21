@@ -8,6 +8,7 @@ import (
 	"github.com/mapprotocol/fe-backend/logic"
 	"github.com/mapprotocol/fe-backend/resp"
 	"github.com/mapprotocol/fe-backend/utils"
+	"github.com/shopspring/decimal"
 	"math/big"
 	"strconv"
 	"strings"
@@ -45,7 +46,8 @@ func Route(c *gin.Context) {
 		resp.ParameterErr(c, "missing amount")
 		return
 	}
-	if _, err := strconv.ParseFloat(req.Amount, 64); err != nil {
+	amountDecimal, err := decimal.NewFromString(req.Amount)
+	if err != nil {
 		resp.ParameterErr(c, "invalid amount")
 		return
 	}
@@ -56,6 +58,15 @@ func Route(c *gin.Context) {
 	if utils.IsEmpty(req.TokenOutAddress) {
 		resp.ParameterErr(c, "missing tokenOutAddress")
 		return
+	}
+	feeRatio := uint64(0)
+	if !utils.IsEmpty(req.FeeRatio) {
+		var err error
+		feeRatio, err = strconv.ParseUint(req.FeeRatio, 10, 64)
+		if err != nil {
+			resp.ParameterErr(c, "invalid feeRatio")
+			return
+		}
 	}
 	if utils.IsEmpty(req.Type) {
 		resp.ParameterErr(c, "missing type")
@@ -99,7 +110,7 @@ func Route(c *gin.Context) {
 	switch req.Action {
 	case dao.OrderActionToEVM:
 		if req.FromChainID == constants.TONChainID {
-			ret, msg, code = logic.GetTONToEVMRoute(req, slippage)
+			ret, msg, code = logic.GetTONToEVMRoute(req, amountDecimal, feeRatio, slippage)
 			if code == resp.CodeExternalServerError {
 				resp.ExternalServerError(c, msg)
 				return
@@ -109,7 +120,7 @@ func Route(c *gin.Context) {
 				return
 			}
 		} else if req.FromChainID == constants.BTCChainID {
-			ret, msg, code = logic.GetBitcoinToEVMRoute(req, slippage)
+			ret, msg, code = logic.GetBitcoinToEVMRoute(req, amountDecimal, feeRatio, slippage)
 			if code == resp.CodeExternalServerError {
 				resp.ExternalServerError(c, msg)
 				return
@@ -124,7 +135,7 @@ func Route(c *gin.Context) {
 		}
 	case dao.OrderActionFromEVM:
 		if req.ToChainID == constants.TONChainID {
-			ret, msg, code = logic.GetEVMToTONRoute(req, slippage)
+			ret, msg, code = logic.GetEVMToTONRoute(req, amountDecimal, feeRatio, slippage)
 			if code == resp.CodeExternalServerError {
 				resp.ExternalServerError(c, msg)
 				return
@@ -134,7 +145,7 @@ func Route(c *gin.Context) {
 				return
 			}
 		} else if req.ToChainID == constants.BTCChainID {
-			ret, msg, code = logic.GetEVMToBitcoinRoute(req, slippage)
+			ret, msg, code = logic.GetEVMToBitcoinRoute(req, amountDecimal, feeRatio, slippage)
 			if code == resp.CodeExternalServerError {
 				resp.ExternalServerError(c, msg)
 				return
@@ -205,6 +216,15 @@ func Swap(c *gin.Context) {
 	if utils.IsEmpty(req.Receiver) {
 		resp.ParameterErr(c, "missing receiver")
 		return
+	}
+	feeRatio := uint64(0)
+	if !utils.IsEmpty(req.FeeRatio) {
+		var err error
+		feeRatio, err = strconv.ParseUint(req.FeeRatio, 10, 64)
+		if err != nil {
+			resp.ParameterErr(c, "invalid feeRatio")
+			return
+		}
 	}
 	if utils.IsEmpty(req.Hash) {
 		resp.ParameterErr(c, "missing hash")
@@ -297,7 +317,7 @@ func Swap(c *gin.Context) {
 		amount := new(big.Float).Mul(amountBigFloat, new(big.Float).SetInt(exp))
 		amountBigInt, _ := amount.Int(nil)
 
-		ret, msg, code = logic.GetSwapFromBitcoinToEVM(req.SrcChain, req.SrcToken, req.Sender, amountBigFloat, amountBigInt, req.DstChain, req.DstToken, req.Receiver, slippage)
+		ret, msg, code = logic.GetSwapFromBitcoinToEVM(req.SrcChain, req.SrcToken, req.Sender, amountBigFloat, amountBigInt, req.DstChain, req.DstToken, req.Receiver, slippage, req.FeeCollector, feeRatio)
 		if code == resp.CodeExternalServerError {
 			resp.ExternalServerError(c, msg)
 			return

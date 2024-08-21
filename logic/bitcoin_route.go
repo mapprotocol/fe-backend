@@ -54,7 +54,7 @@ func GetBitcoinLocalRoutes(amount string) *Route {
 			Amount string `json:"amount"`
 			Symbol string `json:"symbol"`
 		}{
-			Amount: "0",
+			Amount: "0.00007614",
 			Symbol: "BTC",
 		},
 		SrcChain: struct {

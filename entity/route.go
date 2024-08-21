@@ -2,46 +2,27 @@ package entity
 
 type RouteRequest struct {
 	FromChainID     string `form:"fromChainId"`
-	ToChainID       string `form:"toChainId"`
-	Amount          string `form:"amount"`
 	TokenInAddress  string `form:"tokenInAddress"`
+	Amount          string `form:"amount"`
+	ToChainID       string `form:"toChainId"`
 	TokenOutAddress string `form:"tokenOutAddress"`
+	FeeCollector    string `form:"feeCollector"`
+	FeeRatio        string `form:"feeRatio"`
 	Type            string `form:"type"`
 	Slippage        string `form:"slippage"`
 	Action          uint8  `form:"action"`
 }
 
-type SwapRequest struct {
-	SrcChain     string `form:"srcChain"`
-	SrcToken     string `form:"srcToken"`
-	Sender       string `form:"sender"`
-	Amount       string `form:"amount"`
-	Decimal      uint8  `form:"decimal"`
-	DstChain     string `form:"dstChain"`
-	DstToken     string `form:"dstToken"`
-	Receiver     string `form:"receiver"`
-	FeeCollector string `form:"feeCollector"`
-	FeeRatio     string `form:"feeRatio"`
-	Hash         string `form:"hash"`
-	Slippage     string `form:"slippage"`
-}
-
 type RouteResponse struct {
-	Hash      string `json:"hash"`
-	TokenIn   Token  `json:"tokenIn"`
-	TokenOut  Token  `json:"tokenOut"`
-	AmountIn  string `json:"amountIn"`
-	AmountOut string `json:"amountOut"`
-	Path      []Path `json:"path"`
-	GasFee    Fee    `json:"gasFee"`
-	BridgeFee Fee    `json:"bridgeFee"`
-}
-
-type SwapResponse struct {
-	To      string `json:"to"`
-	Data    string `json:"data"`
-	Value   string `json:"value"`
-	ChainId string `json:"chainId"`
+	Hash        string `json:"hash"`
+	TokenIn     Token  `json:"tokenIn"`
+	TokenOut    Token  `json:"tokenOut"`
+	AmountIn    string `json:"amountIn"`
+	AmountOut   string `json:"amountOut"`
+	Path        []Path `json:"path"`
+	GasFee      Fee    `json:"gasFee"`
+	BridgeFee   Fee    `json:"bridgeFee"`
+	ProtocolFee Fee    `json:"protocolFee"`
 }
 
 type Route struct {

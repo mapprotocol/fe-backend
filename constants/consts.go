@@ -36,7 +36,8 @@ const (
 	ExchangeNameFlushExchange = "MAP FE"
 )
 
-const BridgeFeeSymbol = "USDT"
+const BridgeFeeSymbolOfTON = "USDT"
+const BridgeFeeSymbolOfBTC = "BTC"
 
 const NativeSymbolOfChainPool = "MATIC" // todo
 
