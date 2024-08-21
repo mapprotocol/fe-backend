@@ -17,6 +17,8 @@ GET
 | amount          | string | Yes      |         |                                                                    |
 | tokenInAddress  | string | Yes      |         |                                                                    |
 | tokenOutAddress | string | Yes      |         |                                                                    |
+| feeCollector    | string | No       |         |                                                                    |
+| feeRatio        | string | No       |         | 200 means 2%                                                       |
 | type            | string | Yes      |         |                                                                    |
 | slippage        | string | Yes      |         | slippage of swap, a integer in rang [300, 5000], e.g, 300 means 3% |
 | action          | number | Yes      |         | 1: to evm, 2: from evm                                             |
@@ -39,7 +41,7 @@ GET
 **request**:
 
 ```shell
-curl --location '127.0.0.1:8181/api/v1/route?fromChainId=1&toChainId=22776&amount=1&tokenInAddress=0x0000000000000000000000000000000000000000&tokenOutAddress=0x0000000000000000000000000000000000000000&type=exactIn&slippage=100'
+curl --location http://127.0.0.1:8123/api/v1/route?fromChainId=313230561203979757&amount=100&toChainId=56&tokenInAddress=0x0000000000000000000000000000000000000000&tokenOutAddress=0x0000000000000000000000000000000000000000&receiver=0x766f3377497C66c31a5692A435cF3E72Dcc2d4Fc&slippage=300&from=bc1qr2rkrw6a2s79gdc8dyhx3q7k3u6an2wug7wmqk&type=exactIn&action=1&feeCollector=bc1qr2rkrw6a2s79gdc8dyhx3q7k3u6an2wug7wmqk&feeRatio=70&timestamp=1724136612637
 ```
 
 **response**
@@ -49,106 +51,409 @@ curl --location '127.0.0.1:8181/api/v1/route?fromChainId=1&toChainId=22776&amoun
   "code": 2000,
   "msg": "Success",
   "data": {
-    "total": 1,
+    "total": 4,
     "items": [
       {
-        "hash": "0xa7d73ffac909efb9c97b57b71faad84178f8eae439911009e5bb6fd77059c68b",
+        "hash": "0x0000000000000000000000000000000000000000000000000000000000022776",
         "tokenIn": {
-          "chainId": "22776",
+          "chainId": "313230561203979757",
           "address": "0x0000000000000000000000000000000000000000",
-          "name": "MAPO",
-          "decimals": 18,
-          "symbol": "MAPO",
-          "icon": "https://cdn.befiwalletdao.com/image/icon_local_map_checked_3gfyyv.png"
+          "name": "Bitcoin",
+          "decimals": 8,
+          "symbol": "BTC",
+          "icon": "https://map-static-file.s3.amazonaws.com/mapSwap/merlin/0x0000000000000000000000000000000000000000.jpg"
         },
         "tokenOut": {
-          "chainId": "1360104473493505",
+          "chainId": "56",
           "address": "0x0000000000000000000000000000000000000000",
-          "name": "Toncoin",
-          "decimals": 9,
-          "symbol": "TON",
-          "icon": "https://assets.dedust.io/images/usdt.webp"
+          "name": "BNB",
+          "decimals": 18,
+          "symbol": "BNB",
+          "icon": "https://s3.amazonaws.com/map-static-file/mapSwap/binance-smart-chain/0x0000000000000000000000000000000000000000/logo.png"
         },
-        "amountIn": "300.0",
-        "amountOut": "0.426384366",
+        "amountIn": "98.6",
+        "amountOut": "0.080763104168497019",
         "path": [
           {
-            "name": "Butter",
-            "amountIn": "300.0",
-            "amountOut": "2.950721",
+            "name": "MAP FE",
+            "amountIn": "98.6",
+            "amountOut": "98.6",
             "tokenIn": {
-              "chainId": "22776",
+              "chainId": "313230561203979757",
               "address": "0x0000000000000000000000000000000000000000",
-              "name": "MAPO",
-              "decimals": 18,
-              "symbol": "MAPO",
-              "icon": "https://cdn.befiwalletdao.com/image/icon_local_map_checked_3gfyyv.png"
+              "name": "Bitcoin",
+              "decimals": 8,
+              "symbol": "BTC",
+              "icon": "https://map-static-file.s3.amazonaws.com/mapSwap/merlin/0x0000000000000000000000000000000000000000.jpg"
             },
             "tokenOut": {
-              "chainId": "137",
-              "address": "0xc2132D05D31c914a87C6611C10748AEb04B58e8F",
-              "name": "Tether USD",
-              "decimals": 6,
-              "symbol": "USDT",
-              "icon": "https://files.mapprotocol.io/bridge/usdt.png"
+              "chainId": "313230561203979757",
+              "address": "0x0000000000000000000000000000000000000000",
+              "name": "Bitcoin",
+              "decimals": 8,
+              "symbol": "BTC",
+              "icon": "https://map-static-file.s3.amazonaws.com/mapSwap/merlin/0x0000000000000000000000000000000000000000.jpg"
             }
           },
           {
             "name": "MAP FE",
-            "amountIn": "2.950721",
-            "amountOut": "2.950721",
+            "amountIn": "98.6",
+            "amountOut": "98.6",
             "tokenIn": {
-              "chainId": "137",
-              "address": "0xc2132D05D31c914a87C6611C10748AEb04B58e8F",
-              "name": "Tether USD",
-              "decimals": 6,
-              "symbol": "USDT",
-              "icon": "https://files.mapprotocol.io/bridge/usdt.png"
+              "chainId": "313230561203979757",
+              "address": "0x0000000000000000000000000000000000000000",
+              "name": "Bitcoin",
+              "decimals": 8,
+              "symbol": "BTC",
+              "icon": "https://map-static-file.s3.amazonaws.com/mapSwap/merlin/0x0000000000000000000000000000000000000000.jpg"
             },
             "tokenOut": {
-              "chainId": "1360104473493505",
-              "address": "EQCxE6mUtQJKFnGfaROTKOt1lZbDiiX1kCixRv7Nw2Id_sDs",
-              "name": "Tether USD",
-              "decimals": 6,
-              "symbol": "USDT",
-              "icon": "https://assets.dedust.io/images/usdt.webp"
+              "chainId": "137",
+              "address": "0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270",
+              "name": "Wrapped MATIC",
+              "decimals": 18,
+              "symbol": "WMATIC",
+              "icon": "https://s3.amazonaws.com/map-static-file/mapSwap/polygon/0x0d500b1d8e8ef31e21c99d1db9a6444d3adf1270/logo.png"
             }
           },
           {
-            "name": "DeDust",
-            "amountIn": "2.950721",
-            "amountOut": "0.426384366",
+            "name": "Butter",
+            "amountIn": "98.6",
+            "amountOut": "0.080763104168497019",
             "tokenIn": {
-              "chainId": "1360104473493505",
-              "address": "EQCxE6mUtQJKFnGfaROTKOt1lZbDiiX1kCixRv7Nw2Id_sDs",
-              "name": "Tether USD",
-              "decimals": 6,
-              "symbol": "USDT",
-              "icon": "https://assets.dedust.io/images/usdt.webp"
+              "chainId": "137",
+              "address": "0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270",
+              "name": "Wrapped MATIC",
+              "decimals": 18,
+              "symbol": "WMATIC",
+              "icon": "https://s3.amazonaws.com/map-static-file/mapSwap/polygon/0x0d500b1d8e8ef31e21c99d1db9a6444d3adf1270/logo.png"
             },
             "tokenOut": {
-              "chainId": "1360104473493505",
+              "chainId": "56",
               "address": "0x0000000000000000000000000000000000000000",
-              "name": "Toncoin",
-              "decimals": 9,
-              "symbol": "TON",
-              "icon": "https://assets.dedust.io/images/usdt.webp"
+              "name": "BNB",
+              "decimals": 18,
+              "symbol": "BNB",
+              "icon": "https://s3.amazonaws.com/map-static-file/mapSwap/binance-smart-chain/0x0000000000000000000000000000000000000000/logo.png"
             }
           }
         ],
         "gasFee": {
-          "amount": "0.472988216091",
-          "symbol": "MAPO",
+          "amount": "0.00007614",
+          "symbol": "BTC",
           "chainId": ""
         },
         "bridgeFee": {
-          "amount": "0.6",
-          "symbol": "USDT",
+          "amount": "0.7",
+          "symbol": "BTC",
           "chainId": ""
         },
         "protocolFee": {
-          "amount": "0",
-          "symbol": "USDT",
+          "amount": "0.7",
+          "symbol": "BTC",
+          "chainId": ""
+        }
+      },
+      {
+        "hash": "0x0000000000000000000000000000000000000000000000000000000000022776",
+        "tokenIn": {
+          "chainId": "313230561203979757",
+          "address": "0x0000000000000000000000000000000000000000",
+          "name": "Bitcoin",
+          "decimals": 8,
+          "symbol": "BTC",
+          "icon": "https://map-static-file.s3.amazonaws.com/mapSwap/merlin/0x0000000000000000000000000000000000000000.jpg"
+        },
+        "tokenOut": {
+          "chainId": "56",
+          "address": "0x0000000000000000000000000000000000000000",
+          "name": "BNB",
+          "decimals": 18,
+          "symbol": "BNB",
+          "icon": "https://s3.amazonaws.com/map-static-file/mapSwap/binance-smart-chain/0x0000000000000000000000000000000000000000/logo.png"
+        },
+        "amountIn": "98.6",
+        "amountOut": "0.080634266305625526",
+        "path": [
+          {
+            "name": "MAP FE",
+            "amountIn": "98.6",
+            "amountOut": "98.6",
+            "tokenIn": {
+              "chainId": "313230561203979757",
+              "address": "0x0000000000000000000000000000000000000000",
+              "name": "Bitcoin",
+              "decimals": 8,
+              "symbol": "BTC",
+              "icon": "https://map-static-file.s3.amazonaws.com/mapSwap/merlin/0x0000000000000000000000000000000000000000.jpg"
+            },
+            "tokenOut": {
+              "chainId": "313230561203979757",
+              "address": "0x0000000000000000000000000000000000000000",
+              "name": "Bitcoin",
+              "decimals": 8,
+              "symbol": "BTC",
+              "icon": "https://map-static-file.s3.amazonaws.com/mapSwap/merlin/0x0000000000000000000000000000000000000000.jpg"
+            }
+          },
+          {
+            "name": "MAP FE",
+            "amountIn": "98.6",
+            "amountOut": "98.6",
+            "tokenIn": {
+              "chainId": "313230561203979757",
+              "address": "0x0000000000000000000000000000000000000000",
+              "name": "Bitcoin",
+              "decimals": 8,
+              "symbol": "BTC",
+              "icon": "https://map-static-file.s3.amazonaws.com/mapSwap/merlin/0x0000000000000000000000000000000000000000.jpg"
+            },
+            "tokenOut": {
+              "chainId": "137",
+              "address": "0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270",
+              "name": "Wrapped MATIC",
+              "decimals": 18,
+              "symbol": "WMATIC",
+              "icon": "https://s3.amazonaws.com/map-static-file/mapSwap/polygon/0x0d500b1d8e8ef31e21c99d1db9a6444d3adf1270/logo.png"
+            }
+          },
+          {
+            "name": "Butter",
+            "amountIn": "98.6",
+            "amountOut": "0.080634266305625526",
+            "tokenIn": {
+              "chainId": "137",
+              "address": "0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270",
+              "name": "Wrapped MATIC",
+              "decimals": 18,
+              "symbol": "WMATIC",
+              "icon": "https://s3.amazonaws.com/map-static-file/mapSwap/polygon/0x0d500b1d8e8ef31e21c99d1db9a6444d3adf1270/logo.png"
+            },
+            "tokenOut": {
+              "chainId": "56",
+              "address": "0x0000000000000000000000000000000000000000",
+              "name": "BNB",
+              "decimals": 18,
+              "symbol": "BNB",
+              "icon": "https://s3.amazonaws.com/map-static-file/mapSwap/binance-smart-chain/0x0000000000000000000000000000000000000000/logo.png"
+            }
+          }
+        ],
+        "gasFee": {
+          "amount": "0.00007614",
+          "symbol": "BTC",
+          "chainId": ""
+        },
+        "bridgeFee": {
+          "amount": "0.7",
+          "symbol": "BTC",
+          "chainId": ""
+        },
+        "protocolFee": {
+          "amount": "0.7",
+          "symbol": "BTC",
+          "chainId": ""
+        }
+      },
+      {
+        "hash": "0x0000000000000000000000000000000000000000000000000000000000022776",
+        "tokenIn": {
+          "chainId": "313230561203979757",
+          "address": "0x0000000000000000000000000000000000000000",
+          "name": "Bitcoin",
+          "decimals": 8,
+          "symbol": "BTC",
+          "icon": "https://map-static-file.s3.amazonaws.com/mapSwap/merlin/0x0000000000000000000000000000000000000000.jpg"
+        },
+        "tokenOut": {
+          "chainId": "56",
+          "address": "0x0000000000000000000000000000000000000000",
+          "name": "BNB",
+          "decimals": 18,
+          "symbol": "BNB",
+          "icon": "https://s3.amazonaws.com/map-static-file/mapSwap/binance-smart-chain/0x0000000000000000000000000000000000000000/logo.png"
+        },
+        "amountIn": "98.6",
+        "amountOut": "0.080113867232187782",
+        "path": [
+          {
+            "name": "MAP FE",
+            "amountIn": "98.6",
+            "amountOut": "98.6",
+            "tokenIn": {
+              "chainId": "313230561203979757",
+              "address": "0x0000000000000000000000000000000000000000",
+              "name": "Bitcoin",
+              "decimals": 8,
+              "symbol": "BTC",
+              "icon": "https://map-static-file.s3.amazonaws.com/mapSwap/merlin/0x0000000000000000000000000000000000000000.jpg"
+            },
+            "tokenOut": {
+              "chainId": "313230561203979757",
+              "address": "0x0000000000000000000000000000000000000000",
+              "name": "Bitcoin",
+              "decimals": 8,
+              "symbol": "BTC",
+              "icon": "https://map-static-file.s3.amazonaws.com/mapSwap/merlin/0x0000000000000000000000000000000000000000.jpg"
+            }
+          },
+          {
+            "name": "MAP FE",
+            "amountIn": "98.6",
+            "amountOut": "98.6",
+            "tokenIn": {
+              "chainId": "313230561203979757",
+              "address": "0x0000000000000000000000000000000000000000",
+              "name": "Bitcoin",
+              "decimals": 8,
+              "symbol": "BTC",
+              "icon": "https://map-static-file.s3.amazonaws.com/mapSwap/merlin/0x0000000000000000000000000000000000000000.jpg"
+            },
+            "tokenOut": {
+              "chainId": "137",
+              "address": "0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270",
+              "name": "Wrapped MATIC",
+              "decimals": 18,
+              "symbol": "WMATIC",
+              "icon": "https://s3.amazonaws.com/map-static-file/mapSwap/polygon/0x0d500b1d8e8ef31e21c99d1db9a6444d3adf1270/logo.png"
+            }
+          },
+          {
+            "name": "Butter",
+            "amountIn": "98.6",
+            "amountOut": "0.080113867232187782",
+            "tokenIn": {
+              "chainId": "137",
+              "address": "0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270",
+              "name": "Wrapped MATIC",
+              "decimals": 18,
+              "symbol": "WMATIC",
+              "icon": "https://s3.amazonaws.com/map-static-file/mapSwap/polygon/0x0d500b1d8e8ef31e21c99d1db9a6444d3adf1270/logo.png"
+            },
+            "tokenOut": {
+              "chainId": "56",
+              "address": "0x0000000000000000000000000000000000000000",
+              "name": "BNB",
+              "decimals": 18,
+              "symbol": "BNB",
+              "icon": "https://s3.amazonaws.com/map-static-file/mapSwap/binance-smart-chain/0x0000000000000000000000000000000000000000/logo.png"
+            }
+          }
+        ],
+        "gasFee": {
+          "amount": "0.00007614",
+          "symbol": "BTC",
+          "chainId": ""
+        },
+        "bridgeFee": {
+          "amount": "0.7",
+          "symbol": "BTC",
+          "chainId": ""
+        },
+        "protocolFee": {
+          "amount": "0.7",
+          "symbol": "BTC",
+          "chainId": ""
+        }
+      },
+      {
+        "hash": "0x0000000000000000000000000000000000000000000000000000000000022776",
+        "tokenIn": {
+          "chainId": "313230561203979757",
+          "address": "0x0000000000000000000000000000000000000000",
+          "name": "Bitcoin",
+          "decimals": 8,
+          "symbol": "BTC",
+          "icon": "https://map-static-file.s3.amazonaws.com/mapSwap/merlin/0x0000000000000000000000000000000000000000.jpg"
+        },
+        "tokenOut": {
+          "chainId": "56",
+          "address": "0x0000000000000000000000000000000000000000",
+          "name": "BNB",
+          "decimals": 18,
+          "symbol": "BNB",
+          "icon": "https://s3.amazonaws.com/map-static-file/mapSwap/binance-smart-chain/0x0000000000000000000000000000000000000000/logo.png"
+        },
+        "amountIn": "98.6",
+        "amountOut": "0.079833380464649455",
+        "path": [
+          {
+            "name": "MAP FE",
+            "amountIn": "98.6",
+            "amountOut": "98.6",
+            "tokenIn": {
+              "chainId": "313230561203979757",
+              "address": "0x0000000000000000000000000000000000000000",
+              "name": "Bitcoin",
+              "decimals": 8,
+              "symbol": "BTC",
+              "icon": "https://map-static-file.s3.amazonaws.com/mapSwap/merlin/0x0000000000000000000000000000000000000000.jpg"
+            },
+            "tokenOut": {
+              "chainId": "313230561203979757",
+              "address": "0x0000000000000000000000000000000000000000",
+              "name": "Bitcoin",
+              "decimals": 8,
+              "symbol": "BTC",
+              "icon": "https://map-static-file.s3.amazonaws.com/mapSwap/merlin/0x0000000000000000000000000000000000000000.jpg"
+            }
+          },
+          {
+            "name": "MAP FE",
+            "amountIn": "98.6",
+            "amountOut": "98.6",
+            "tokenIn": {
+              "chainId": "313230561203979757",
+              "address": "0x0000000000000000000000000000000000000000",
+              "name": "Bitcoin",
+              "decimals": 8,
+              "symbol": "BTC",
+              "icon": "https://map-static-file.s3.amazonaws.com/mapSwap/merlin/0x0000000000000000000000000000000000000000.jpg"
+            },
+            "tokenOut": {
+              "chainId": "137",
+              "address": "0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270",
+              "name": "Wrapped MATIC",
+              "decimals": 18,
+              "symbol": "WMATIC",
+              "icon": "https://s3.amazonaws.com/map-static-file/mapSwap/polygon/0x0d500b1d8e8ef31e21c99d1db9a6444d3adf1270/logo.png"
+            }
+          },
+          {
+            "name": "Butter",
+            "amountIn": "98.6",
+            "amountOut": "0.079833380464649455",
+            "tokenIn": {
+              "chainId": "137",
+              "address": "0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270",
+              "name": "Wrapped MATIC",
+              "decimals": 18,
+              "symbol": "WMATIC",
+              "icon": "https://s3.amazonaws.com/map-static-file/mapSwap/polygon/0x0d500b1d8e8ef31e21c99d1db9a6444d3adf1270/logo.png"
+            },
+            "tokenOut": {
+              "chainId": "56",
+              "address": "0x0000000000000000000000000000000000000000",
+              "name": "BNB",
+              "decimals": 18,
+              "symbol": "BNB",
+              "icon": "https://s3.amazonaws.com/map-static-file/mapSwap/binance-smart-chain/0x0000000000000000000000000000000000000000/logo.png"
+            }
+          }
+        ],
+        "gasFee": {
+          "amount": "0.00007614",
+          "symbol": "BTC",
+          "chainId": ""
+        },
+        "bridgeFee": {
+          "amount": "0.7",
+          "symbol": "BTC",
+          "chainId": ""
+        },
+        "protocolFee": {
+          "amount": "0.7",
+          "symbol": "BTC",
           "chainId": ""
         }
       }
