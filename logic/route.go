@@ -108,7 +108,7 @@ func GetTONToEVMRoute(req *entity.RouteRequest, amount decimal.Decimal, feeRatio
 	}
 
 	request := &butter.RouteRequest{
-		TokenInAddress:  constants.USDTOfChainPoll,
+		TokenInAddress:  constants.USDTOfChainPool,
 		TokenOutAddress: req.TokenOutAddress,
 		Type:            req.Type,
 		Slippage:        slippage,
@@ -197,7 +197,7 @@ func GetEVMToTONRoute(req *entity.RouteRequest, amount decimal.Decimal, feeRatio
 
 	request := &butter.RouteRequest{
 		TokenInAddress:  req.TokenInAddress,
-		TokenOutAddress: constants.USDTOfChainPoll,
+		TokenOutAddress: constants.USDTOfChainPool,
 		Type:            req.Type,
 		Slippage:        slippage / 3 * 2,
 		FromChainID:     req.FromChainID,
@@ -370,7 +370,7 @@ func GetBitcoinToEVMRoute(req *entity.RouteRequest, amount decimal.Decimal, feeR
 	}
 
 	request := &butter.RouteRequest{
-		TokenInAddress:  constants.WBTCOfChainPoll,
+		TokenInAddress:  constants.WBTCOfChainPool,
 		TokenOutAddress: req.TokenOutAddress,
 		Type:            req.Type,
 		Slippage:        slippage,
@@ -459,7 +459,7 @@ func GetEVMToBitcoinRoute(req *entity.RouteRequest, amount decimal.Decimal, feeR
 
 	request := &butter.RouteRequest{
 		TokenInAddress:  req.TokenInAddress,
-		TokenOutAddress: constants.WBTCOfChainPoll,
+		TokenOutAddress: constants.WBTCOfChainPool,
 		Type:            req.Type,
 		Slippage:        slippage / 3 * 2,
 		FromChainID:     req.FromChainID,
@@ -683,7 +683,7 @@ func GetSwapFromEVMToTON(srcChain *big.Int, srcToken, sender, amount string, dst
 		return nil, "", resp.CodeInsufficientLiquidity // todo chain pool
 	}
 
-	chainPoolToken := constants.USDTOfChainPoll
+	chainPoolToken := constants.USDTOfChainPool
 	if isMultiChainPool && dstChain.String() == constants.ChainIDOfEthereum {
 		chainPoolToken = constants.USDTOfEthereum
 	}
@@ -845,7 +845,7 @@ func GetSwapFromEVMToBitcoin(srcChain *big.Int, srcToken, sender, amount string,
 		return nil, "", resp.CodeInsufficientLiquidity // todo chain pool
 	}
 
-	chainPoolToken := constants.WBTCOfChainPoll
+	chainPoolToken := constants.WBTCOfChainPool
 	if isMultiChainPool && dstChain.String() == constants.ChainIDOfEthereum {
 		chainPoolToken = constants.WBTCOfEthereum
 	}
@@ -916,7 +916,7 @@ func GetLocalRouteSwapFromEVMToTON(srcChain *big.Int, srcToken, sender, amount s
 		return ret, "", resp.CodeAmountTooFew
 	}
 
-	chainPoolToken := constants.USDTOfChainPoll
+	chainPoolToken := constants.USDTOfChainPool
 	if isMultiChainPool && dstChain.String() == constants.ChainIDOfEthereum {
 		chainPoolToken = constants.USDTOfEthereum
 	}
@@ -955,7 +955,7 @@ func GetLocalRouteSwapFromEVMToBitcoin(srcChain *big.Int, srcToken, sender, amou
 		return ret, "", resp.CodeAmountTooFew
 	}
 
-	chainPoolToken := constants.WBTCOfChainPoll
+	chainPoolToken := constants.WBTCOfChainPool
 	if isMultiChainPool && dstChain.String() == constants.ChainIDOfEthereum {
 		chainPoolToken = constants.WBTCOfEthereum
 	}
@@ -1163,7 +1163,7 @@ func getChainPoolWBTCBalance(dstChain string) (balance *big.Float, err error) {
 		log.Logger().WithFields(params).Error("failed to get balance of chain pool contract")
 		return balance, err
 	}
-	balance = new(big.Float).Quo(new(big.Float).SetInt(bal), getUSDTDecimalOfChainPool(dstChain))
+	balance = new(big.Float).Quo(new(big.Float).SetInt(bal), getWBTCDecimalOfChainPool(dstChain))
 	return balance, err
 }
 
@@ -1173,6 +1173,16 @@ func getUSDTDecimalOfChainPool(chain string) (decimal *big.Float) {
 		decimal = big.NewFloat(constants.USDTDecimalOfEthereum) // todo
 	default:
 		decimal = big.NewFloat(constants.USDTDecimalOfChainPool) // todo
+	}
+	return decimal
+}
+
+func getWBTCDecimalOfChainPool(chain string) (decimal *big.Float) {
+	switch chain {
+	case constants.ChainIDOfEthereum:
+		decimal = big.NewFloat(constants.WBTCDecimalOfEthereum) // todo
+	default:
+		decimal = big.NewFloat(constants.WBTCDecimalOfChainPool) // todo
 	}
 	return decimal
 }

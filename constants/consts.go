@@ -1,22 +1,27 @@
 package constants
 
 const (
-	ChainIDOfChainPool = "137" // todo
+	ChainIDOfChainPool = "22776"
 	ChainIDOfEthereum  = "1"
 )
 
 const (
-	USDTDecimalOfChainPool = 1e6
+	USDTDecimalOfChainPool = 1e18
 	USDTDecimalOfEthereum  = 1e6
 )
 
-const USDTDecimalNumberOfChainPool = 6
+const (
+	WBTCDecimalOfChainPool = 1e18
+	WBTCDecimalOfEthereum  = 1e8
+)
+
+const USDTDecimalNumberOfChainPool = 18
 
 const (
-	WBTCOfChainPoll = "0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270" // todo
-	WBTCOfEthereum  = "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599" // todo
-	USDTOfChainPoll = "0xc2132D05D31c914a87C6611C10748AEb04B58e8F" // todo
-	USDTOfEthereum  = "0xdac17f958d2ee523a2206206994597c13d831ec7" // todo
+	WBTCOfChainPool = "0xb877e3562a660c7861117c2f1361a26abaf19beb"
+	WBTCOfEthereum  = "0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599"
+	USDTOfChainPool = "0x33daba9618a75a7aff103e53afe530fbacf4a3dd"
+	USDTOfEthereum  = "0xdac17f958d2ee523a2206206994597c13d831ec7"
 	USDTOfTON       = "EQCxE6mUtQJKFnGfaROTKOt1lZbDiiX1kCixRv7Nw2Id_sDs"
 )
 
@@ -39,7 +44,7 @@ const (
 const BridgeFeeSymbolOfTON = "USDT"
 const BridgeFeeSymbolOfBTC = "BTC"
 
-const NativeSymbolOfChainPool = "MATIC" // todo
+const NativeSymbolOfChainPool = "MAPO"
 
-const LocalRouteGasFee = "0.03"
+const LocalRouteGasFee = "0.121116"
 const LocalRouteHash = "0x0000000000000000000000000000000000000000000000000000000000022776"

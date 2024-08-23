@@ -248,7 +248,7 @@ func getLocalRoutes(amount string) []*RouteResponseData {
 			Symbol   string `json:"symbol"`
 			Icon     string `json:"icon"`
 		}{
-			Address:  constants.USDTOfChainPoll,
+			Address:  constants.USDTOfChainPool,
 			Name:     "Tether USD",
 			Decimals: constants.USDTDecimalNumberOfChainPool,
 			Symbol:   "USDT",
@@ -261,7 +261,7 @@ func getLocalRoutes(amount string) []*RouteResponseData {
 			Symbol   string `json:"symbol"`
 			Icon     string `json:"icon"`
 		}{
-			Address:  constants.USDTOfChainPoll,
+			Address:  constants.USDTOfChainPool,
 			Name:     "Tether USD",
 			Decimals: constants.USDTDecimalNumberOfChainPool,
 			Symbol:   "USDT",
