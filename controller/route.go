@@ -175,11 +175,14 @@ func Swap(c *gin.Context) {
 		resp.ParameterErr(c, "invalid srcChain")
 		return
 	}
-
-	if !utils.IsValidEvmAddress(req.SrcToken) {
-		resp.ParameterErr(c, "invalid srcToken")
+	if utils.IsEmpty(req.SrcToken) {
+		resp.ParameterErr(c, "missing srcToken")
 		return
 	}
+	//if !utils.IsValidEvmAddress(req.SrcToken) {
+	//	resp.ParameterErr(c, "invalid srcToken")
+	//	return
+	//}
 	//if !utils.IsValidEvmAddress(req.DstToken) {
 	//	resp.ParameterErr(c, "invalid dstToken")
 	//	return
@@ -206,6 +209,10 @@ func Swap(c *gin.Context) {
 	dstChain, ok := new(big.Int).SetString(req.DstChain, 10)
 	if !ok {
 		resp.ParameterErr(c, "invalid dstChain")
+		return
+	}
+	if utils.IsEmpty(req.DstToken) {
+		resp.ParameterErr(c, "missing dstToken")
 		return
 	}
 	//if !utils.IsValidBitcoinAddress(req.Receiver, logic.NetParams) {
