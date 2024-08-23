@@ -29,7 +29,6 @@ import (
 
 const (
 	SwapType = "exactIn"
-	Sender   = "0x0Eb16A9cFDf8e3A4471EF190eE63de5A24f38787"
 )
 
 const (
@@ -110,10 +109,11 @@ func HandlePendingOrdersOfFirstStageFromBTCToEVM() {
 					continue
 				}
 				if len(utxo) != 1 { // todo get first utxo ?
-					log.Logger().WithField("relayer", o.Relayer).Debug("invalid utxo")
+					log.Logger().WithField("relayer", o.Relayer).WithField("total", len(utxo)).Debug("invalid utxo")
 					continue
 				}
 
+				// todo value >= in amount
 				inAmount := new(big.Float).Quo(new(big.Float).SetInt64(utxo[0].Output.Value), big.NewFloat(params.BTCDecimal))
 				_, afterAmount := deductFees(new(big.Float).SetInt64(utxo[0].Output.Value), FeeRate)
 				afterAmountFloat := new(big.Float).Quo(afterAmount, big.NewFloat(params.BTCDecimal))
@@ -172,12 +172,12 @@ func HandleConfirmedOrdersOfFirstStageFromBTCToEVM() {
 
 				wbtc := params.WBTCOfChainPool
 				decimal := params.WBTCDecimalOfChainPool
-				chainID := params.ChainIDOfChainPool
+				chainIDOfChainPool := params.ChainIDOfChainPool
 				chainInfo := &dao.ChainPool{}
 				if isMultiChainPool && o.SrcChain == params.ChainIDOfEthereum {
 					wbtc = params.WBTCOfEthereum
 					decimal = params.WBTCDecimalOfEthereum
-					chainID = params.ChainIDOfEthereum
+					chainIDOfChainPool = params.ChainIDOfEthereum
 					chainInfo, err = dao.NewChainPoolWithChainID(params.ChainIDOfEthereum).First()
 					if err != nil {
 						log.Logger().WithField("chainID", params.ChainIDOfChainPool).WithField("error", err.Error()).Error("failed to get chain info")
@@ -230,15 +230,27 @@ func HandleConfirmedOrdersOfFirstStageFromBTCToEVM() {
 						"amount":  o.RelayAmount,
 						"error":   err,
 					}
+					log.Logger().WithFields(fields).Error("failed to parse string to big rat")
+					alarm.Slack(context.Background(), "failed to parse string to big rat")
+					continue
+				}
+				amount = new(big.Rat).Mul(amount, new(big.Rat).SetUint64(decimal))
+				amountInt := amount.Num()
+				inAmountSat, ok := new(big.Int).SetString(o.InAmountSat, 10)
+				if !ok {
+					fields := map[string]interface{}{
+						"orderId": o.ID,
+						"amount":  o.InAmountSat,
+						"error":   err,
+					}
 					log.Logger().WithFields(fields).Error("failed to parse string to big int")
 					alarm.Slack(context.Background(), "failed to parse string to big int")
 					continue
 				}
-				amount = new(big.Rat).Mul(amount, new(big.Rat).SetFloat64(decimal))
-				amountInt := amount.Num()
 
+				fee := calcProtocolFees(inAmountSat, o.FeeRatio, decimal)
 				txHash := common.Hash{}
-				if o.DstChain == chainID && strings.ToLower(o.DstToken) == strings.ToLower(wbtc) {
+				if o.DstChain == chainIDOfChainPool && strings.ToLower(o.DstToken) == strings.ToLower(wbtc) {
 					update := &dao.BitcoinOrder{
 						Stage:  dao.OrderStag2,
 						Status: dao.OrderStatusTxPrepareSend,
@@ -250,25 +262,44 @@ func HandleConfirmedOrdersOfFirstStageFromBTCToEVM() {
 						continue
 					}
 
-					txHash, err = deliver(transactor, common.HexToAddress(wbtc), orderID, amountInt, common.HexToAddress(o.Receiver))
+					txHash, err = deliver(transactor, common.HexToAddress(wbtc), orderID, amountInt, common.HexToAddress(o.Receiver), fee, common.HexToAddress(o.FeeCollector))
 					if err != nil {
+						log.Logger().WithField("error", err.Error()).Error("failed to send deliver transaction")
+						alarm.Slack(context.Background(), "failed to send deliver transaction")
 						time.Sleep(5 * time.Second)
 						continue
 					}
 				} else {
+					relayAmountStr := o.RelayAmount
+					if fee.Cmp(big.NewInt(0)) == 1 {
+						relayAmount, err := strconv.ParseFloat(o.RelayAmount, 10)
+						if err != nil {
+							log.Logger().WithField("amount", o.RelayAmount).WithField("error", err.Error()).Error("failed to parse relay amount")
+							alarm.Slack(context.Background(), "failed to parse relay amount")
+							continue
+						}
+						relayAmountSat, err := btcutil.NewAmount(relayAmount)
+						if err != nil {
+							log.Logger().WithField("amount", relayAmount).WithField("error", err.Error()).Error("failed to convert relay amount to satoshi")
+							alarm.Slack(context.Background(), "failed to convert relay amount to satoshi")
+							continue
+						}
+
+						fee := new(big.Int).Mul(inAmountSat, new(big.Int).SetUint64(o.FeeRatio))
+						fee = new(big.Int).Div(fee, big.NewInt(10000))
+						relayAmountStr = strconv.FormatFloat(float64(int64(relayAmountSat)-fee.Int64())/params.BTCDecimal, 'f', -1, 64)
+					}
+
 					request := &butter.RouterAndSwapRequest{
-						//FromChainID:     o.SrcChain,
-						FromChainID: params.ChainIDOfChainPool, // todo
-						ToChainID:   o.DstChain,
-						//Amount:          o.InAmount,  //
-						Amount:          o.RelayAmount, // todo
+						FromChainID:     params.ChainIDOfChainPool,
+						ToChainID:       o.DstChain,
+						Amount:          relayAmountStr,
 						TokenInAddress:  params.WBTCOfChainPool,
 						TokenOutAddress: o.DstToken,
 						Type:            SwapType,
-						Slippage:        o.Slippage / 3 * 2, // todo
-						//From:            o.Sender,
-						From:     Sender, // todo
-						Receiver: o.Receiver,
+						Slippage:        o.Slippage / 3 * 2,
+						From:            sender,
+						Receiver:        o.Receiver,
 					}
 					data, err := butter.RouteAndSwap(request)
 					if err != nil {
@@ -302,8 +333,10 @@ func HandleConfirmedOrdersOfFirstStageFromBTCToEVM() {
 						continue
 					}
 
-					txHash, err = deliverAndSwap(transactor, common.HexToAddress(wbtc), orderID, amountInt, decodeData, value)
+					txHash, err = deliverAndSwap(transactor, common.HexToAddress(wbtc), orderID, amountInt, decodeData, fee, common.HexToAddress(o.FeeCollector), value)
 					if err != nil {
+						log.Logger().WithField("error", err.Error()).Error("failed to send deliver and swap transaction")
+						alarm.Slack(context.Background(), "failed to send deliver and swap transaction")
 						time.Sleep(5 * time.Second)
 						continue
 					}
@@ -529,7 +562,7 @@ func HandlePendingOrdersOfFirstStageFromEVM() {
 					continue
 				}
 
-				afterAmountFloat := new(big.Float).Quo(afterAmount, big.NewFloat(params.WBTCDecimalOfChainPool))
+				afterAmountFloat := new(big.Float).Quo(afterAmount, new(big.Float).SetUint64(params.WBTCDecimalOfChainPool))
 				order := &dao.BitcoinOrder{
 					SrcChain:    onReceived.SrcChain.String(),
 					SrcToken:    string(onReceived.SrcToken),
@@ -739,4 +772,14 @@ func deductFees(amount, feeRate *big.Float) (feeAmount, afterAmount *big.Float) 
 	afterAmount = new(big.Float).Sub(amount, feeAmount)
 	log.Logger().WithField("amount", amount).WithField("feeAmount", feeAmount).Info("after deduction of fees")
 	return feeAmount, afterAmount
+}
+
+func calcProtocolFees(inAmountSat *big.Int, feeRatio uint64, wbtcDecimal uint64) *big.Int {
+	fee := new(big.Int).Mul(inAmountSat, new(big.Int).SetUint64(feeRatio))
+	fee = new(big.Int).Div(fee, big.NewInt(10000))
+	if wbtcDecimal != params.BTCDecimal {
+		fee = new(big.Int).Mul(fee, new(big.Int).SetUint64(wbtcDecimal))
+		fee = new(big.Int).Div(fee, new(big.Int).SetUint64(params.BTCDecimal))
+	}
+	return fee
 }

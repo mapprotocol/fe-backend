@@ -1,10 +1,6 @@
 package main
 
 import (
-	"github.com/mapprotocol/fe-backend/resource/tonclient"
-	"github.com/mapprotocol/fe-backend/third-party/butter"
-	"github.com/mapprotocol/fe-backend/third-party/filter"
-	"github.com/mapprotocol/fe-backend/third-party/tonrouter"
 	blog "log"
 	"os"
 	"os/signal"
@@ -16,7 +12,11 @@ import (
 	"github.com/mapprotocol/fe-backend/config"
 	"github.com/mapprotocol/fe-backend/resource/db"
 	"github.com/mapprotocol/fe-backend/resource/log"
+	"github.com/mapprotocol/fe-backend/resource/tonclient"
 	"github.com/mapprotocol/fe-backend/task"
+	"github.com/mapprotocol/fe-backend/third-party/butter"
+	"github.com/mapprotocol/fe-backend/third-party/filter"
+	"github.com/mapprotocol/fe-backend/third-party/tonrouter"
 	"github.com/mapprotocol/fe-backend/utils/tx"
 )
 
@@ -31,7 +31,7 @@ func main() {
 
 	task.InitMempoolClient(viper.GetString("network"))
 
-	tx.InitTransactor(viper.GetStringMapString("ChainPool")["senderprivatekey"])
+	tx.InitTransactor(viper.GetStringMapString("chainPool")["senderprivatekey"])
 
 	tonConfig := viper.GetStringMapString("ton")
 	tonclient.Init(tonConfig["words"], tonConfig["password"])

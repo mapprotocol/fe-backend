@@ -35,7 +35,7 @@ func init() {
 	}
 }
 
-func (t *Transactor) Deliver(orderID [32]byte, token common.Address, amount *big.Int, receiver common.Address) (common.Hash, error) {
+func (t *Transactor) Deliver(orderID [32]byte, token common.Address, amount *big.Int, receiver common.Address, fee *big.Int, feeReceiver common.Address) (common.Hash, error) {
 	var txHash common.Hash
 
 	for i := 0; i < RetryTimes; i++ {
@@ -44,7 +44,7 @@ func (t *Transactor) Deliver(orderID [32]byte, token common.Address, amount *big
 			return common.Hash{}, err
 		}
 
-		input, err := pack(feRouterABI, "deliver", orderID, token, amount, receiver)
+		input, err := pack(feRouterABI, "deliver", orderID, token, amount, receiver, fee, feeReceiver)
 		if err != nil {
 			log.Logger().Error("failed to pack deliver params")
 			return common.Hash{}, err
@@ -65,7 +65,7 @@ func (t *Transactor) Deliver(orderID [32]byte, token common.Address, amount *big
 	return txHash, nil
 }
 
-func (t *Transactor) DeliverAndSwap(orderID [32]byte, initiator common.Address, token common.Address, amount *big.Int, swapData []byte, bridgeData []byte, feeData []byte, value *big.Int) (common.Hash, error) {
+func (t *Transactor) DeliverAndSwap(orderID [32]byte, initiator common.Address, token common.Address, amount *big.Int, swapData []byte, bridgeData []byte, feeData []byte, fee *big.Int, feeReceiver common.Address, value *big.Int) (common.Hash, error) {
 	var txHash common.Hash
 
 	for i := 0; i < RetryTimes; i++ {
@@ -74,7 +74,7 @@ func (t *Transactor) DeliverAndSwap(orderID [32]byte, initiator common.Address, 
 			return common.Hash{}, err
 		}
 
-		input, err := pack(feRouterABI, "deliverAndSwap", orderID, initiator, token, amount, swapData, bridgeData, feeData)
+		input, err := pack(feRouterABI, "deliverAndSwap", orderID, initiator, token, amount, swapData, bridgeData, feeData, fee, feeReceiver)
 		if err != nil {
 			log.Logger().Error("failed to pack deliver and swap params")
 			return common.Hash{}, err

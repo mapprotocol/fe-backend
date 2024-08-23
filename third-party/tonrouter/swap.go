@@ -13,7 +13,7 @@ import (
 const SuccessCode = 0
 
 const (
-	PathBridgeSwap = "/bridger/swap"
+	PathBridgeSwap = "/v2/bridger/swap"
 )
 
 var Domain string

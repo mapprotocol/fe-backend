@@ -1,12 +1,12 @@
 package params
 
 const (
-	USDTDecimalOfChainPool = 1e6
+	USDTDecimalOfChainPool = 1e18
 	USDTDecimalOfEthereum  = 1e6
 )
 
 const (
-	ChainIDOfChainPool = "137"
+	ChainIDOfChainPool = "22776"
 	ChainIDOfEthereum  = "1"
 )
 
@@ -16,6 +16,6 @@ const (
 )
 
 const (
-	USDTOfChainPool = "0xc2132D05D31c914a87C6611C10748AEb04B58e8F" // todo
-	USDTOfEthereum  = "0xdac17f958d2ee523a2206206994597c13d831ec7" // todo
+	USDTOfChainPool = "0x33daba9618a75a7aff103e53afe530fbacf4a3dd"
+	USDTOfEthereum  = "0xdac17f958d2ee523a2206206994597c13d831ec7"
 )

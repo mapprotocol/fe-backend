@@ -38,10 +38,24 @@ const (
 	EventIDEVMToTON = "1a6c0a51"
 )
 
-var isMultiChainPool = false
+var (
+	Big0         = big.NewInt(0)
+	EmptyAddress = common.Address{}
+)
+
+var (
+	sender           string
+	isMultiChainPool bool
+)
 
 func Init() {
+	sender = viper.GetStringMapString("chainPool")["sender"]
+	if utils.IsEmpty(sender) {
+		panic("chainPool:sender is empty")
+	}
 	isMultiChainPool = viper.GetBool("isMultiChainPool")
+
+	blog.Println("chainPool:sender: ", sender)
 	blog.Println("isMultiChainPool: ", isMultiChainPool)
 }
 
@@ -231,7 +245,7 @@ func HandlePendingOrdersOfFirstStageFromTONToEVM() {
 				UpdateLogID(chainID, topic, lg.Id)
 				continue
 			}
-			receiver, err := to.LoadBigUInt(384)
+			receiverRef, err := to.LoadRef()
 			if err != nil {
 				fields := map[string]interface{}{
 					"logID":   lg.Id,
@@ -239,12 +253,12 @@ func HandlePendingOrdersOfFirstStageFromTONToEVM() {
 					"topic":   topic,
 					"error":   err.Error(),
 				}
-				log.Logger().WithFields(fields).Error("failed to load receiver")
-				alarm.Slack(context.Background(), "failed to load receiver")
+				log.Logger().WithFields(fields).Error("failed to load receiver ref")
+				alarm.Slack(context.Background(), "failed to load receiver ref")
 				UpdateLogID(chainID, topic, lg.Id)
 				continue
 			}
-			dstToken, err := to.LoadBigUInt(384)
+			heightBitsReceiver, err := receiverRef.LoadBigUInt(256)
 			if err != nil {
 				fields := map[string]interface{}{
 					"logID":   lg.Id,
@@ -252,11 +266,67 @@ func HandlePendingOrdersOfFirstStageFromTONToEVM() {
 					"topic":   topic,
 					"error":   err.Error(),
 				}
-				log.Logger().WithFields(fields).Error("failed to load token out address")
-				alarm.Slack(context.Background(), "failed to load token out address")
+				log.Logger().WithFields(fields).Error("failed to load height bits receiver")
+				alarm.Slack(context.Background(), "failed to load height receiver")
 				UpdateLogID(chainID, topic, lg.Id)
 				continue
 			}
+			lowBitsReceiver, err := receiverRef.LoadBigUInt(256)
+			if err != nil {
+				fields := map[string]interface{}{
+					"logID":   lg.Id,
+					"chainID": chainID,
+					"topic":   topic,
+					"error":   err.Error(),
+				}
+				log.Logger().WithFields(fields).Error("failed to load low bits receiver")
+				alarm.Slack(context.Background(), "failed to load low receiver")
+				UpdateLogID(chainID, topic, lg.Id)
+				continue
+			}
+			receiver := new(big.Int).Or(new(big.Int).Lsh(heightBitsReceiver, 256), lowBitsReceiver)
+
+			dstTokenRef, err := to.LoadRef()
+			if err != nil {
+				fields := map[string]interface{}{
+					"logID":   lg.Id,
+					"chainID": chainID,
+					"topic":   topic,
+					"error":   err.Error(),
+				}
+				log.Logger().WithFields(fields).Error("failed to load token out address ref")
+				alarm.Slack(context.Background(), "failed to load token out address ref")
+				UpdateLogID(chainID, topic, lg.Id)
+				continue
+			}
+			heightBitsDstToken, err := dstTokenRef.LoadBigUInt(256)
+			if err != nil {
+				fields := map[string]interface{}{
+					"logID":   lg.Id,
+					"chainID": chainID,
+					"topic":   topic,
+					"error":   err.Error(),
+				}
+				log.Logger().WithFields(fields).Error("failed to load height bits token out address")
+				alarm.Slack(context.Background(), "failed to load height bits token out address")
+				UpdateLogID(chainID, topic, lg.Id)
+				continue
+			}
+			lowBitsDstToken, err := dstTokenRef.LoadBigUInt(256)
+			if err != nil {
+				fields := map[string]interface{}{
+					"logID":   lg.Id,
+					"chainID": chainID,
+					"topic":   topic,
+					"error":   err.Error(),
+				}
+				log.Logger().WithFields(fields).Error("failed to load low bits token out address")
+				alarm.Slack(context.Background(), "failed to load low bits token out address")
+				UpdateLogID(chainID, topic, lg.Id)
+				continue
+			}
+			dstToken := new(big.Int).Or(new(big.Int).Lsh(heightBitsDstToken, 256), lowBitsDstToken)
+
 			relayAmount, err := slice.LoadUInt(32)
 			if err != nil {
 				fields := map[string]interface{}{
@@ -437,25 +507,24 @@ func HandleConfirmedOrdersOfFirstStageFromTONToEVM() {
 						continue
 					}
 
-					txHash, err = deliver(transactor, common.HexToAddress(usdt), orderID, amountInt, common.HexToAddress(o.Receiver))
+					txHash, err = deliver(transactor, common.HexToAddress(usdt), orderID, amountInt, common.HexToAddress(o.Receiver), Big0, EmptyAddress)
 					if err != nil {
+						log.Logger().WithField("error", err.Error()).Error("failed to send deliver transaction")
+						alarm.Slack(context.Background(), "failed to send deliver transaction")
 						time.Sleep(5 * time.Second)
 						continue
 					}
 				} else {
 					request := &butter.RouterAndSwapRequest{
-						//FromChainID:     o.SrcChain,
-						FromChainID: params.ChainIDOfChainPool, // todo
-						ToChainID:   o.DstChain,
-						//Amount:          o.InAmount,  //
-						Amount:          o.RelayAmount, // todo
+						FromChainID:     params.ChainIDOfChainPool,
+						ToChainID:       o.DstChain,
+						Amount:          o.RelayAmount,
 						TokenInAddress:  params.USDTOfChainPool,
 						TokenOutAddress: o.DstToken,
 						Type:            SwapType,
-						Slippage:        o.Slippage / 3 * 2, // todo
-						//From:            o.Sender,
-						From:     Sender, // todo
-						Receiver: o.Receiver,
+						Slippage:        o.Slippage / 3 * 2,
+						From:            sender, // todo
+						Receiver:        o.Receiver,
 					}
 					data, err := butter.RouteAndSwap(request)
 					if err != nil {
@@ -494,8 +563,10 @@ func HandleConfirmedOrdersOfFirstStageFromTONToEVM() {
 						continue
 					}
 
-					txHash, err = deliverAndSwap(transactor, common.HexToAddress(usdt), orderID, amountInt, decodeData, value)
+					txHash, err = deliverAndSwap(transactor, common.HexToAddress(usdt), orderID, amountInt, decodeData, Big0, EmptyAddress, value)
 					if err != nil {
+						log.Logger().WithField("error", err.Error()).Error("failed to send deliver and swap transaction")
+						alarm.Slack(context.Background(), "failed to send deliver and swap transaction")
 						time.Sleep(5 * time.Second)
 						continue
 					}
@@ -1028,40 +1099,42 @@ func HandlePendingOrdersOfSecondSStageFromEVMToTON() {
 	}
 }
 
-func deliver(transactor *tx.Transactor, usdt common.Address, orderID [32]byte, amount *big.Int, receiver common.Address) (txHash common.Hash, err error) {
-	txHash, err = transactor.Deliver(orderID, usdt, amount, receiver)
+func deliver(transactor *tx.Transactor, token common.Address, orderID [32]byte, amount *big.Int, receiver common.Address, fee *big.Int, feeReceiver common.Address) (txHash common.Hash, err error) {
+	txHash, err = transactor.Deliver(orderID, token, amount, receiver, fee, feeReceiver)
 	if err != nil {
 		fields := map[string]interface{}{
-			"orderID":  hex.EncodeToString(orderID[:]),
-			"token":    usdt,
-			"amount":   amount,
-			"receiver": receiver,
-			"error":    err.Error(),
+			"orderID":     hex.EncodeToString(orderID[:]),
+			"token":       token,
+			"amount":      amount,
+			"receiver":    receiver,
+			"fee":         fee,
+			"feeReceiver": feeReceiver,
+			"error":       err.Error(),
 		}
 		log.Logger().WithFields(fields).Error("failed to send deliver transaction")
-		alarm.Slack(context.Background(), "failed to send deliver transaction")
 		return txHash, err
 	}
 	log.Logger().WithField("hash", txHash).Info("completed send deliver transaction")
 	return txHash, nil
 }
 
-func deliverAndSwap(transactor *tx.Transactor, token common.Address, orderID [32]byte, amount *big.Int, params *SwapAndBridgeFunctionParams, value *big.Int) (txHash common.Hash, err error) {
+func deliverAndSwap(transactor *tx.Transactor, token common.Address, orderID [32]byte, amount *big.Int, params *SwapAndBridgeFunctionParams, fee *big.Int, feeReceiver common.Address, value *big.Int) (txHash common.Hash, err error) {
 	fields := map[string]interface{}{
-		"orderID":    hex.EncodeToString(orderID[:]),
-		"initiator":  Initiator,
-		"token":      token,
-		"amount":     amount,
-		"swapData":   hex.EncodeToString(params.SwapData),
-		"bridgeData": hex.EncodeToString(params.BridgeData),
-		"feeData":    hex.EncodeToString(params.FeeData),
-		"value":      value,
+		"orderID":     hex.EncodeToString(orderID[:]),
+		"initiator":   Initiator,
+		"token":       token,
+		"amount":      amount,
+		"swapData":    hex.EncodeToString(params.SwapData),
+		"bridgeData":  hex.EncodeToString(params.BridgeData),
+		"feeData":     hex.EncodeToString(params.FeeData),
+		"fee":         fee,
+		"feeReceiver": feeReceiver,
+		"value":       value,
 	}
-	txHash, err = transactor.DeliverAndSwap(orderID, Initiator, token, amount, params.SwapData, params.BridgeData, params.FeeData, value)
+	txHash, err = transactor.DeliverAndSwap(orderID, Initiator, token, amount, params.SwapData, params.BridgeData, params.FeeData, fee, feeReceiver, value)
 	if err != nil {
 		fields["error"] = err.Error()
 		log.Logger().WithFields(fields).Error("failed to send deliver and swap transaction")
-		alarm.Slack(context.Background(), "failed to send deliver and swap transaction")
 		return txHash, err
 	}
 	fields["hash"] = txHash.Hex()
