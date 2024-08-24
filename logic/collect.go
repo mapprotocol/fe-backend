@@ -231,12 +231,17 @@ func getUtxoFromOrders(items []*OrderItem, btcApiClient *mempool.MempoolClient) 
 }
 
 func getOrders(limit int, network *chaincfg.Params) ([]*OrderItem, int64, error) {
-	order := dao.Order{
+	order := dao.BitcoinOrder{
 		Action: dao.OrderActionToEVM,
 		Stage:  dao.OrderStag2,
 		Status: dao.OrderStatusTxConfirmed,
 	}
-	gotOrders, count, err := order.Find(nil, dao.Paginate(1, limit))
+	ext := &dao.QueryExtra{
+		Conditions: map[string]interface{}{
+			"collect_status": 0,
+		},
+	}
+	gotOrders, count, err := order.Find(ext, dao.Paginate(1, limit))
 	if err != nil {
 		return nil, 0, err
 	}
@@ -359,9 +364,8 @@ func setOrders(ords []*OrderItem, status uint8) error {
 		ids = append(ids, o.OrderID)
 	}
 
-	update := &dao.Order{
-		Stage:  dao.OrderStag3,
-		Status: status,
+	update := &dao.BitcoinOrder{
+		CollectStatus: status,
 	}
 	if err := dao.NewOrder().UpdatesByIDs(ids, update); err != nil {
 		params := map[string]interface{}{
@@ -369,7 +373,7 @@ func setOrders(ords []*OrderItem, status uint8) error {
 			"update": utils.JSON(update),
 			"error":  err,
 		}
-		log.Logger().WithFields(params).Error("failed to update order status")
+		log.Logger().WithFields(params).Error("failed to update order collect status")
 		return err
 	}
 	return nil
@@ -472,7 +476,7 @@ func withdrawOrdersInfos(items []*WithdrawOrder) string {
 }
 
 func getWithdrawOrders(limit int, network *chaincfg.Params) ([]*WithdrawOrder, error) {
-	order := dao.Order{
+	order := dao.BitcoinOrder{
 		Action: dao.OrderActionFromEVM,
 		Stage:  dao.OrderStag1,
 		Status: dao.OrderStatusTxConfirmed,
@@ -529,7 +533,7 @@ func getWithdrawOrders(limit int, network *chaincfg.Params) ([]*WithdrawOrder, e
 // state = 1 | 2
 // 1 -- init. 2 -- send  3 onchain
 func getInitedWithdrawOrders(state uint8, limit int) ([]*chainhash.Hash, error) {
-	order := dao.Order{
+	order := dao.BitcoinOrder{
 		Action: dao.OrderActionFromEVM,
 		Stage:  dao.OrderStag2,
 		Status: state,
@@ -553,7 +557,7 @@ func getInitedWithdrawOrders(state uint8, limit int) ([]*chainhash.Hash, error) 
 
 // state = 1 & txhash
 func initWithdrawOrders(txhash *chainhash.Hash, ids []uint64) error {
-	update := &dao.Order{
+	update := &dao.BitcoinOrder{
 		Stage:     dao.OrderStag2,
 		Status:    dao.OrderStatusTxPrepareSend,
 		OutTxHash: txhash.String(),
@@ -572,10 +576,10 @@ func initWithdrawOrders(txhash *chainhash.Hash, ids []uint64) error {
 
 // state=2
 func updateWithdrawOrdersState(txhash *chainhash.Hash, state uint8) error {
-	order := dao.Order{
+	order := dao.BitcoinOrder{
 		OutTxHash: txhash.String(),
 	}
-	update := &dao.Order{
+	update := &dao.BitcoinOrder{
 		Status: state,
 	}
 	if err := order.Updates(update); err != nil {

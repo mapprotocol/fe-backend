@@ -71,12 +71,12 @@ func (c *Collect) Find(ext *QueryExtra, pager Pager) (list []*Collect, count int
 	}
 
 	if pager != nil {
-		if err := tx.Model(c).Count(&count).Error; err != nil {
-			return list, count, err
-		}
-		if count == 0 {
-			return list, 0, nil
-		}
+		//if err := tx.Model(c).Count(&count).Error; err != nil {
+		//	return list, count, err
+		//}
+		//if count == 0 {
+		//	return list, 0, nil
+		//}
 		tx = tx.Scopes(pager)
 	}
 	err = tx.Find(&list).Error

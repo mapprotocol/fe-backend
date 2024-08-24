@@ -103,7 +103,7 @@ func main() {
 		return
 	}
 
-	alarm.ValidateEnv()
+	//alarm.ValidateEnv()
 	// init config
 	config.Init()
 	// init log
