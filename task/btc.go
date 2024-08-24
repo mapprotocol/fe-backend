@@ -568,28 +568,12 @@ func HandlePendingOrdersOfFirstStageFromEVM() {
 					continue
 				}
 			} else if onReceived.DstChain.String() == params.BTCChainID {
-				inAmount, err := strconv.ParseFloat(onReceived.InAmount, 10)
-				if err != nil {
-					log.Logger().WithField("amount", onReceived.InAmount).WithField("error", err.Error()).Error("failed to parse in amount")
-					alarm.Slack(context.Background(), "failed to parse in amount")
-					UpdateLogID(chainID, topic, lg.Id)
-					continue
-				}
-				inAmountSat, err := btcutil.NewAmount(inAmount)
-				if err != nil {
-					log.Logger().WithField("amount", onReceived.InAmount).WithField("error", err.Error()).Error("failed to convert in amount to satoshi")
-					alarm.Slack(context.Background(), "failed to convert in amount to satoshi")
-					UpdateLogID(chainID, topic, lg.Id)
-					continue
-				}
-
 				afterAmountFloat := new(big.Float).Quo(afterAmount, new(big.Float).SetUint64(params.WBTCDecimalOfChainPool))
 				order := &dao.BitcoinOrder{
 					SrcChain:    onReceived.SrcChain.String(),
 					SrcToken:    string(onReceived.SrcToken),
 					Sender:      string(onReceived.Sender),
 					InAmount:    onReceived.InAmount,
-					InAmountSat: strconv.FormatInt(int64(inAmountSat), 10),
 					RelayToken:  params.WBTCOfChainPool,
 					RelayAmount: afterAmountFloat.String(),
 					DstChain:    onReceived.DstChain.String(),
