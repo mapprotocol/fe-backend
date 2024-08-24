@@ -3,6 +3,7 @@ package logic
 import (
 	"encoding/hex"
 	"errors"
+	"github.com/btcsuite/btcd/btcutil"
 	"github.com/shopspring/decimal"
 	"math/big"
 	"sync"
@@ -616,7 +617,7 @@ func GetSwapFromTONToEVM(sender string, dstChain, receiver, feeCollector, feeRat
 			"amount":  amountOut.Text('f', -1),
 			"balance": balance.Text('f', -1),
 		}
-		log.Logger().WithFields(params).Info("amount is greater than balance")
+		log.Logger().WithFields(params).Info("amount is greater than ton router balance")
 		return nil, "", resp.CodeInsufficientLiquidity // todo chain pool
 	}
 
@@ -830,19 +831,23 @@ func GetSwapFromEVMToBitcoin(srcChain *big.Int, srcToken, sender, amount string,
 		}
 		return nil, "", resp.CodeInternalServerError
 	}
-	//if amountOut.Cmp(WBTCLimit) == -1 {
-	//	fmt.Println("============================== amountOut: ", amountOut)
-	//	return ret, "", resp.CodeAmountTooFew
-	//}
-	balance := amountOut // todo
+	if amountOut.Cmp(WBTCLimit) == -1 {
+		return ret, "", resp.CodeAmountTooFew
+	}
 
+	balanceSats, err := btcApiClient.Balance(btcVaultAddress)
+	if err != nil {
+		log.Logger().WithField("error", err).Error("failed to get bitcoin vault address balance")
+		return nil, "", resp.CodeInternalServerError
+	}
+	balance := big.NewFloat(btcutil.Amount(balanceSats).ToBTC())
 	if amountOut.Cmp(balance) == 1 {
 		params := map[string]interface{}{
 			"amount":  amountOut.Text('f', -1),
 			"balance": balance.Text('f', -1),
 		}
-		log.Logger().WithFields(params).Info("amount is greater than balance")
-		return nil, "", resp.CodeInsufficientLiquidity // todo chain pool
+		log.Logger().WithFields(params).Info("amount is greater than bitcoin vault address balance")
+		return nil, "", resp.CodeInsufficientLiquidity
 	}
 
 	chainPoolToken := constants.WBTCOfChainPool

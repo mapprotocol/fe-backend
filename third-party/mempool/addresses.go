@@ -55,3 +55,22 @@ func (c *MempoolClient) ListUnspent(address btcutil.Address) ([]*UnspentOutput, 
 	}
 	return unspentOutputs, nil
 }
+
+func (c *MempoolClient) Balance(address btcutil.Address) (int64, error) {
+	res, err := c.request(http.MethodGet, fmt.Sprintf("/address/%s/utxo", address.EncodeAddress()), nil)
+	if err != nil {
+		return 0, err
+	}
+
+	var utxos UTXOs
+	err = json.Unmarshal(res, &utxos)
+	if err != nil {
+		return 0, err
+	}
+
+	balance := int64(0)
+	for _, utxo := range utxos {
+		balance += utxo.Value
+	}
+	return balance, nil
+}

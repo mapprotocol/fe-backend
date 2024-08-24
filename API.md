@@ -1,3 +1,10 @@
+## supported chains
+
+| chain   | chain id           | 
+|---------|--------------------|
+| TON     | 1360104473493505   |
+| Bitcoin | 313230561203979757 |
+
 ## route
 
 ### request path
@@ -529,120 +536,6 @@ curl --location '127.0.0.1:8181/api/v1/swap?srcChain=1&srcToken=0x00000000000000
 }
 ```
 
-## create order
-
-### request path
-
-/api/v1/order/create
-
-### request method
-
-POST
-
-### request params
-
-| parameter    | type   | required | default | description                                                      |
-|--------------|--------|----------|---------|------------------------------------------------------------------|
-| srcChain     | string | Yes      |         |                                                                  |
-| srcToken     | string | Yes      |         |                                                                  |
-| sender       | string | Yes      |         |                                                                  |
-| amount       | string | Yes      |         |                                                                  |
-| dstChain     | string | Yes      |         |                                                                  |
-| dstToken     | string | Yes      |         |                                                                  |
-| receiver     | string | Yes      |         |                                                                  |
-| action       | number | Yes      |         | swap direction, 1: to evm, 2: from evm                           |
-| hash         | string | Yes      |         | the route hash returned by /api/v1/route                         |                
-| **slippage** | string | Yes      |         | slippage of swap, a integer in rang [0, 5000], e.g, 100 means 1% |
-
-### response params
-
-| parameter | type   | description   |
-|-----------|--------|---------------|
-| code      | number | response code |
-| msg       | string | response msg  |
-| data      | object | response data |
-
-#### data structure
-
-| parameter | type   | description ---- |
-|-----------|--------|------------------|
-| orderId   | number |                  |
-| relayer   | string | relayer address  |
-
-### Example
-
-**request**:
-
-```shell
-curl --location '127.0.0.1:8181/api/v1/order/create' \
---header 'Content-Type: application/json' \
---data '{
-    "srcChain": "0x3948cddbbe5889e5de5d8d8f91a5cc6619909af4",
-    "srcToken": "0x0000000000000000000000000000000000000000"
-    ...
-```
-
-**response**
-
-```json
-{
-  "code": 2000,
-  "msg": "Success",
-  "data": {
-    "orderId": 14723,
-    "relayer": "tb1ptuad7rdwycax553fp9fjg75ly2tv2065asl8uwcm3uxuve52tggqwclxst"
-  }
-}
-```
-
-## update order
-
-### request path
-
-/api/v1/order/update
-
-### request method
-
-POST
-
-### request params
-
-| parameter | type   | required | default | description |
-|-----------|--------|----------|---------|-------------|
-| orderId   | number | Yes      |         |             |
-| inTxHash  | string | Yes      |         |             |
-
-### response params
-
-| parameter | type   | description   |
-|-----------|--------|---------------|
-| code      | number | response code |
-| msg       | string | response msg  |
-| data      | object | response data |
-
-### Example
-
-**request**:
-
-```shell
-curl --location '127.0.0.1:8181/api/v1/order/update' \
---header 'Content-Type: application/json' \
---data '{
-    "orderId": 14723,
-    "inTxHash": "764111ece8e33adcabf5dce7d1a57886d20ff44b06e29c5298542763d20d22cb"
-    ...
-```
-
-**response**
-
-```json
-{
-  "code": 2000,
-  "msg": "Success",
-  "data": {}
-}
-```
-
 ## order list
 
 ### request path
@@ -700,7 +593,7 @@ GET
 **request**:
 
 ```shell
-curl --location 'http://127.0.0.1:8181/api/v1/order/list?sender=tb1p862kth24h9gvz3vlt0g76uyxwaswqra4fr5njz0tjyq85u6dx6jszjc68l'
+curl --location 'http://127.0.0.1:8181/api/v1/order/list?sender=EQAQkdeIVxGcH67fRM6duM2o0KociERYIhMiZW5cZ0kgrM8R'
 ```
 
 **response**
@@ -710,11 +603,22 @@ curl --location 'http://127.0.0.1:8181/api/v1/order/list?sender=tb1p862kth24h9gv
   "code": 2000,
   "msg": "Success",
   "data": {
-    "page": 1,
-    "total": 60,
+    "total": 1,
     "items": [
       {
-        "orderId": 1
+        "orderId": 14,
+        "srcChain": "1360104473493505",
+        "srcToken": "EQCxE6mUtQJKFnGfaROTKOt1lZbDiiX1kCixRv7Nw2Id_sDs",
+        "sender": "EQAQkdeIVxGcH67fRM6duM2o0KociERYIhMiZW5cZ0kgrM8R",
+        "inAmount": "5.916",
+        "dstChain": "22776",
+        "dstToken": "0x0000000000000000000000000000000000000000",
+        "receiver": "0x2E9B4be739453cdDbB3641FB61052BA46873D41f",
+        "outAmount": "",
+        "action": 1,
+        "stage": 2,
+        "status": 4,
+        "createdAt": 1724405186
       }
     ]
   }
@@ -735,6 +639,7 @@ GET
 
 | parameter | type   | required | default | description |
 |-----------|--------|----------|---------|-------------|
+| sender    | string | Yes      |         |             |
 | orderId   | number | Yes      |         |             |
 
 ### response params
@@ -768,7 +673,7 @@ GET
 **request**:
 
 ```shell
-curl --location 'http://127.0.0.1:8181/api/v1/order/list?sender=tb1p862kth24h9gvz3vlt0g76uyxwaswqra4fr5njz0tjyq85u6dx6jszjc68l'
+curl --location 'http://127.0.0.1:8181/api/v1/order/detail?ender=EQAQkdeIVxGcH67fRM6duM2o0KociERYIhMiZW5cZ0kgrM8R&orderId=14'
 ```
 
 **response**
@@ -778,21 +683,19 @@ curl --location 'http://127.0.0.1:8181/api/v1/order/list?sender=tb1p862kth24h9gv
   "code": 2000,
   "msg": "Success",
   "data": {
-    "orderId": 1
+    "orderId": 14,
+    "srcChain": "1360104473493505",
+    "srcToken": "EQCxE6mUtQJKFnGfaROTKOt1lZbDiiX1kCixRv7Nw2Id_sDs",
+    "sender": "EQAQkdeIVxGcH67fRM6duM2o0KociERYIhMiZW5cZ0kgrM8R",
+    "inAmount": "5.916",
+    "dstChain": "22776",
+    "dstToken": "0x0000000000000000000000000000000000000000",
+    "receiver": "0x2E9B4be739453cdDbB3641FB61052BA46873D41f",
+    "outAmount": "",
+    "action": 1,
+    "stage": 2,
+    "status": 4,
+    "createdAt": 1724405186
   }
 }
 ```
-
-## 接口调用顺序
-
-### ton to evm:
-
-1. /api/v1/route
-2. /api/v1/swap --> tx data
-3. send tx to ton
-
-### evm to ton
-
-1. /api/v1/route
-2. /api/v1/swap --> tx data
-3. send tx to evm

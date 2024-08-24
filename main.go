@@ -27,7 +27,8 @@ func main() {
 	tonrouter.Init()
 	logic.Init()
 
-	logic.InitNetworkParams(viper.GetString("network"))
+	bitcoinConf := viper.GetStringMapString("bitcoin")
+	logic.InitMempoolClient(bitcoinConf["network"], bitcoinConf["vault"])
 
 	engine := gin.Default()
 	router.Register(engine)

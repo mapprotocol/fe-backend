@@ -254,41 +254,6 @@ func Swap(c *gin.Context) {
 	code := resp.CodeSuccess
 	ret := &entity.SwapResponse{}
 
-	//switch req.SrcChain {
-	//case constants.TONChainID:
-	//	ret, msg, code = logic.GetSwapFromTON(req.Sender, req.DstChain, req.Receiver, req.FeeCollector, req.FeeRatio, req.Hash)
-	//	if code == resp.CodeExternalServerError {
-	//		resp.ExternalServerError(c, msg)
-	//		return
-	//	}
-	//	if code != resp.CodeSuccess {
-	//		resp.Error(c, code)
-	//		return
-	//	}
-	//default:
-	//	if strings.ToLower(req.Hash) == constants.LocalRouteHash {
-	//		exp := new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(req.Decimal)), nil)
-	//		amount := new(big.Float).Mul(amountBigFloat, new(big.Float).SetInt(exp))
-	//		amountBigInt, _ := amount.Int(nil)
-	//
-	//		ret, msg, code = logic.GetLocalRouteSwapFromEVM(srcChain, req.SrcToken, req.Sender, req.Amount, amountBigFloat, amountBigInt, dstChain, req.DstToken, req.Receiver, slippage)
-	//		if code != resp.CodeSuccess {
-	//			resp.Error(c, code)
-	//			return
-	//		}
-	//	} else {
-	//		ret, msg, code = logic.GetSwapFromEVM(srcChain, req.SrcToken, req.Sender, req.Amount, dstChain, req.DstToken, req.Receiver, req.Hash, slippage)
-	//		if code == resp.CodeExternalServerError {
-	//			resp.ExternalServerError(c, msg)
-	//			return
-	//		}
-	//		if code != resp.CodeSuccess {
-	//			resp.Error(c, code)
-	//			return
-	//		}
-	//	}
-	//}
-
 	if strings.ToLower(req.Hash) == constants.LocalRouteHash {
 		exp := new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(req.Decimal)), nil)
 		amount := new(big.Float).Mul(amountBigFloat, new(big.Float).SetInt(exp))

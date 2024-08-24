@@ -102,3 +102,87 @@ func TestMempoolClient_ListUnspent(t *testing.T) {
 		})
 	}
 }
+
+func TestMempoolClient_Balance(t *testing.T) {
+	type fields struct {
+		network *chaincfg.Params
+	}
+	type args struct {
+		address string
+	}
+	tests := []struct {
+		name    string
+		fields  fields
+		args    args
+		want    int64
+		wantErr bool
+	}{
+		{
+			name: "t-1",
+			fields: fields{
+				network: &chaincfg.TestNet3Params,
+			},
+			args: args{
+				address: "tb1q9l9pph9e8ds5calkf76y40gw9d37zmt6q4mnu3",
+			},
+			want:    7040802,
+			wantErr: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := NewClient(tt.fields.network)
+			t.Log("mempool url: ", c.baseURL)
+			address, err := btcutil.DecodeAddress(tt.args.address, tt.fields.network)
+			if err != nil {
+				t.Fatal(err)
+			}
+			got, err := c.Balance(address)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Balance() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if got != tt.want {
+				t.Errorf("Balance() got = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestSatoshiToBTC(t *testing.T) {
+
+	type fields struct {
+		network *chaincfg.Params
+	}
+	type args struct {
+		satoshi int64
+	}
+	tests := []struct {
+		name string
+		args args
+		want float64
+	}{
+		{
+			name: "t-1",
+			args: args{
+				satoshi: 7040802,
+			},
+			want: 0.07040802,
+		},
+		{
+			name: "t-2",
+			args: args{
+				satoshi: 50000,
+			},
+			want: 0.0005,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := btcutil.Amount(tt.args.satoshi).ToBTC()
+			if got != tt.want {
+				t.Errorf("SatoshiToBTC() got = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}

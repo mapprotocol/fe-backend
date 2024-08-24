@@ -2,11 +2,13 @@ package logic
 
 import (
 	"errors"
+	"fmt"
 	"github.com/btcsuite/btcd/btcec/v2"
 	"github.com/btcsuite/btcd/btcec/v2/schnorr"
 	"github.com/btcsuite/btcd/btcutil"
 	"github.com/btcsuite/btcd/chaincfg"
 	"github.com/btcsuite/btcd/txscript"
+	"github.com/mapprotocol/fe-backend/third-party/mempool"
 	"gorm.io/gorm"
 	blog "log"
 
@@ -16,14 +18,18 @@ import (
 	"github.com/mapprotocol/fe-backend/resp"
 )
 
-var NetParams = &chaincfg.Params{}
+var (
+	NetParams       = &chaincfg.Params{}
+	btcApiClient    = &mempool.MempoolClient{}
+	btcVaultAddress btcutil.Address
+)
 
 const (
 	NetworkMainnet = "mainnet"
 	NetworkTestnet = "testnet"
 )
 
-func InitNetworkParams(network string) {
+func InitMempoolClient(network, vault string) {
 	switch network {
 	case NetworkMainnet, "":
 		NetParams = &chaincfg.MainNetParams
@@ -34,6 +40,17 @@ func InitNetworkParams(network string) {
 	default:
 		panic("unknown network")
 	}
+
+	address, err := btcutil.DecodeAddress(vault, NetParams)
+	if err != nil {
+		panic(fmt.Sprintf("failed to decode vault address: %s", err))
+	}
+	btcVaultAddress = address
+	blog.Print("initialized vault address: ", address.String())
+
+	btcApiClient = mempool.NewClient(NetParams)
+	blog.Print("initialized mempool client，network: ", network)
+
 }
 
 //func CreateOrder(srcChain, srcToken, sender, amount string, dstChain, dstToken, receiver string, action uint8, slippage uint64) (ret *entity.CreateOrderResponse, code int) {
@@ -84,37 +101,37 @@ func InitNetworkParams(network string) {
 //	}, resp.CodeSuccess
 //}
 
-func UpdateOrder(orderID uint64, txHash string) int {
-	order, err := dao.NewOrderWithID(orderID).First()
-	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return resp.CodeOrderNotFound
-		}
-		log.Logger().WithField("order_id", orderID).WithField("error", err).Error("failed to get order")
-		return resp.CodeInternalServerError
-	}
-	if order.Action == dao.OrderActionToEVM {
-		// todo check tx hash
-	} else if order.Action == dao.OrderActionFromEVM {
-		// todo check tx hash
-		//common.HexToHash()
-	}
-
-	update := dao.Order{
-		ID:       orderID,
-		InTxHash: txHash,
-	}
-	if err := dao.NewOrder().Updates(&update); err != nil {
-		params := map[string]interface{}{
-			"order_id": orderID,
-			"txHash":   txHash,
-			"error":    err,
-		}
-		log.Logger().WithFields(params).Error("failed to update order")
-		return resp.CodeInternalServerError
-	}
-	return resp.CodeSuccess
-}
+//func UpdateOrder(orderID uint64, txHash string) int {
+//	order, err := dao.NewOrderWithID(orderID).First()
+//	if err != nil {
+//		if errors.Is(err, gorm.ErrRecordNotFound) {
+//			return resp.CodeOrderNotFound
+//		}
+//		log.Logger().WithField("order_id", orderID).WithField("error", err).Error("failed to get order")
+//		return resp.CodeInternalServerError
+//	}
+//	if order.Action == dao.OrderActionToEVM {
+//		// todo check tx hash
+//	} else if order.Action == dao.OrderActionFromEVM {
+//		// todo check tx hash
+//		//common.HexToHash()
+//	}
+//
+//	update := dao.Order{
+//		ID:       orderID,
+//		InTxHash: txHash,
+//	}
+//	if err := dao.NewOrder().Updates(&update); err != nil {
+//		params := map[string]interface{}{
+//			"order_id": orderID,
+//			"txHash":   txHash,
+//			"error":    err,
+//		}
+//		log.Logger().WithFields(params).Error("failed to update order")
+//		return resp.CodeInternalServerError
+//	}
+//	return resp.CodeSuccess
+//}
 
 func OrderList(sender string, page, size int) (ret []*entity.OrderListResponse, count int64, code int) {
 	list, count, err := dao.NewOrderWithSender(sender).Find(nil, dao.Paginate(page, size))
@@ -146,6 +163,7 @@ func OrderList(sender string, page, size int) (ret []*entity.OrderListResponse, 
 			Receiver:  s.Receiver,
 			OutAmount: s.OutAmount,
 			Action:    s.Action,
+			Stage:     s.Stage,
 			Status:    s.Status,
 			CreatedAt: s.CreatedAt.Unix(),
 		})
@@ -153,8 +171,46 @@ func OrderList(sender string, page, size int) (ret []*entity.OrderListResponse, 
 	return ret, count, resp.CodeSuccess
 }
 
-func OrderDetail(orderID uint64) (ret *entity.OrderDetailResponse, code int) {
-	order, err := dao.NewOrderWithID(orderID).First()
+func BitcoinOrderList(sender string, page, size int) (ret []*entity.OrderListResponse, count int64, code int) {
+	list, count, err := dao.NewBitcoinOrderWithSender(sender).Find(nil, dao.Paginate(page, size))
+	if err != nil {
+		fields := map[string]interface{}{
+			"page":  page,
+			"size":  size,
+			"error": err,
+		}
+		log.Logger().WithFields(fields).Error("failed to get bitcoin order list")
+		return nil, 0, resp.CodeInternalServerError
+	}
+
+	length := len(list)
+	if length == 0 {
+		return []*entity.OrderListResponse{}, count, resp.CodeSuccess
+	}
+
+	ret = make([]*entity.OrderListResponse, 0, length)
+	for _, s := range list {
+		ret = append(ret, &entity.OrderListResponse{
+			OrderID:   s.ID,
+			SrcChain:  s.SrcChain,
+			SrcToken:  s.SrcToken,
+			Sender:    s.Sender,
+			InAmount:  s.InAmount,
+			DstChain:  s.DstChain,
+			DstToken:  s.DstToken,
+			Receiver:  s.Receiver,
+			OutAmount: s.OutAmount,
+			Action:    s.Action,
+			Stage:     s.Stage,
+			Status:    s.Status,
+			CreatedAt: s.CreatedAt.Unix(),
+		})
+	}
+	return ret, count, resp.CodeSuccess
+}
+
+func OrderDetail(orderID uint64, sender string) (ret *entity.OrderDetailResponse, code int) {
+	order, err := dao.NewOrderWithID(orderID, sender).First()
 	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 		log.Logger().WithField("orderID", orderID).WithField("error", err).Error("failed to get order")
 		return nil, resp.CodeInternalServerError
@@ -174,6 +230,34 @@ func OrderDetail(orderID uint64) (ret *entity.OrderDetailResponse, code int) {
 		Receiver:  order.Receiver,
 		OutAmount: order.OutAmount,
 		Action:    order.Action,
+		Stage:     order.Stage,
+		Status:    order.Status,
+		CreatedAt: order.CreatedAt.Unix(),
+	}, resp.CodeSuccess
+}
+
+func BitcoinOrderDetail(orderID uint64, sender string) (ret *entity.OrderDetailResponse, code int) {
+	order, err := dao.NewBitcoinOrderWithID(orderID, sender).First()
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		log.Logger().WithField("orderID", orderID).WithField("error", err).Error("failed to get bitcoin order")
+		return nil, resp.CodeInternalServerError
+	}
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, resp.CodeOrderNotFound
+	}
+
+	return &entity.OrderDetailResponse{
+		OrderID:   order.ID,
+		SrcChain:  order.SrcChain,
+		SrcToken:  order.SrcToken,
+		Sender:    order.Sender,
+		InAmount:  order.InAmount,
+		DstChain:  order.DstChain,
+		DstToken:  order.DstToken,
+		Receiver:  order.Receiver,
+		OutAmount: order.OutAmount,
+		Action:    order.Action,
+		Stage:     order.Stage,
 		Status:    order.Status,
 		CreatedAt: order.CreatedAt.Unix(),
 	}, resp.CodeSuccess

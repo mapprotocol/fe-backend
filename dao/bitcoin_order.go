@@ -40,8 +40,15 @@ func NewBitcoinOrder() *BitcoinOrder {
 	return &BitcoinOrder{}
 }
 
-func NewBitcoinOrderWithID(id uint64) *BitcoinOrder {
-	return &BitcoinOrder{ID: id}
+func NewBitcoinOrderWithID(id uint64, sender string) *BitcoinOrder {
+	return &BitcoinOrder{
+		ID:     id,
+		Sender: sender,
+	}
+}
+
+func NewBitcoinOrderWithSender(sender string) *BitcoinOrder {
+	return &BitcoinOrder{Sender: sender}
 }
 
 func (o *BitcoinOrder) TableName() string {
@@ -95,15 +102,4 @@ func (o *BitcoinOrder) Find(ext *QueryExtra, pager Pager) (list []*BitcoinOrder,
 	}
 	err = tx.Find(&list).Error
 	return list, count, err
-}
-
-func (o *BitcoinOrder) GetOldest10ByStatus(id uint64, action, stage, status uint8) (list []*BitcoinOrder, err error) {
-	err = db.GetDB().Where(o).Where("id >= ?", id).Where("action = ?", action).
-		Where("stage = ?", stage).Where("status = ?", status).Limit(OldestLimit).Find(&list).Error
-	return list, err
-}
-
-func (o *BitcoinOrder) GetOldest10ByID(id uint64) (list []*BitcoinOrder, err error) {
-	err = db.GetDB().Where(o).Where("id >= ?", id).Limit(OldestLimit).Find(&list).Error
-	return list, err
 }

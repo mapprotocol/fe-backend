@@ -58,8 +58,11 @@ func NewOrder() *Order {
 	return &Order{}
 }
 
-func NewOrderWithID(id uint64) *Order {
-	return &Order{ID: id}
+func NewOrderWithID(id uint64, sender string) *Order {
+	return &Order{
+		ID:     id,
+		Sender: sender,
+	}
 }
 
 func NewOrderWithSender(sender string) *Order {

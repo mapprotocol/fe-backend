@@ -75,19 +75,19 @@ import (
 //	resp.Success(c, ret)
 //}
 
-func UpdateOrder(c *gin.Context) {
-	req := &entity.UpdateOrderRequest{}
-	if err := c.ShouldBindJSON(req); err != nil {
-		resp.ParameterErr(c, "")
-		return
-	}
-
-	if code := logic.UpdateOrder(req.OrderID, req.InTxHash); code != resp.CodeSuccess {
-		resp.Error(c, code)
-		return
-	}
-	resp.SuccessNil(c)
-}
+//func UpdateOrder(c *gin.Context) {
+//	req := &entity.UpdateOrderRequest{}
+//	if err := c.ShouldBindJSON(req); err != nil {
+//		resp.ParameterErr(c, "")
+//		return
+//	}
+//
+//	if code := logic.UpdateOrder(req.OrderID, req.InTxHash); code != resp.CodeSuccess {
+//		resp.Error(c, code)
+//		return
+//	}
+//	resp.SuccessNil(c)
+//}
 
 func OrderList(c *gin.Context) {
 	req := &entity.OrderListRequest{}
@@ -98,11 +98,24 @@ func OrderList(c *gin.Context) {
 
 	page, size := utils.ValidatePage(req.Page, req.Size)
 
-	list, count, code := logic.OrderList(req.Sender, page, size)
-	if code != resp.CodeSuccess {
-		resp.Error(c, code)
-		return
+	count := int64(0)
+	code := resp.CodeSuccess
+	var list []*entity.OrderListResponse
+
+	if utils.IsValidBitcoinAddress(req.Sender, logic.NetParams) {
+		list, count, code = logic.BitcoinOrderList(req.Sender, page, size)
+		if code != resp.CodeSuccess {
+			resp.Error(c, code)
+			return
+		}
+	} else {
+		list, count, code = logic.OrderList(req.Sender, page, size)
+		if code != resp.CodeSuccess {
+			resp.Error(c, code)
+			return
+		}
 	}
+
 	resp.SuccessList(c, count, list)
 }
 
@@ -113,10 +126,22 @@ func OrderDetail(c *gin.Context) {
 		return
 	}
 
-	ret, code := logic.OrderDetail(req.OrderID)
-	if code != resp.CodeSuccess {
-		resp.Error(c, code)
-		return
+	code := resp.CodeSuccess
+	ret := &entity.OrderDetailResponse{}
+
+	if utils.IsValidBitcoinAddress(req.Sender, logic.NetParams) {
+		ret, code = logic.BitcoinOrderDetail(req.OrderID, req.Sender)
+		if code != resp.CodeSuccess {
+			resp.Error(c, code)
+			return
+		}
+	} else {
+		ret, code = logic.OrderDetail(req.OrderID, req.Sender)
+		if code != resp.CodeSuccess {
+			resp.Error(c, code)
+			return
+		}
 	}
+
 	resp.Success(c, ret)
 }

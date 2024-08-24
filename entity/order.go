@@ -25,6 +25,7 @@ type OrderListRequest struct {
 }
 
 type OrderDetailRequest struct {
+	Sender  string `form:"sender"`
 	OrderID uint64 `form:"orderId"`
 }
 
@@ -46,6 +47,7 @@ type OrderListResponse struct {
 	Receiver  string `json:"receiver"`
 	OutAmount string `json:"outAmount"`
 	Action    uint8  `json:"action"`
+	Stage     uint8  `json:"stage"`
 	Status    uint8  `json:"status"`
 	CreatedAt int64  `json:"createdAt"`
 }
@@ -61,6 +63,7 @@ type OrderDetailResponse struct {
 	Receiver  string `json:"receiver"`
 	OutAmount string `json:"outAmount"`
 	Action    uint8  `json:"action"`
+	Stage     uint8  `json:"stage"`
 	Status    uint8  `json:"status"`
 	CreatedAt int64  `json:"createdAt"`
 }
