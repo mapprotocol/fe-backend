@@ -766,10 +766,11 @@ func GetSwapFromBitcoinToEVM(srcChain, srcToken, sender string, amount *big.Floa
 	}
 	if amount.Cmp(balance) == 1 {
 		params := map[string]interface{}{
-			"amount":  amount.Text('f', -1),
-			"balance": balance.Text('f', -1),
+			"dstChain": dstChain,
+			"amount":   amount.Text('f', -1),
+			"balance":  balance.Text('f', -1),
 		}
-		log.Logger().WithFields(params).Info("amount is greater than balance")
+		log.Logger().WithFields(params).Info("amount is greater than chain pool balance")
 		return nil, "", resp.CodeInsufficientLiquidity // todo chain pool
 	}
 
@@ -785,11 +786,11 @@ func GetSwapFromBitcoinToEVM(srcChain, srcToken, sender string, amount *big.Floa
 	}
 
 	order := &dao.BitcoinOrder{
-		SrcChain: srcChain,
-		SrcToken: srcToken,
-		Sender:   sender,
-		//InAmount:   amount.Text('f', -1),
-		//InAmountSat:
+		SrcChain:     srcChain,
+		SrcToken:     srcToken,
+		Sender:       sender,
+		InAmount:     amount.Text('f', -1),
+		InAmountSat:  amountBigInt.String(),
 		Relayer:      address.String(),
 		RelayerKey:   privateKey.Key.String(),
 		DstChain:     dstChain,
