@@ -789,7 +789,7 @@ func GetSwapFromBitcoinToEVM(srcChain, srcToken, sender string, amount *big.Floa
 		SrcChain:     srcChain,
 		SrcToken:     srcToken,
 		Sender:       sender,
-		InAmount:     amount.Text('f', -1),
+		InAmount:     amount.Text('f', 8),
 		InAmountSat:  amountBigInt.String(),
 		Relayer:      address.String(),
 		RelayerKey:   privateKey.Key.String(),

@@ -70,6 +70,9 @@ func (c *MempoolClient) Balance(address btcutil.Address) (int64, error) {
 
 	balance := int64(0)
 	for _, utxo := range utxos {
+		if !utxo.Status.Confirmed {
+			continue
+		}
 		balance += utxo.Value
 	}
 	return balance, nil
