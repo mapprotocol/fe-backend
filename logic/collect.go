@@ -986,6 +986,11 @@ func RunCollect(cfg *CollectCfg) error {
 				log.Logger().WithField("error", err).Error("create latest collect info failed")
 				return err
 			}
+			err = setOrders(ords, dao.OrderStatusTxPrepareSend)
+			if err != nil {
+				log.Logger().WithField("error", err).Info("[OrderStatusTxPrepareSend] set orders state failed")
+				return err
+			}
 			log.Logger().Info("create latest collect info success")
 
 			txHash, err := client.BroadcastTx(tx)
@@ -995,7 +1000,11 @@ func RunCollect(cfg *CollectCfg) error {
 				return err
 			}
 			log.Logger().WithField("txhash", txHash.String()).Info("broadcast the collect tx")
-
+			err = setOrders(ords, dao.OrderStatusTxSent)
+			if err != nil {
+				log.Logger().WithField("error", err).Info("[OrderStatusTxSent] set orders state failed")
+				return err
+			}
 			if err = setLatestCollectInfo(txHash, dao.OrderStatusTxSent); err != nil {
 				log.Logger().WithField("error", err).Info("set setLatestCollectInfo failed")
 			}
