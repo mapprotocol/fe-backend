@@ -295,7 +295,7 @@ func getOrders(limit int, network *chaincfg.Params) ([]*OrderItem, int64, error)
 
 func getLatestCollectInfo() (*chainhash.Hash, []*OrderItem, error) {
 	collect := &dao.Collect{
-		Status: dao.CollectStatusPending,
+		Status: dao.OrderStatusTxSent,
 	}
 	gotCollects, _, err := collect.Find(nil, nil)
 	if err != nil {
