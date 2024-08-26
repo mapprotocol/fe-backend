@@ -410,7 +410,7 @@ func getFeeRate(test bool, client *mempool.MempoolClient) int64 {
 	if err != nil {
 		return 50
 	}
-	return resp.FastestFee
+	return resp.FastestFee * 2
 }
 func waitTxOnChain(txhash *chainhash.Hash, client *mempool.MempoolClient) error {
 	time.Sleep(30 * time.Second)
