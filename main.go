@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"github.com/btcsuite/btcd/btcutil"
 	"github.com/btcsuite/btcd/chaincfg"
+	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/mapprotocol/fe-backend/config"
 	"github.com/mapprotocol/fe-backend/logic"
+	"github.com/mapprotocol/fe-backend/logic/keystore"
 	"github.com/mapprotocol/fe-backend/resource/db"
 	"github.com/mapprotocol/fe-backend/resource/log"
 	"github.com/mapprotocol/fe-backend/utils/alarm"
@@ -17,7 +19,7 @@ import (
 const (
 	VersionMajor = 0          // Major version component of the current release
 	VersionMinor = 0          // Minor version component of the current release
-	VersionPatch = 1          // Patch version component of the current release
+	VersionPatch = 2          // Patch version component of the current release
 	VersionMeta  = "unstable" // Version metadata to append to the version string
 )
 
@@ -96,6 +98,14 @@ func toConfig() (*logic.CollectCfg, error) {
 
 	return cfg, nil
 }
+func getHotWallet2Key() (string, error) {
+	fpath := "./hotwallet2.json"
+	keyBytes, err := keystore.GetWalletKey(fpath)
+	if err != nil {
+		return "", err
+	}
+	return hexutil.Encode(keyBytes), nil
+}
 func main() {
 	args := os.Args
 	if len(args) >= 2 && args[1] == "version" {
@@ -106,6 +116,12 @@ func main() {
 	//alarm.ValidateEnv()
 	// init config
 	config.Init()
+	//k, e := getHotWallet2Key()
+	//if e != nil {
+	//	fmt.Println(e)
+	//	return
+	//}
+	//fmt.Println(k)
 	// init log
 	log.Init(viper.GetString("env"), viper.GetString("logDir"))
 	// init db
