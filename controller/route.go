@@ -272,6 +272,8 @@ func Swap(c *gin.Context) {
 				return
 			}
 		}
+		resp.Success(c, ret)
+		return
 	}
 
 	if req.SrcChain == constants.TONChainID {
