@@ -484,11 +484,11 @@ func GetEVMToBitcoinRoute(req *entity.RouteRequest, amount decimal.Decimal, feeR
 		return ret, "", resp.CodeButterNotAvailableRoute
 	}
 
-	tonRoutes, err := getBitcoinRoutes(butterRoutes)
+	bitcoinRoutes, err := getBitcoinRoutes(butterRoutes)
 	if err != nil {
 		return ret, "", resp.CodeTONRouteServerError
 	}
-	if len(tonRoutes) != len(butterRoutes) {
+	if len(bitcoinRoutes) != len(butterRoutes) {
 		return ret, "", resp.CodeTONRouteServerError
 	}
 
@@ -502,14 +502,14 @@ func GetEVMToBitcoinRoute(req *entity.RouteRequest, amount decimal.Decimal, feeR
 	}
 	ret = make([]*entity.RouteResponse, 0, len(butterRoutes))
 	for _, r := range butterRoutes {
-		tonRoute, ok := tonRoutes[r.Hash]
+		bitcoinRoute, ok := bitcoinRoutes[r.Hash]
 		if !ok {
 			continue
 		}
 
-		in := tonRoute.SrcChain.Route[0].Path[0].TokenIn
+		in := bitcoinRoute.SrcChain.Route[0].Path[0].TokenIn
 		tonTokenIn = entity.Token{
-			ChainId:  tonRoute.SrcChain.ChainId,
+			ChainId:  bitcoinRoute.SrcChain.ChainId,
 			Address:  in.Address,
 			Name:     in.Name,
 			Decimals: in.Decimals,
@@ -517,9 +517,9 @@ func GetEVMToBitcoinRoute(req *entity.RouteRequest, amount decimal.Decimal, feeR
 			Icon:     in.Image,
 		}
 
-		out := tonRoute.SrcChain.Route[0].Path[0].TokenOut
+		out := bitcoinRoute.SrcChain.Route[0].Path[0].TokenOut
 		tonTokenOut = entity.Token{
-			ChainId:  tonRoute.SrcChain.ChainId,
+			ChainId:  bitcoinRoute.SrcChain.ChainId,
 			Address:  out.Address,
 			Name:     out.Name,
 			Decimals: out.Decimals,
@@ -549,7 +549,7 @@ func GetEVMToBitcoinRoute(req *entity.RouteRequest, amount decimal.Decimal, feeR
 			TokenIn:   butterSrcChainTokenIn,
 			TokenOut:  tonTokenOut,
 			AmountIn:  r.SrcChain.TotalAmountIn,
-			AmountOut: tonRoute.SrcChain.TokenAmountOut,
+			AmountOut: bitcoinRoute.SrcChain.TokenAmountOut,
 			Path: []entity.Path{
 				{
 					Name:      r.SrcChain.Bridge,
@@ -561,14 +561,14 @@ func GetEVMToBitcoinRoute(req *entity.RouteRequest, amount decimal.Decimal, feeR
 				{
 					Name:      constants.ExchangeNameFlushExchange,
 					AmountIn:  r.DstChain.TotalAmountOut,
-					AmountOut: tonRoute.SrcChain.TokenAmountIn,
+					AmountOut: bitcoinRoute.SrcChain.TokenAmountIn,
 					TokenIn:   butterDstChainTokenOut,
 					TokenOut:  tonTokenIn,
 				},
 				{
-					Name:      tonRoute.SrcChain.Route[0].DexName,
-					AmountIn:  tonRoute.SrcChain.TokenAmountIn,
-					AmountOut: tonRoute.SrcChain.TokenAmountOut,
+					Name:      bitcoinRoute.SrcChain.Route[0].DexName,
+					AmountIn:  bitcoinRoute.SrcChain.TokenAmountIn,
+					AmountOut: bitcoinRoute.SrcChain.TokenAmountOut,
 					TokenIn:   tonTokenIn,
 					TokenOut:  tonTokenOut,
 				},

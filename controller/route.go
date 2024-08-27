@@ -254,6 +254,7 @@ func Swap(c *gin.Context) {
 	code := resp.CodeSuccess
 	ret := &entity.SwapResponse{}
 
+	// call the `deliver` method of the chain pool to exchange the same token on the same chain.
 	if strings.ToLower(req.Hash) == constants.LocalRouteHash {
 		exp := new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(req.Decimal)), nil)
 		amount := new(big.Float).Mul(amountBigFloat, new(big.Float).SetInt(exp))

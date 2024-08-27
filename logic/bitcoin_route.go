@@ -49,7 +49,7 @@ func GetBitcoinLocalRoutes(amount string) *Route {
 		Decimals: 8,
 	}
 	route := Route{
-		Hash: constants.LocalRouteHash,
+		Hash: constants.LocalRouteBitcoinHash,
 		GasFee: struct {
 			Amount string `json:"amount"`
 			Symbol string `json:"symbol"`

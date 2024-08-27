@@ -48,4 +48,12 @@ const BridgeFeeSymbolOfBTC = "BTC"
 const NativeSymbolOfChainPool = "MAPO"
 
 const LocalRouteGasFee = "0.121116"
+
+// LocalRouteHash is the hash of local route for chain pool
+// This route indicates that the `deliver` method of the chain pool needs to be called to exchange
+// the same token on the same chain.
 const LocalRouteHash = "0x0000000000000000000000000000000000000000000000000000000000022776"
+
+// LocalRouteBitcoinHash is the hash of local route for bitcoin chain
+// This route indicates that the transaction was sent from Bitcoin
+const LocalRouteBitcoinHash = "0x0000000000000000000000000000000000000000000000313230561203979757"
