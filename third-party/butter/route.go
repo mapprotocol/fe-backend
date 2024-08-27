@@ -12,6 +12,7 @@ import (
 	"github.com/spf13/viper"
 	"math/big"
 	"strconv"
+	"strings"
 )
 
 const SuccessCode = 0
@@ -118,7 +119,7 @@ func Init() {
 	}
 }
 func Route(request *RouteRequest) ([]*RouteResponseData, error) {
-	if request.FromChainID == request.ToChainID && request.TokenInAddress == request.TokenOutAddress {
+	if request.FromChainID == request.ToChainID && strings.ToLower(request.TokenInAddress) == strings.ToLower(request.TokenOutAddress) {
 		return getLocalRoutes(request.Amount), nil
 	}
 	params := fmt.Sprintf(
