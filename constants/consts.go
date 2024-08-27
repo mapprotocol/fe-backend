@@ -16,6 +16,7 @@ const (
 )
 
 const USDTDecimalNumberOfChainPool = 18
+const BTCDecimalNumberOfChainPool = 18
 
 const (
 	WBTCOfChainPool = "0xb877e3562a660c7861117c2f1361a26abaf19beb"

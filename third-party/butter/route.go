@@ -120,7 +120,7 @@ func Init() {
 }
 func Route(request *RouteRequest) ([]*RouteResponseData, error) {
 	if request.FromChainID == request.ToChainID && strings.ToLower(request.TokenInAddress) == strings.ToLower(request.TokenOutAddress) {
-		return getLocalRoutes(request.Amount), nil
+		return getLocalRoutes(request.TokenInAddress, request.Amount), nil
 	}
 	params := fmt.Sprintf(
 		"fromChainId=%s&toChainId=%s&tokenInAddress=%s&tokenOutAddress=%s&amount=%s&type=%s&slippage=%d&entrance=%s",
@@ -220,7 +220,36 @@ func GetRouteAmountOut(hash string) (*big.Float, error) {
 	return amountOut, nil
 }
 
-func getLocalRoutes(amount string) []*RouteResponseData {
+func getLocalRoutes(tokenAddress, amount string) []*RouteResponseData {
+	token := struct {
+		Address  string `json:"address"`
+		Name     string `json:"name"`
+		Decimals int    `json:"decimals"`
+		Symbol   string `json:"symbol"`
+		Icon     string `json:"icon"`
+	}{
+		Address:  constants.USDTOfChainPool,
+		Name:     "Tether USD",
+		Decimals: constants.USDTDecimalNumberOfChainPool,
+		Symbol:   "USDT",
+		Icon:     "https://files.mapprotocol.io/bridge/usdt.png",
+	}
+
+	if strings.ToLower(tokenAddress) == strings.ToLower(constants.WBTCOfChainPool) {
+		token = struct {
+			Address  string `json:"address"`
+			Name     string `json:"name"`
+			Decimals int    `json:"decimals"`
+			Symbol   string `json:"symbol"`
+			Icon     string `json:"icon"`
+		}{
+			Address:  constants.WBTCOfChainPool,
+			Name:     "Bitcoin",
+			Decimals: constants.BTCDecimalNumberOfChainPool,
+			Symbol:   "BTC",
+			Icon:     "https://map-static-file.s3.amazonaws.com/mapSwap/merlin/0x0000000000000000000000000000000000000000.jpg",
+		}
+	}
 	chin := struct {
 		ChainId string `json:"chainId"`
 		TokenIn struct {
@@ -241,33 +270,9 @@ func getLocalRoutes(amount string) []*RouteResponseData {
 		TotalAmountOut string `json:"totalAmountOut"`
 		Bridge         string `json:"bridge"`
 	}{
-		ChainId: constants.ChainIDOfChainPool,
-		TokenIn: struct {
-			Address  string `json:"address"`
-			Name     string `json:"name"`
-			Decimals int    `json:"decimals"`
-			Symbol   string `json:"symbol"`
-			Icon     string `json:"icon"`
-		}{
-			Address:  constants.USDTOfChainPool,
-			Name:     "Tether USD",
-			Decimals: constants.USDTDecimalNumberOfChainPool,
-			Symbol:   "USDT",
-			Icon:     "https://files.mapprotocol.io/bridge/usdt.png",
-		},
-		TokenOut: struct {
-			Address  string `json:"address"`
-			Name     string `json:"name"`
-			Decimals int    `json:"decimals"`
-			Symbol   string `json:"symbol"`
-			Icon     string `json:"icon"`
-		}{
-			Address:  constants.USDTOfChainPool,
-			Name:     "Tether USD",
-			Decimals: constants.USDTDecimalNumberOfChainPool,
-			Symbol:   "USDT",
-			Icon:     "https://files.mapprotocol.io/bridge/usdt.png",
-		},
+		ChainId:        constants.ChainIDOfChainPool,
+		TokenIn:        token,
+		TokenOut:       token,
 		TotalAmountIn:  amount,
 		TotalAmountOut: amount,
 		Bridge:         constants.ExchangeNameFlushExchange,
