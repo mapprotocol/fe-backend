@@ -47,18 +47,16 @@ type PrevOutPoint struct {
 type CollectCfg struct {
 	Testnet                 bool
 	StrHotWalletFee1Privkey string
-	StrHotWallet1Priv       string
 	HotWalletFee1           btcutil.Address // use for collect tx fee
 	HotWallet1              btcutil.Address // use for collect
 
 	StrHotWalletFee2Privkey string
-	StrHotWallet2Priv       string
+	HotWallet2Priv          *btcec.PrivateKey
 	HotWalletFee2           btcutil.Address // use for withdraw  tx fee
 	HotWallet2              btcutil.Address // use for withdraw
 	HotWallet2Line          int64
 
-	StrFee3Privkey string
-	HotWalletFee3  btcutil.Address // use for move tx fee (hot1 --> hot2)
+	HotWalletFee3 btcutil.Address // use for move tx fee (hot1 --> hot2)
 
 	MaxTransferAmount int64
 }
@@ -752,20 +750,6 @@ func checkWithdrawTxsState(cfg *CollectCfg) {
 		time.Sleep(5 * time.Minute)
 	}
 }
-func checkHotwallet2Balance(cfg *CollectCfg, hotwallet2 btcutil.Address, client *mempool.MempoolClient) (bool, error) {
-	outs, err := gatherUTXO3(hotwallet2, client)
-	if err != nil {
-		return false, err
-	}
-	all := int64(0)
-	for _, out := range outs {
-		all += out.Value
-	}
-	if all < cfg.HotWallet2Line {
-		return true, nil
-	}
-	return false, nil
-}
 
 // =============================================================================
 func makeSimpleTx0(feerate, amount int64, sender, receiver, tipper btcutil.Address, senderPriv,
@@ -859,44 +843,10 @@ func makeSimpleTx0(feerate, amount int64, sender, receiver, tipper btcutil.Addre
 	return commitTx, nil
 }
 
-func makeHotWallet1ToHotWallet2Tx(feerate int64, cfg *CollectCfg, btcApiClient *mempool.MempoolClient) (*wire.MsgTx, error) {
-	privateKeyBytes, err := hex.DecodeString(cfg.StrHotWallet1Priv)
-	if err != nil {
-		panic(err)
-	}
-	senderPriv, _ := btcec.PrivKeyFromBytes(privateKeyBytes)
-
-	sender, receiver, feeAddress := cfg.HotWallet1, cfg.HotWallet2, cfg.HotWalletFee3
-
-	privateKeyBytes, err = hex.DecodeString(cfg.StrFee3Privkey)
-	if err != nil {
-		panic(err)
-	}
-	feePriv, _ := btcec.PrivKeyFromBytes(privateKeyBytes)
-
-	// get the sender_address utxo
-	senderOutlist, err := gatherUTXO3(sender, btcApiClient)
-	if err != nil {
-		return nil, err
-	}
-	// get the fee_address utxo
-	feeOutlist, err := gatherUTXO3(feeAddress, btcApiClient)
-	if err != nil {
-		return nil, err
-	}
-
-	amount := cfg.MaxTransferAmount
-	tx, err := makeSimpleTx0(feerate, amount, sender, receiver, feeAddress, senderPriv, feePriv,
-		senderOutlist, feeOutlist, btcApiClient)
-
-	return tx, err
-}
-
 // =============================================================================
 func Run(cfg *CollectCfg) error {
 	wg := &sync.WaitGroup{}
 	wg.Add(4)
-	chBalanceLow, chBalanceHigh := make(chan int), make(chan int)
 
 	go func(cfg *CollectCfg) {
 		defer wg.Done()
@@ -906,14 +856,8 @@ func Run(cfg *CollectCfg) error {
 
 	go func(cfg *CollectCfg) {
 		defer wg.Done()
-		err := RunBtcWithdraw(cfg, chBalanceLow, chBalanceHigh)
+		err := RunBtcWithdraw(cfg)
 		log.Logger().WithField("error", err).Error("withdraw process finish")
-	}(cfg)
-
-	go func(cfg *CollectCfg) {
-		defer wg.Done()
-		err := RunHotWalletBalance(cfg, chBalanceLow, chBalanceHigh)
-		log.Logger().WithField("error", err).Error("hot wallet balance process finish")
 	}(cfg)
 
 	go func(cfg *CollectCfg) {
@@ -922,8 +866,6 @@ func Run(cfg *CollectCfg) error {
 	}(cfg)
 
 	wg.Wait()
-	close(chBalanceLow)
-	close(chBalanceHigh)
 	log.Logger().Info("......finish......")
 	return nil
 }
@@ -1034,10 +976,10 @@ func RunCollect(cfg *CollectCfg) error {
 func btcWithdrawTxTransfer(cfg *CollectCfg, tipper, sender btcutil.Address, tipperPriv, senderPriv *btcec.PrivateKey,
 	orders []*WithdrawOrder, client *mempool.MempoolClient) error {
 
-	log.Logger().Info("begin withdrawal tx process.....")
-	feerate := getFeeRate(cfg.Testnet, client)
-
 	if len(orders) > 0 {
+		log.Logger().Info("begin withdrawal tx process.....")
+		feerate := getFeeRate(cfg.Testnet, client)
+
 		log.Logger().WithField("key", withdrawOrdersInfos(orders)).Info("user withdraw...")
 
 		tx, err := makeWithdrawTx1(feerate, tipper, sender, senderPriv, tipperPriv, orders, client)
@@ -1073,17 +1015,17 @@ func btcWithdrawTxTransfer(cfg *CollectCfg, tipper, sender btcutil.Address, tipp
 	}
 	return nil
 }
-func RunBtcWithdraw(cfg *CollectCfg, ch1, ch2 chan int) error {
+func RunBtcWithdraw(cfg *CollectCfg) error {
 	privateKeyBytes, err := hex.DecodeString(cfg.StrHotWalletFee2Privkey)
 	if err != nil {
 		panic(err)
 	}
+
 	tipperPriv, _ := btcec.PrivKeyFromBytes(privateKeyBytes)
-	privBytes1, err := hex.DecodeString(cfg.StrHotWallet2Priv)
-	if err != nil {
-		panic(err)
+	senderPriv := cfg.HotWallet2Priv
+	if senderPriv == nil {
+		panic("invalid hot-wallet2 key")
 	}
-	senderPriv, _ := btcec.PrivKeyFromBytes(privBytes1)
 	tipper, sender := cfg.HotWalletFee2, cfg.HotWallet2
 
 	network := &chaincfg.MainNetParams
@@ -1092,95 +1034,24 @@ func RunBtcWithdraw(cfg *CollectCfg, ch1, ch2 chan int) error {
 	}
 	client := mempool.NewClient(network)
 
-	stopWithdraw := false
 	ticker := time.NewTicker(2 * time.Minute)
 	defer ticker.Stop()
 
 	for {
 		select {
-		case msg := <-ch2:
-			if msg == FullBalanceHotWallet {
-				stopWithdraw = false
-			}
 		case <-ticker.C:
-			if !stopWithdraw {
-				orders, err := getWithdrawOrders(20, network)
+			orders, err := getWithdrawOrders(20, network)
+			if err != nil {
+				log.Logger().WithField("error", err).Error("failed to get orders")
+				alarm.Slack(context.Background(), "failed to get withdraw orders")
+			} else {
+				err = btcWithdrawTxTransfer(cfg, tipper, sender, tipperPriv, senderPriv, orders, client)
 				if err != nil {
-					log.Logger().WithField("error", err).Error("failed to get orders")
-					alarm.Slack(context.Background(), "failed to get withdraw orders")
-				} else {
-					err = btcWithdrawTxTransfer(cfg, tipper, sender, tipperPriv, senderPriv, orders, client)
-					if err != nil {
-						if err == localErr.LowBalanceInHotWallet2 {
-							stopWithdraw = true
-							ch1 <- LowBalanceHotWallet
-						}
+					if err == localErr.LowBalanceInHotWallet2 {
+						log.Logger().WithField("error", err).Error("failed to Withdraw")
+						alarm.Slack(context.Background(), "cann't withdraw, low balance in hot-wallet2")
 					}
 				}
-			}
-		default:
-		}
-	}
-	return nil
-}
-
-func HotWalletBalanceTransfer(cfg *CollectCfg, client *mempool.MempoolClient) error {
-	// get the withdrawal order
-	log.Logger().Info("begin hotwallet1 to hotwallet2 process.....")
-	feerate := getFeeRate(cfg.Testnet, client)
-
-	tx, err := makeHotWallet1ToHotWallet2Tx(feerate, cfg, client)
-	if err != nil {
-		log.Logger().WithField("error", err).Info("wallet1 to wallet2 failed")
-		return err
-	}
-
-	txHash, err := client.BroadcastTx(tx)
-	if err != nil {
-		log.Logger().WithField("error", err).Error("failed to broadcast tx")
-		return err
-	}
-	log.Logger().WithField("txhash", txHash.String()).Info("broadcast the wallet1 to wallet2 tx")
-	err = waitTxOnChain(txHash, client)
-	if err != nil {
-		log.Logger().WithField("error", err).Error("wait the tx on chain failed")
-	} else {
-		log.Logger().WithField("txhash", txHash.String()).Info("the wallet balance transfer tx was on chain")
-	}
-	return err
-}
-
-func RunHotWalletBalance(cfg *CollectCfg, ch1, ch2 chan int) error {
-	network := &chaincfg.MainNetParams
-	if cfg.Testnet {
-		network = &chaincfg.TestNet3Params
-	}
-	client := mempool.NewClient(network)
-
-	ticker := time.NewTicker(30 * time.Minute)
-	defer ticker.Stop()
-	hotwallet2 := cfg.HotWallet2
-
-	for {
-		select {
-		case <-ticker.C:
-			// check the water line
-			transfer, err := checkHotwallet2Balance(cfg, hotwallet2, client)
-			if transfer && err == nil {
-				err := HotWalletBalanceTransfer(cfg, client)
-				if err != nil {
-					log.Logger().WithField("error", err).Info("wallet1 to wallet2 failed")
-					alarm.Slack(context.Background(), "failed to makeHotWallet1ToHotWallet2Tx")
-				}
-			}
-		case msg := <-ch1:
-			if msg == LowBalanceHotWallet {
-				err := HotWalletBalanceTransfer(cfg, client)
-				if err != nil {
-					log.Logger().WithField("error", err).Info("wallet1 to wallet2 failed")
-					alarm.Slack(context.Background(), "failed to makeHotWallet1ToHotWallet2Tx")
-				}
-				ch2 <- FullBalanceHotWallet
 			}
 		default:
 		}

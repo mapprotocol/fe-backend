@@ -19,7 +19,7 @@ import (
 )
 
 var (
-	testnet = true
+	testnet = false
 	priv1   = ""
 )
 
