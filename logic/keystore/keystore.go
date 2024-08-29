@@ -57,6 +57,7 @@ func GetWalletKey(filepath string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+	fmt.Println(passphrase)
 	key, err := keystore.DecryptKey(keyjson, passphrase)
 	if err != nil {
 		fmt.Println("Error decrypting key", err)
