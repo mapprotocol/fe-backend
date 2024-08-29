@@ -75,15 +75,7 @@ func toConfig() (*logic.CollectCfg, error) {
 		return cfg, err
 	}
 	cfg.HotWalletFee2 = feeAddr2
-
-	strFeeAddr3 := viper.GetString("hotwalletFeeAddress3")
-	feeAddr3, err := btcutil.DecodeAddress(strFeeAddr3, network)
-	if err != nil {
-		log.Logger().WithField("error", err).Error("decode fee3 address failed")
-		return cfg, err
-	}
-	cfg.HotWalletFee3 = feeAddr3
-
+	
 	amount0 := viper.GetFloat64("minHotWallet2Amount")
 	amount1, err := btcutil.NewAmount(amount0)
 	if err != nil {

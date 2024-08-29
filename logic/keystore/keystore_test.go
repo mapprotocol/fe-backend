@@ -5,7 +5,9 @@ package keystore
 
 import (
 	"fmt"
+	"github.com/ethereum/go-ethereum/accounts/keystore"
 	"github.com/ethereum/go-ethereum/common/hexutil"
+	"github.com/ethereum/go-ethereum/crypto"
 	"os"
 	"path/filepath"
 	"testing"
@@ -19,7 +21,24 @@ func Test01(t *testing.T) {
 	}
 	fmt.Println(hexutil.Encode(keyP))
 }
+func Test02(t *testing.T) {
+	// Read key from file.
+	fpath := "./hotwallet2.json"
+	keyjson, err := os.ReadFile(fpath)
+	if err != nil {
+		fmt.Println("Failed to read the keyfile at", fpath, err)
+		return
+	}
+	// Decrypt key with passphrase.
+	passphrase := "abc-1234"
 
+	key, err := keystore.DecryptKey(keyjson, passphrase)
+	if err != nil {
+		fmt.Println("Error decrypting key", err)
+		return
+	}
+	fmt.Println(hexutil.Encode(crypto.FromECDSA(key.PrivateKey)))
+}
 func createTestFile(t *testing.T) (*os.File, string) {
 	filename := "./test_key"
 
