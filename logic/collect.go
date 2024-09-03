@@ -1033,13 +1033,7 @@ func RunBtcWithdraw(cfg *CollectCfg) error {
 
 	tipperPriv, _ := btcec.PrivKeyFromBytes(privateKeyBytes)
 
-	privateKeyBytes, err = hex.DecodeString("")
-	if err != nil {
-		panic(err)
-	}
-
-	senderPriv, _ := btcec.PrivKeyFromBytes(privateKeyBytes)
-	//senderPriv := cfg.HotWallet2Priv
+	senderPriv := cfg.HotWallet2Priv
 	if senderPriv == nil {
 		panic("invalid hot-wallet2 key")
 	}
