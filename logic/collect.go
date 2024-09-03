@@ -421,7 +421,7 @@ func waitTxOnChain(txhash *chainhash.Hash, client *mempool.MempoolClient) error 
 		if resp.Confirmed {
 			return nil
 		}
-		fmt.Println("try query again....")
+		fmt.Println("try query again....hash", txhash.String())
 		time.Sleep(1 * time.Minute)
 	}
 }
@@ -434,6 +434,7 @@ func checkLatestTx(client *mempool.MempoolClient) error {
 	if txhash == nil {
 		return nil
 	}
+	fmt.Println("checkLatestTx in collect,hash:", txhash.String())
 	err = waitTxOnChain(txhash, client)
 	if err != nil {
 		log.Logger().WithField("error", err).Error("wait tx on chain failed")
