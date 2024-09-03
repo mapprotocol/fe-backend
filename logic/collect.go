@@ -870,6 +870,76 @@ func Run(cfg *CollectCfg) error {
 	log.Logger().Info("......finish......")
 	return nil
 }
+func runCollectProcess(feerate int64, feePriv *btcec.PrivateKey, client *mempool.MempoolClient, ords []*OrderItem, cfg *CollectCfg) error {
+	enough, err := checkFeeAddress(cfg.HotWalletFee1, client)
+	if err != nil {
+		log.Logger().WithField("error", err).Error("failed to checkFeeAddress")
+		alarm.Slack(context.Background(), "check fee address balance failed")
+		return err
+	}
+	if !enough {
+		e := errors.New("the fee address has not enough balance")
+		log.Logger().WithField("error", e).Error("low balance in fee address")
+		alarm.Slack(context.Background(), "low balance in fee address")
+	}
+
+	if len(ords) > 0 {
+		tx, err := makeCollectTx1(feerate, cfg.HotWallet1, cfg.HotWalletFee1, feePriv, ords, client)
+		if err != nil {
+			//fmt.Println(err)
+			log.Logger().WithField("error", err).Info("make collect tx")
+			alarm.Slack(context.Background(), "failed to make collect tx")
+			return err
+		}
+		txhash := tx.TxHash()
+		err = createLatestCollectInfo(&txhash, ords)
+		if err != nil {
+			log.Logger().WithField("error", err).Error("create latest collect info failed")
+			return err
+		}
+		err = setOrders(ords, dao.OrderStatusTxPrepareSend)
+		if err != nil {
+			log.Logger().WithField("error", err).Info("[OrderStatusTxPrepareSend] set orders state failed")
+			return err
+		}
+		log.Logger().Info("create latest collect info success")
+
+		txHash, err := client.BroadcastTx(tx)
+		if err != nil {
+			log.Logger().WithField("error", err).Error("failed to broadcast tx")
+			alarm.Slack(context.Background(), "failed to broadcast tx")
+			return err
+		}
+		log.Logger().WithField("txhash", txHash.String()).Info("broadcast the collect tx")
+		err = setOrders(ords, dao.OrderStatusTxSent)
+		if err != nil {
+			log.Logger().WithField("error", err).Info("[OrderStatusTxSent] set orders state failed")
+			return err
+		}
+		if err = setLatestCollectInfo(txHash, dao.OrderStatusTxSent); err != nil {
+			log.Logger().WithField("error", err).Info("set setLatestCollectInfo failed")
+		}
+
+		err = waitTxOnChain(txHash, client)
+		if err != nil {
+			//fmt.Println("the collect tx on chain failed", err)
+			log.Logger().WithField("error", err).Info("the collect tx on chain failed")
+			alarm.Slack(context.Background(), "the collect tx on chain failed")
+			return err
+		} else {
+			log.Logger().WithField("txhash", txhash.String()).Info("the tx was on the chain")
+			err = setOrders(ords, dao.OrderStatusTxConfirmed)
+			if err != nil {
+				log.Logger().WithField("error", err).Info("set orders state failed")
+			}
+			err = setLatestCollectInfo(txHash, dao.OrderStatusTxConfirmed)
+			if err != nil {
+				log.Logger().WithField("error", err).Info("set setLatestCollectInfo failed")
+			}
+		}
+	}
+	return nil
+}
 func RunCollect(cfg *CollectCfg) error {
 	privateKeyBytes, err := hex.DecodeString(cfg.StrHotWalletFee1Privkey)
 	if err != nil {
@@ -895,80 +965,19 @@ func RunCollect(cfg *CollectCfg) error {
 		if err != nil {
 			log.Logger().WithField("error", err).Error("failed to get orders")
 			alarm.Slack(context.Background(), "failed to get orders")
-			return err
-		}
-		strOrder, allAmount := orderInfos(ords)
-		feerate := getFeeRate(cfg.Testnet, client)
-
-		log.Logger().WithField("orders", strOrder).Info("collect the order")
-		log.Logger().WithField("all amount", allAmount).WithField("feerate", feerate).Info("collect the order")
-
-		enough, err := checkFeeAddress(cfg.HotWalletFee1, client)
-		if err != nil {
-			log.Logger().WithField("error", err).Error("failed to checkFeeAddress")
-			alarm.Slack(context.Background(), "check fee address balance failed")
-			return err
-		}
-		if !enough {
-			e := errors.New("the fee address has not enough balance")
-			log.Logger().WithField("error", e).Error("low balance in fee address")
-			alarm.Slack(context.Background(), "low balance in fee address")
-		}
-
-		if len(ords) > 0 {
-			tx, err := makeCollectTx1(feerate, cfg.HotWallet1, cfg.HotWalletFee1, feePriv, ords, client)
-			if err != nil {
-				//fmt.Println(err)
-				log.Logger().WithField("error", err).Info("make collect tx")
-				alarm.Slack(context.Background(), "failed to make collect tx")
-				return err
-			}
-			txhash := tx.TxHash()
-			err = createLatestCollectInfo(&txhash, ords)
-			if err != nil {
-				log.Logger().WithField("error", err).Error("create latest collect info failed")
-				return err
-			}
-			err = setOrders(ords, dao.OrderStatusTxPrepareSend)
-			if err != nil {
-				log.Logger().WithField("error", err).Info("[OrderStatusTxPrepareSend] set orders state failed")
-				return err
-			}
-			log.Logger().Info("create latest collect info success")
-
-			txHash, err := client.BroadcastTx(tx)
-			if err != nil {
-				log.Logger().WithField("error", err).Error("failed to broadcast tx")
-				alarm.Slack(context.Background(), "failed to broadcast tx")
-				return err
-			}
-			log.Logger().WithField("txhash", txHash.String()).Info("broadcast the collect tx")
-			err = setOrders(ords, dao.OrderStatusTxSent)
-			if err != nil {
-				log.Logger().WithField("error", err).Info("[OrderStatusTxSent] set orders state failed")
-				return err
-			}
-			if err = setLatestCollectInfo(txHash, dao.OrderStatusTxSent); err != nil {
-				log.Logger().WithField("error", err).Info("set setLatestCollectInfo failed")
-			}
-
-			err = waitTxOnChain(txHash, client)
-			if err != nil {
-				//fmt.Println("the collect tx on chain failed", err)
-				log.Logger().WithField("error", err).Info("the collect tx on chain failed")
-				alarm.Slack(context.Background(), "the collect tx on chain failed")
-				return err
-			} else {
-				err = setOrders(ords, dao.OrderStatusTxConfirmed)
+		} else {
+			if len(ords) > 0 {
+				strOrder, allAmount := orderInfos(ords)
+				feerate := getFeeRate(cfg.Testnet, client)
+				log.Logger().WithField("orders", strOrder).Info("collect the order")
+				log.Logger().WithField("all amount", allAmount).WithField("feerate", feerate).Info("collect the order")
+				err = runCollectProcess(feerate, feePriv, client, ords, cfg)
 				if err != nil {
-					log.Logger().WithField("error", err).Info("set orders state failed")
-				}
-				err = setLatestCollectInfo(txHash, dao.OrderStatusTxConfirmed)
-				if err != nil {
-					log.Logger().WithField("error", err).Info("set setLatestCollectInfo failed")
+					log.Logger().WithField("error", err).Error("collect tx failed")
 				}
 			}
 		}
+
 		time.Sleep(30 * time.Minute)
 	}
 	return nil
