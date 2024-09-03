@@ -7,6 +7,7 @@ const (
 
 const (
 	ChainIDOfChainPool = "22776"
+	ChainIDOfMaticPool = "137"
 	ChainIDOfEthereum  = "1"
 )
 

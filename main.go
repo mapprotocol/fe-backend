@@ -1,10 +1,10 @@
 package main
 
 import (
+	_func "github.com/mapprotocol/fe-backend/utils/func"
 	blog "log"
 	"os"
 	"os/signal"
-	"runtime/debug"
 	"syscall"
 
 	"github.com/spf13/viper"
@@ -44,6 +44,7 @@ func main() {
 	runTask()
 	runBTCTask()
 	runTONTask()
+	runSolTask()
 
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
@@ -55,124 +56,26 @@ func main() {
 }
 
 func runTask() {
-	go func() {
-		defer func() {
-			stack := string(debug.Stack())
-			log.Logger().WithField("stack", stack).Error("failed to HandlePendingOrdersOfFirstStageFromEVM")
+	_func.Go(task.HandlePendingOrdersOfFirstStageFromEVM, "HandlePendingOrdersOfFirstStageFromEVM")
 
-			if r := recover(); r != nil {
-				log.Logger().WithField("error", r).Error("failed to recover HandlePendingOrdersOfFirstStageFromEVM")
-			}
-		}()
-
-		task.HandlePendingOrdersOfFirstStageFromEVM()
-	}()
 }
 
 func runBTCTask() {
-	go func() {
-		defer func() {
-			stack := string(debug.Stack())
-			log.Logger().WithField("stack", stack).Error("failed to HandlePendingOrdersOfFirstStageFromBTCToEVM")
+	_func.Go(task.HandlePendingOrdersOfFirstStageFromBTCToEVM, "HandlePendingOrdersOfFirstStageFromBTCToEVM")
+	_func.Go(task.HandleConfirmedOrdersOfFirstStageFromBTCToEVM, "HandleConfirmedOrdersOfFirstStageFromBTCToEVM")
+	_func.Go(task.HandlePendingOrdersOfSecondStageFromBTCToEVM, "HandlePendingOrdersOfSecondStageFromBTCToEVM")
 
-			if r := recover(); r != nil {
-				log.Logger().WithField("error", r).Error("failed to recover HandlePendingOrdersOfFirstStageFromBTCToEVM")
-			}
-		}()
-
-		task.HandlePendingOrdersOfFirstStageFromBTCToEVM()
-	}()
-
-	go func() {
-		defer func() {
-			stack := string(debug.Stack())
-			log.Logger().WithField("stack", stack).Error("failed to HandleConfirmedOrdersOfFirstStageFromBTCToEVM")
-
-			if r := recover(); r != nil {
-				log.Logger().WithField("error", r).Error("failed to recover HandleConfirmedOrdersOfFirstStageFromBTCToEVM")
-			}
-		}()
-
-		task.HandleConfirmedOrdersOfFirstStageFromBTCToEVM()
-	}()
-
-	go func() {
-		defer func() {
-			stack := string(debug.Stack())
-			log.Logger().WithField("stack", stack).Error("failed to HandlePendingOrdersOfSecondStageFromBTCToEVM")
-
-			if r := recover(); r != nil {
-				log.Logger().WithField("error", r).Error("failed to recover HandlePendingOrdersOfSecondStageFromBTCToEVM")
-			}
-		}()
-
-		task.HandlePendingOrdersOfSecondStageFromBTCToEVM()
-	}()
 }
 
 func runTONTask() {
-	go func() {
-		defer func() {
-			stack := string(debug.Stack())
-			log.Logger().WithField("stack", stack).Error("failed to HandlePendingOrdersOfFirstStageFromTONToEVM")
+	_func.Go(task.HandlePendingOrdersOfFirstStageFromTONToEVM, "HandlePendingOrdersOfFirstStageFromTONToEVM")
+	_func.Go(task.HandleConfirmedOrdersOfFirstStageFromTONToEVM, "HandleConfirmedOrdersOfFirstStageFromTONToEVM")
+	_func.Go(task.HandlePendingOrdersOfSecondStageFromTONToEVM, "HandlePendingOrdersOfSecondStageFromTONToEVM")
+	_func.Go(task.HandleConfirmedOrdersOfFirstStageFromEVMToTON, "HandleConfirmedOrdersOfFirstStageFromEVMToTON")
+	_func.Go(task.HandlePendingOrdersOfSecondSStageFromEVMToTON, "HandlePendingOrdersOfSecondSStageFromEVMToTON")
+}
 
-			if r := recover(); r != nil {
-				log.Logger().WithField("error", r).Error("failed to recover HandlePendingOrdersOfFirstStageFromTONToEVM")
-			}
-		}()
-
-		task.HandlePendingOrdersOfFirstStageFromTONToEVM()
-	}()
-
-	go func() {
-		defer func() {
-			stack := string(debug.Stack())
-			log.Logger().WithField("stack", stack).Error("failed to HandleConfirmedOrdersOfFirstStageFromTONToEVM")
-
-			if r := recover(); r != nil {
-				log.Logger().WithField("error", r).Error("failed to recover HandleConfirmedOrdersOfFirstStageFromTONToEVM")
-			}
-		}()
-
-		task.HandleConfirmedOrdersOfFirstStageFromTONToEVM()
-	}()
-
-	go func() {
-		defer func() {
-			stack := string(debug.Stack())
-			log.Logger().WithField("stack", stack).Error("failed to HandlePendingOrdersOfSecondStageFromTONToEVM")
-
-			if r := recover(); r != nil {
-				log.Logger().WithField("error", r).Error("failed to recover HandlePendingOrdersOfSecondStageFromTONToEVM")
-			}
-		}()
-
-		task.HandlePendingOrdersOfSecondStageFromTONToEVM()
-	}()
-
-	go func() {
-		defer func() {
-			stack := string(debug.Stack())
-			log.Logger().WithField("stack", stack).Error("failed to HandleConfirmedOrdersOfFirstStageFromEVMToTON")
-
-			if r := recover(); r != nil {
-				log.Logger().WithField("error", r).Error("failed to recover HandleConfirmedOrdersOfFirstStageFromEVMToTON")
-			}
-		}()
-
-		task.HandleConfirmedOrdersOfFirstStageFromEVMToTON()
-	}()
-
-	go func() {
-		defer func() {
-			stack := string(debug.Stack())
-			log.Logger().WithField("stack", stack).Error("failed to HandlePendingOrdersOfSecondSStageFromEVMToTON")
-
-			if r := recover(); r != nil {
-				log.Logger().WithField("error", r).Error("failed to recover HandlePendingOrdersOfSecondSStageFromEVMToTON")
-			}
-		}()
-
-		task.HandlePendingOrdersOfSecondSStageFromEVMToTON()
-	}()
+func runSolTask() {
+	_func.Go(task.FilterEventToSol, "FilterEventToSol")
+	_func.Go(task.HandlerEvm2Sol, "HandlerEvm2Sol")
 }

@@ -18,3 +18,6 @@ chainpool:
 ton:
   words: ""
   password: ""
+sol:
+  host:
+  pri:
