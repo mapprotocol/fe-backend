@@ -6,7 +6,6 @@ import (
 	"github.com/btcsuite/btcd/btcec/v2"
 	"github.com/btcsuite/btcd/btcutil"
 	"github.com/btcsuite/btcd/chaincfg"
-	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/mapprotocol/fe-backend/config"
 	"github.com/mapprotocol/fe-backend/logic"
 	"github.com/mapprotocol/fe-backend/logic/keystore"
@@ -92,7 +91,6 @@ func getHotWallet2Key() (*btcec.PrivateKey, error) {
 	if err != nil {
 		return nil, err
 	}
-	fmt.Println("--------:", hexutil.Encode(keyBytes))
 	priv, _ := btcec.PrivKeyFromBytes(keyBytes)
 	return priv, nil
 }
