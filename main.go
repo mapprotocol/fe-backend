@@ -6,6 +6,7 @@ import (
 	"github.com/btcsuite/btcd/btcec/v2"
 	"github.com/btcsuite/btcd/btcutil"
 	"github.com/btcsuite/btcd/chaincfg"
+	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/mapprotocol/fe-backend/config"
 	"github.com/mapprotocol/fe-backend/logic"
 	"github.com/mapprotocol/fe-backend/logic/keystore"
@@ -75,7 +76,7 @@ func toConfig() (*logic.CollectCfg, error) {
 		return cfg, err
 	}
 	cfg.HotWalletFee2 = feeAddr2
-	
+
 	amount0 := viper.GetFloat64("minHotWallet2Amount")
 	amount1, err := btcutil.NewAmount(amount0)
 	if err != nil {
@@ -91,6 +92,7 @@ func getHotWallet2Key() (*btcec.PrivateKey, error) {
 	if err != nil {
 		return nil, err
 	}
+	fmt.Println("--------:", hexutil.Encode(keyBytes))
 	priv, _ := btcec.PrivKeyFromBytes(keyBytes)
 	return priv, nil
 }
