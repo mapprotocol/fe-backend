@@ -6,6 +6,7 @@ import (
 	"github.com/btcsuite/btcd/btcutil"
 	"github.com/shopspring/decimal"
 	"math/big"
+	"strings"
 	"sync"
 
 	"github.com/mapprotocol/fe-backend/bindings/erc20"
@@ -23,6 +24,8 @@ import (
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/spf13/viper"
 )
+
+const NativeTokenAddress = "0x0000000000000000000000000000000000000000"
 
 var isMultiChainPool bool
 var feRouterContract string
@@ -947,10 +950,15 @@ func GetLocalRouteSwapFromEVMToTON(srcChain *big.Int, srcToken, sender, amount s
 		log.Logger().WithFields(params).Error("failed to pack onReceived")
 		return ret, "", resp.CodeInternalServerError
 	}
+
+	value := "0x0"
+	if strings.ToLower(srcToken) == NativeTokenAddress {
+		value = "0x" + amountBigInt.Text(16)
+	}
 	ret = &entity.SwapResponse{
 		To:      feRouterContract,
 		Data:    "0x" + hex.EncodeToString(packed),
-		Value:   "0x" + amountBigInt.Text(16),
+		Value:   value,
 		ChainId: constants.ChainIDOfChainPool,
 	}
 	return ret, "", resp.CodeSuccess
@@ -986,10 +994,15 @@ func GetLocalRouteSwapFromEVMToBitcoin(srcChain *big.Int, srcToken, sender, amou
 		log.Logger().WithFields(params).Error("failed to pack onReceived")
 		return ret, "", resp.CodeInternalServerError
 	}
+
+	value := "0x0"
+	if strings.ToLower(srcToken) == NativeTokenAddress {
+		value = "0x" + amountBigInt.Text(16)
+	}
 	ret = &entity.SwapResponse{
 		To:      feRouterContract,
 		Data:    "0x" + hex.EncodeToString(packed),
-		Value:   "0x" + amountBigInt.Text(16),
+		Value:   value,
 		ChainId: constants.ChainIDOfChainPool,
 	}
 	return ret, "", resp.CodeSuccess
