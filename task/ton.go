@@ -5,7 +5,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"github.com/gagliardetto/solana-go"
 	blog "log"
 	"math/big"
 	"strconv"
@@ -805,115 +804,6 @@ func getEndpoint() string {
 		return rpc.MainNetBeta_RPC
 	default:
 		return rpc.DevNet_RPC
-	}
-}
-
-func HandlerEvm2Sol() {
-	order := dao.SolOrder{
-		DstChain: params.SolChainID,
-		Status:   dao.OrderStatusTxConfirmed,
-	}
-	endpoint := getEndpoint()
-	client := rpc.New(endpoint)
-
-	solCfg := viper.GetStringMapString("sol")
-	routerPri, err := solana.PrivateKeyFromBase58(solCfg["pri"])
-	if err != nil {
-		panic(err)
-	}
-	for id := uint64(1); ; {
-		orders, err := order.GetOldest10ByID(id)
-		if err != nil {
-			fields := map[string]interface{}{
-				"id":    id,
-				"func":  "HandlerEvm2Sol",
-				"order": utils.JSON(order),
-				"error": err.Error(),
-			}
-
-			log.Logger().WithFields(fields).Error("failed to get confirmed status order of first stage from evm to ton")
-			alarm.Slack(context.Background(), "failed to get confirmed status order from evm to ton")
-			time.Sleep(5 * time.Second)
-			continue
-		}
-
-		length := len(orders)
-		if length == 0 {
-			time.Sleep(10 * time.Second)
-			break
-		}
-
-		for i, o := range orders {
-			if i == length-1 {
-				id = o.ID + 1
-			}
-
-			ele := o
-			data, err := requestSolButter(solCfg["host"], routerPri.PublicKey().String(), ele)
-			if err != nil {
-				log.Logger().WithField("error", err.Error()).Error("failed to request sol swap")
-				alarm.Slack(context.Background(), "failed to request sol swap")
-				time.Sleep(5 * time.Second)
-				continue
-			}
-
-			bbs, err := hex.DecodeString(data)
-			if err != nil {
-				log.Logger().WithField("error", err.Error()).Error("failed to hex data")
-				alarm.Slack(context.Background(), "failed to hex data")
-				time.Sleep(5 * time.Second)
-				continue
-			}
-			trx, err := solana.TransactionFromBytes(bbs)
-			if err != nil {
-				log.Logger().WithField("error", err.Error()).Error("failed to get trx")
-				alarm.Slack(context.Background(), "failed to get trx")
-				time.Sleep(5 * time.Second)
-				continue
-			}
-			resp, err := client.GetLatestBlockhash(context.Background(), rpc.CommitmentFinalized)
-			if err != nil {
-				log.Logger().WithField("error", err.Error()).Error("failed to getLatestBlockHash")
-				alarm.Slack(context.Background(), "failed to getLatestBlockHash")
-				time.Sleep(5 * time.Second)
-				continue
-			}
-			trx.Message.RecentBlockhash = resp.Value.Blockhash
-			// sign
-			_, err = trx.Sign(func(key solana.PublicKey) *solana.PrivateKey {
-				if key == routerPri.PublicKey() {
-					return &routerPri
-				}
-				return nil
-			})
-			if err != nil {
-				log.Logger().WithField("error", err.Error()).Error("failed to sign trx")
-				alarm.Slack(context.Background(), "failed to sign trx")
-				time.Sleep(5 * time.Second)
-				continue
-			}
-			sig, err := client.SendTransaction(context.TODO(), trx)
-			if err != nil {
-				log.Logger().WithField("error", err.Error()).Error("failed to send trx")
-				alarm.Slack(context.Background(), "failed to send trx")
-				time.Sleep(5 * time.Second)
-				continue
-			}
-
-			update := &dao.SolOrder{
-				Stage:     dao.OrderStag2,
-				Status:    dao.OrderStatusTxSent,
-				OutTxHash: sig.String(),
-			}
-			if err := dao.NewSolOrderWithID(o.ID).Updates(update); err != nil {
-				log.Logger().WithField("update", utils.JSON(update)).WithField("error", err.Error()).Error("failed to update sol order status")
-				alarm.Slack(context.Background(), "failed to update sol order status")
-				time.Sleep(5 * time.Second)
-				continue
-			}
-			time.Sleep(time.Second)
-		}
-		time.Sleep(10 * time.Second)
 	}
 }
 

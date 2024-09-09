@@ -41,9 +41,9 @@ func main() {
 	tonrouter.Init()
 	task.Init()
 
-	runTask()
-	runBTCTask()
-	runTONTask()
+	//runTask()
+	//runBTCTask()
+	//runTONTask()
 	runSolTask()
 
 	sigs := make(chan os.Signal, 1)
@@ -57,14 +57,12 @@ func main() {
 
 func runTask() {
 	_func.Go(task.HandlePendingOrdersOfFirstStageFromEVM, "HandlePendingOrdersOfFirstStageFromEVM")
-
 }
 
 func runBTCTask() {
 	_func.Go(task.HandlePendingOrdersOfFirstStageFromBTCToEVM, "HandlePendingOrdersOfFirstStageFromBTCToEVM")
 	_func.Go(task.HandleConfirmedOrdersOfFirstStageFromBTCToEVM, "HandleConfirmedOrdersOfFirstStageFromBTCToEVM")
 	_func.Go(task.HandlePendingOrdersOfSecondStageFromBTCToEVM, "HandlePendingOrdersOfSecondStageFromBTCToEVM")
-
 }
 
 func runTONTask() {
@@ -78,4 +76,5 @@ func runTONTask() {
 func runSolTask() {
 	_func.Go(task.FilterEventToSol, "FilterEventToSol")
 	_func.Go(task.HandlerEvm2Sol, "HandlerEvm2Sol")
+	_func.Go(task.FilterSol2Evm, "FilterSol2Evm")
 }
