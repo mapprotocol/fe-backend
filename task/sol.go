@@ -5,6 +5,11 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
+	"math/big"
+	"net/http"
+	"time"
+
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/gagliardetto/solana-go"
 	"github.com/gagliardetto/solana-go/rpc"
@@ -14,13 +19,8 @@ import (
 	"github.com/mapprotocol/fe-backend/third-party/filter"
 	"github.com/mapprotocol/fe-backend/utils"
 	"github.com/mapprotocol/fe-backend/utils/alarm"
+	"github.com/mr-tron/base58"
 	"github.com/spf13/viper"
-	"github.com/xssnick/tonutils-go/tvm/cell"
-	"io"
-	"math/big"
-	"net/http"
-	"strconv"
-	"time"
 )
 
 const (
@@ -288,7 +288,8 @@ func FilterSol2Evm() {
 				continue
 			}
 
-			logData, err := hex.DecodeString(lg.LogData)
+			logData := make(map[string]interface{})
+			err = json.Unmarshal([]byte(lg.LogData), &logData)
 			if err != nil {
 				fields := map[string]interface{}{
 					"logID":   lg.Id,
@@ -303,257 +304,344 @@ func FilterSol2Evm() {
 				continue
 			}
 
-			body := &cell.Cell{}
-			if err := json.Unmarshal(logData, &body); err != nil {
-				fields := map[string]interface{}{
-					"logID":   lg.Id,
-					"chainID": chainID,
-					"topic":   topic,
-					"logData": hex.EncodeToString(logData),
-					"error":   err.Error(),
-				}
-				log.Logger().WithFields(fields).Error("failed to unmarshal log data")
-				alarm.Slack(context.Background(), "failed to unmarshal log data")
-				UpdateLogID(chainID, topic, lg.Id)
-				continue
-			}
-			slice := body.BeginParse()
-			orderID, err := slice.LoadUInt(64)
-			if err != nil {
-				fields := map[string]interface{}{
-					"logID":   lg.Id,
-					"chainID": chainID,
-					"topic":   topic,
-					"error":   err.Error(),
-				}
-				log.Logger().WithFields(fields).Error("failed to load order id")
-				alarm.Slack(context.Background(), "failed to load order id from")
-				UpdateLogID(chainID, topic, lg.Id)
-				continue
-			}
-			from, err := slice.LoadRef()
-			if err != nil {
-				fields := map[string]interface{}{
-					"logID":   lg.Id,
-					"chainID": chainID,
-					"topic":   topic,
-					"error":   err.Error(),
-				}
-				log.Logger().WithFields(fields).Error("failed to load from ref")
-				alarm.Slack(context.Background(), "failed to load from ref")
-				UpdateLogID(chainID, topic, lg.Id)
-				continue
-			}
-			to, err := slice.LoadRef()
-			if err != nil {
-				fields := map[string]interface{}{
-					"logID":   lg.Id,
-					"chainID": chainID,
-					"topic":   topic,
-					"error":   err.Error(),
-				}
-				log.Logger().WithFields(fields).Error("failed to load to ref")
-				alarm.Slack(context.Background(), "failed to load to ref")
-				UpdateLogID(chainID, topic, lg.Id)
-				continue
-			}
-			srcChain, err := from.LoadUInt(64)
-			if err != nil {
-				fields := map[string]interface{}{
-					"logID":   lg.Id,
-					"chainID": chainID,
-					"topic":   topic,
-					"error":   err.Error(),
-				}
-				log.Logger().WithFields(fields).Error("failed to load from chain id")
-				alarm.Slack(context.Background(), "failed to load from chain id")
-				UpdateLogID(chainID, topic, lg.Id)
-				continue
-			}
-			sender, err := from.LoadAddr()
-			if err != nil {
-				fields := map[string]interface{}{
-					"logID":   lg.Id,
-					"chainID": chainID,
-					"topic":   topic,
-					"error":   err.Error(),
-				}
-				log.Logger().WithFields(fields).Error("failed to load sender")
-				alarm.Slack(context.Background(), "failed to load sender")
-				UpdateLogID(chainID, topic, lg.Id)
-				continue
-			}
-			srcToken, err := from.LoadAddr()
-			if err != nil {
-				fields := map[string]interface{}{
-					"logID":   lg.Id,
-					"chainID": chainID,
-					"topic":   topic,
-					"error":   err.Error(),
-				}
-				log.Logger().WithFields(fields).Error("failed to load src token")
-				alarm.Slack(context.Background(), "failed to load rc token")
-				UpdateLogID(chainID, topic, lg.Id)
-				continue
-			}
-			inAmount, err := from.LoadUInt(64)
-			if err != nil {
-				fields := map[string]interface{}{
-					"logID":   lg.Id,
-					"chainID": chainID,
-					"topic":   topic,
-					"error":   err.Error(),
-				}
-				log.Logger().WithFields(fields).Error("failed to load amount in")
-				alarm.Slack(context.Background(), "failed to load amount in")
-				UpdateLogID(chainID, topic, lg.Id)
-				continue
-			}
-			slippage, err := from.LoadUInt(16)
-			if err != nil {
-				fields := map[string]interface{}{
-					"logID":   lg.Id,
-					"chainID": chainID,
-					"topic":   topic,
-					"error":   err.Error(),
-				}
-				log.Logger().WithFields(fields).Error("failed to load slippage")
-				alarm.Slack(context.Background(), "failed to load slippage")
-				UpdateLogID(chainID, topic, lg.Id)
-				continue
-			}
-			dstChain, err := to.LoadUInt(64)
-			if err != nil {
-				fields := map[string]interface{}{
-					"logID":   lg.Id,
-					"chainID": chainID,
-					"topic":   topic,
-					"error":   err.Error(),
-				}
-				log.Logger().WithFields(fields).Error("failed to load to chain id")
-				alarm.Slack(context.Background(), "failed to load to chain id")
-				UpdateLogID(chainID, topic, lg.Id)
-				continue
-			}
-			receiverRef, err := to.LoadRef()
-			if err != nil {
-				fields := map[string]interface{}{
-					"logID":   lg.Id,
-					"chainID": chainID,
-					"topic":   topic,
-					"error":   err.Error(),
-				}
-				log.Logger().WithFields(fields).Error("failed to load receiver ref")
-				alarm.Slack(context.Background(), "failed to load receiver ref")
-				UpdateLogID(chainID, topic, lg.Id)
-				continue
-			}
-			heightBitsReceiver, err := receiverRef.LoadBigUInt(256)
-			if err != nil {
-				fields := map[string]interface{}{
-					"logID":   lg.Id,
-					"chainID": chainID,
-					"topic":   topic,
-					"error":   err.Error(),
-				}
-				log.Logger().WithFields(fields).Error("failed to load height bits receiver")
-				alarm.Slack(context.Background(), "failed to load height receiver")
-				UpdateLogID(chainID, topic, lg.Id)
-				continue
-			}
-			lowBitsReceiver, err := receiverRef.LoadBigUInt(256)
-			if err != nil {
-				fields := map[string]interface{}{
-					"logID":   lg.Id,
-					"chainID": chainID,
-					"topic":   topic,
-					"error":   err.Error(),
-				}
-				log.Logger().WithFields(fields).Error("failed to load low bits receiver")
-				alarm.Slack(context.Background(), "failed to load low receiver")
-				UpdateLogID(chainID, topic, lg.Id)
-				continue
-			}
-			receiver := new(big.Int).Or(new(big.Int).Lsh(heightBitsReceiver, 256), lowBitsReceiver)
+			/*
+				{"tokenAmount":"079f2c","swapTokenOutMinAmountOut":"079f2c","minAmountOut":"0daa7ac1dd5df747","swapTokenOutBeforeBalance":"174885d4e2","afterBalance":"17488d740e"}
+			*/
 
-			dstTokenRef, err := to.LoadRef()
-			if err != nil {
+			srcChainStr := logData["fromChainId"].(string)
+			srcChain, ok := big.NewInt(0).SetString(srcChainStr, 16)
+			if !ok {
 				fields := map[string]interface{}{
-					"logID":   lg.Id,
-					"chainID": chainID,
-					"topic":   topic,
-					"error":   err.Error(),
+					"logID":       lg.Id,
+					"chainID":     chainID,
+					"srcChainStr": srcChainStr,
 				}
-				log.Logger().WithFields(fields).Error("failed to load token out address ref")
-				alarm.Slack(context.Background(), "failed to load token out address ref")
-				UpdateLogID(chainID, topic, lg.Id)
-				continue
-			}
-			heightBitsDstToken, err := dstTokenRef.LoadBigUInt(256)
-			if err != nil {
-				fields := map[string]interface{}{
-					"logID":   lg.Id,
-					"chainID": chainID,
-					"topic":   topic,
-					"error":   err.Error(),
-				}
-				log.Logger().WithFields(fields).Error("failed to load height bits token out address")
-				alarm.Slack(context.Background(), "failed to load height bits token out address")
-				UpdateLogID(chainID, topic, lg.Id)
-				continue
-			}
-			lowBitsDstToken, err := dstTokenRef.LoadBigUInt(256)
-			if err != nil {
-				fields := map[string]interface{}{
-					"logID":   lg.Id,
-					"chainID": chainID,
-					"topic":   topic,
-					"error":   err.Error(),
-				}
-				log.Logger().WithFields(fields).Error("failed to load low bits token out address")
-				alarm.Slack(context.Background(), "failed to load low bits token out address")
-				UpdateLogID(chainID, topic, lg.Id)
-				continue
-			}
-			dstToken := new(big.Int).Or(new(big.Int).Lsh(heightBitsDstToken, 256), lowBitsDstToken)
-
-			relayAmount, err := slice.LoadUInt(32)
-			if err != nil {
-				fields := map[string]interface{}{
-					"logID":   lg.Id,
-					"chainID": chainID,
-					"topic":   topic,
-					"error":   err.Error(),
-				}
-				log.Logger().WithFields(fields).Error("failed to load jetton amount")
-				alarm.Slack(context.Background(), "failed to load jetton amount")
+				log.Logger().WithFields(fields).Error("parse srcChain failed")
+				alarm.Slack(context.Background(), "parse srcChain failed, str("+srcChainStr+")")
 				UpdateLogID(chainID, topic, lg.Id)
 				continue
 			}
 
-			srcTokenStr := srcToken.String()
-			if srcTokenStr == params.NoneAddress {
-				srcTokenStr = params.NativeOfTON
+			toChainStr := logData["toChain"].(string)
+			toChain, ok := big.NewInt(0).SetString(toChainStr, 16)
+			if !ok {
+				fields := map[string]interface{}{
+					"logID":      lg.Id,
+					"chainID":    chainID,
+					"toChainStr": toChainStr,
+				}
+				log.Logger().WithFields(fields).Error("parse toChain failed")
+				alarm.Slack(context.Background(), "parse toChain failed, str("+toChainStr+")")
+				UpdateLogID(chainID, topic, lg.Id)
+				continue
 			}
-			_, afterAmount := deductFees(new(big.Float).SetUint64(relayAmount), FeeRate)
-			// convert token to float like 0.089
-			afterAmountFloat := new(big.Float).Quo(afterAmount, big.NewFloat(params.USDTDecimalOfTON))
-			inAmountFloat := new(big.Float).Quo(new(big.Float).SetUint64(inAmount), big.NewFloat(params.InAmountDecimalOfTON))
+
+			orderIdStr := logData["orderId"].(string)
+			orderId := big.NewInt(0).SetBytes(common.Hex2Bytes(orderIdStr))
+
+			fromStr := logData["from"].([]byte)
+			from := base58.Encode(fromStr)
+
+			fromTokenStr := logData["fromToken"].([]byte)
+			fromToken := base58.Encode(fromTokenStr)
+
+			toTokenStr := logData["toToken"].([]byte)
+			toToken := common.BytesToAddress(toTokenStr[:20])
+
+			receiverTokenStr := logData["receiver"].([]byte)
+			receiver := common.BytesToAddress(receiverTokenStr)
+
+			tokenAmountStr := logData["tokenAmount"].(string)
+			tokenAmount, ok := big.NewInt(0).SetString(tokenAmountStr, 16)
+			if !ok {
+				fields := map[string]interface{}{
+					"logID":          lg.Id,
+					"chainID":        chainID,
+					"tokenAmountStr": tokenAmountStr,
+				}
+				log.Logger().WithFields(fields).Error("parse tokenAmount failed")
+				alarm.Slack(context.Background(), "parse tokenAmount failed, str("+tokenAmountStr+")")
+				UpdateLogID(chainID, topic, lg.Id)
+				continue
+			}
+
+			afterBalanceStr := logData["afterBalance"].(string)
+			afterBalance, ok := big.NewInt(0).SetString(afterBalanceStr, 16)
+			if !ok {
+				fields := map[string]interface{}{
+					"logID":           lg.Id,
+					"chainID":         chainID,
+					"afterBalanceStr": afterBalanceStr,
+				}
+				log.Logger().WithFields(fields).Error("parse tokenAmount failed")
+				alarm.Slack(context.Background(), "parse tokenAmount failed, str("+tokenAmountStr+")")
+				UpdateLogID(chainID, topic, lg.Id)
+				continue
+			}
+
+			swapTokenOutBeforeBalanceStr := logData["swapTokenOutBeforeBalance"].(string)
+			swapTokenOutBeforeBalance, ok := big.NewInt(0).SetString(swapTokenOutBeforeBalanceStr, 16)
+			if !ok {
+				fields := map[string]interface{}{
+					"logID":                     lg.Id,
+					"chainID":                   chainID,
+					"swapTokenOutBeforeBalance": swapTokenOutBeforeBalanceStr,
+				}
+				log.Logger().WithFields(fields).Error("parse tokenAmount failed")
+				alarm.Slack(context.Background(), "parse tokenAmount failed, str("+swapTokenOutBeforeBalanceStr+")")
+				UpdateLogID(chainID, topic, lg.Id)
+				continue
+			}
+			relayAmount := big.NewInt(0).Sub(afterBalance, swapTokenOutBeforeBalance)
+
+			// body := &cell.Cell{}
+			// if err := json.Unmarshal(logData, &body); err != nil {
+			// 	fields := map[string]interface{}{
+			// 		"logID":   lg.Id,
+			// 		"chainID": chainID,
+			// 		"topic":   topic,
+			// 		"logData": hex.EncodeToString(logData),
+			// 		"error":   err.Error(),
+			// 	}
+			// 	log.Logger().WithFields(fields).Error("failed to unmarshal log data")
+			// 	alarm.Slack(context.Background(), "failed to unmarshal log data")
+			// 	UpdateLogID(chainID, topic, lg.Id)
+			// 	continue
+			// }
+			// slice := body.BeginParse()
+			// orderID, err := slice.LoadUInt(64)
+			// if err != nil {
+			// 	fields := map[string]interface{}{
+			// 		"logID":   lg.Id,
+			// 		"chainID": chainID,
+			// 		"topic":   topic,
+			// 		"error":   err.Error(),
+			// 	}
+			// 	log.Logger().WithFields(fields).Error("failed to load order id")
+			// 	alarm.Slack(context.Background(), "failed to load order id from")
+			// 	UpdateLogID(chainID, topic, lg.Id)
+			// 	continue
+			// }
+			// from, err := slice.LoadRef()
+			// if err != nil {
+			// 	fields := map[string]interface{}{
+			// 		"logID":   lg.Id,
+			// 		"chainID": chainID,
+			// 		"topic":   topic,
+			// 		"error":   err.Error(),
+			// 	}
+			// 	log.Logger().WithFields(fields).Error("failed to load from ref")
+			// 	alarm.Slack(context.Background(), "failed to load from ref")
+			// 	UpdateLogID(chainID, topic, lg.Id)
+			// 	continue
+			// }
+			// to, err := slice.LoadRef()
+			// if err != nil {
+			// 	fields := map[string]interface{}{
+			// 		"logID":   lg.Id,
+			// 		"chainID": chainID,
+			// 		"topic":   topic,
+			// 		"error":   err.Error(),
+			// 	}
+			// 	log.Logger().WithFields(fields).Error("failed to load to ref")
+			// 	alarm.Slack(context.Background(), "failed to load to ref")
+			// 	UpdateLogID(chainID, topic, lg.Id)
+			// 	continue
+			// }
+			// srcChain, err := from.LoadUInt(64)
+			// if err != nil {
+			// 	fields := map[string]interface{}{
+			// 		"logID":   lg.Id,
+			// 		"chainID": chainID,
+			// 		"topic":   topic,
+			// 		"error":   err.Error(),
+			// 	}
+			// 	log.Logger().WithFields(fields).Error("failed to load from chain id")
+			// 	alarm.Slack(context.Background(), "failed to load from chain id")
+			// 	UpdateLogID(chainID, topic, lg.Id)
+			// 	continue
+			// }
+			// sender, err := from.LoadAddr()
+			// if err != nil {
+			// 	fields := map[string]interface{}{
+			// 		"logID":   lg.Id,
+			// 		"chainID": chainID,
+			// 		"topic":   topic,
+			// 		"error":   err.Error(),
+			// 	}
+			// 	log.Logger().WithFields(fields).Error("failed to load sender")
+			// 	alarm.Slack(context.Background(), "failed to load sender")
+			// 	UpdateLogID(chainID, topic, lg.Id)
+			// 	continue
+			// }
+			// srcToken, err := from.LoadAddr()
+			// if err != nil {
+			// 	fields := map[string]interface{}{
+			// 		"logID":   lg.Id,
+			// 		"chainID": chainID,
+			// 		"topic":   topic,
+			// 		"error":   err.Error(),
+			// 	}
+			// 	log.Logger().WithFields(fields).Error("failed to load src token")
+			// 	alarm.Slack(context.Background(), "failed to load rc token")
+			// 	UpdateLogID(chainID, topic, lg.Id)
+			// 	continue
+			// }
+			// inAmount, err := from.LoadUInt(64)
+			// if err != nil {
+			// 	fields := map[string]interface{}{
+			// 		"logID":   lg.Id,
+			// 		"chainID": chainID,
+			// 		"topic":   topic,
+			// 		"error":   err.Error(),
+			// 	}
+			// 	log.Logger().WithFields(fields).Error("failed to load amount in")
+			// 	alarm.Slack(context.Background(), "failed to load amount in")
+			// 	UpdateLogID(chainID, topic, lg.Id)
+			// 	continue
+			// }
+			// slippage, err := from.LoadUInt(16)
+			// if err != nil {
+			// 	fields := map[string]interface{}{
+			// 		"logID":   lg.Id,
+			// 		"chainID": chainID,
+			// 		"topic":   topic,
+			// 		"error":   err.Error(),
+			// 	}
+			// 	log.Logger().WithFields(fields).Error("failed to load slippage")
+			// 	alarm.Slack(context.Background(), "failed to load slippage")
+			// 	UpdateLogID(chainID, topic, lg.Id)
+			// 	continue
+			// }
+			// dstChain, err := to.LoadUInt(64)
+			// if err != nil {
+			// 	fields := map[string]interface{}{
+			// 		"logID":   lg.Id,
+			// 		"chainID": chainID,
+			// 		"topic":   topic,
+			// 		"error":   err.Error(),
+			// 	}
+			// 	log.Logger().WithFields(fields).Error("failed to load to chain id")
+			// 	alarm.Slack(context.Background(), "failed to load to chain id")
+			// 	UpdateLogID(chainID, topic, lg.Id)
+			// 	continue
+			// }
+			// receiverRef, err := to.LoadRef()
+			// if err != nil {
+			// 	fields := map[string]interface{}{
+			// 		"logID":   lg.Id,
+			// 		"chainID": chainID,
+			// 		"topic":   topic,
+			// 		"error":   err.Error(),
+			// 	}
+			// 	log.Logger().WithFields(fields).Error("failed to load receiver ref")
+			// 	alarm.Slack(context.Background(), "failed to load receiver ref")
+			// 	UpdateLogID(chainID, topic, lg.Id)
+			// 	continue
+			// }
+			// heightBitsReceiver, err := receiverRef.LoadBigUInt(256)
+			// if err != nil {
+			// 	fields := map[string]interface{}{
+			// 		"logID":   lg.Id,
+			// 		"chainID": chainID,
+			// 		"topic":   topic,
+			// 		"error":   err.Error(),
+			// 	}
+			// 	log.Logger().WithFields(fields).Error("failed to load height bits receiver")
+			// 	alarm.Slack(context.Background(), "failed to load height receiver")
+			// 	UpdateLogID(chainID, topic, lg.Id)
+			// 	continue
+			// }
+			// lowBitsReceiver, err := receiverRef.LoadBigUInt(256)
+			// if err != nil {
+			// 	fields := map[string]interface{}{
+			// 		"logID":   lg.Id,
+			// 		"chainID": chainID,
+			// 		"topic":   topic,
+			// 		"error":   err.Error(),
+			// 	}
+			// 	log.Logger().WithFields(fields).Error("failed to load low bits receiver")
+			// 	alarm.Slack(context.Background(), "failed to load low receiver")
+			// 	UpdateLogID(chainID, topic, lg.Id)
+			// 	continue
+			// }
+			// receiver := new(big.Int).Or(new(big.Int).Lsh(heightBitsReceiver, 256), lowBitsReceiver)
+			// dstTokenRef, err := to.LoadRef()
+			// if err != nil {
+			// 	fields := map[string]interface{}{
+			// 		"logID":   lg.Id,
+			// 		"chainID": chainID,
+			// 		"topic":   topic,
+			// 		"error":   err.Error(),
+			// 	}
+			// 	log.Logger().WithFields(fields).Error("failed to load token out address ref")
+			// 	alarm.Slack(context.Background(), "failed to load token out address ref")
+			// 	UpdateLogID(chainID, topic, lg.Id)
+			// 	continue
+			// }
+			// heightBitsDstToken, err := dstTokenRef.LoadBigUInt(256)
+			// if err != nil {
+			// 	fields := map[string]interface{}{
+			// 		"logID":   lg.Id,
+			// 		"chainID": chainID,
+			// 		"topic":   topic,
+			// 		"error":   err.Error(),
+			// 	}
+			// 	log.Logger().WithFields(fields).Error("failed to load height bits token out address")
+			// 	alarm.Slack(context.Background(), "failed to load height bits token out address")
+			// 	UpdateLogID(chainID, topic, lg.Id)
+			// 	continue
+			// }
+			// lowBitsDstToken, err := dstTokenRef.LoadBigUInt(256)
+			// if err != nil {
+			// 	fields := map[string]interface{}{
+			// 		"logID":   lg.Id,
+			// 		"chainID": chainID,
+			// 		"topic":   topic,
+			// 		"error":   err.Error(),
+			// 	}
+			// 	log.Logger().WithFields(fields).Error("failed to load low bits token out address")
+			// 	alarm.Slack(context.Background(), "failed to load low bits token out address")
+			// 	UpdateLogID(chainID, topic, lg.Id)
+			// 	continue
+			// }
+			// dstToken := new(big.Int).Or(new(big.Int).Lsh(heightBitsDstToken, 256), lowBitsDstToken)
+			// relayAmount, err := slice.LoadUInt(32)
+			// if err != nil {
+			// 	fields := map[string]interface{}{
+			// 		"logID":   lg.Id,
+			// 		"chainID": chainID,
+			// 		"topic":   topic,
+			// 		"error":   err.Error(),
+			// 	}
+			// 	log.Logger().WithFields(fields).Error("failed to load jetton amount")
+			// 	alarm.Slack(context.Background(), "failed to load jetton amount")
+			// 	UpdateLogID(chainID, topic, lg.Id)
+			// 	continue
+			// }
+			// srcTokenStr := srcToken.String()
+			// if srcTokenStr == params.NoneAddress {
+			// 	srcTokenStr = params.NativeOfTON
+			// }
+			// _, afterAmount := deductFees(new(big.Float).SetUint64(relayAmount), FeeRate)
+			// // convert token to float like 0.089
+			// afterAmountFloat := new(big.Float).Quo(afterAmount, big.NewFloat(params.USDTDecimalOfTON))
+			// inAmountFloat := new(big.Float).Quo(new(big.Float).SetUint64(inAmount), big.NewFloat(params.InAmountDecimalOfTON))
 			order := &dao.Order{
-				OrderIDFromContract: orderID,
-				SrcChain:            strconv.FormatUint(srcChain, 10),
-				SrcToken:            srcTokenStr,
-				Sender:              sender.String(),
-				InAmount:            inAmountFloat.Text('f', -1),
+				OrderIDFromContract: uint64(orderId.Int64()),
+				SrcChain:            srcChain.String(),
+				DstChain:            toChain.String(),
+				SrcToken:            fromToken,
+				Sender:              from,
+				InAmount:            tokenAmount.String(),
 				RelayToken:          params.USDTOfTON,
-				RelayAmount:         afterAmountFloat.String(),
-				DstChain:            strconv.FormatUint(dstChain, 10),
-				DstToken:            common.BytesToAddress(dstToken.Bytes()).String(),
-				Receiver:            common.BytesToAddress(receiver.Bytes()).String(),
+				RelayAmount:         relayAmount.String(),
+				DstToken:            toToken.Hex(),
+				Receiver:            receiver.Hex(),
 				Action:              dao.OrderActionToEVM,
 				Stage:               dao.OrderStag1,
 				Status:              dao.OrderStatusTxConfirmed,
-				Slippage:            slippage,
+				// Slippage:            slippage,
 			}
 
 			if err := order.Create(); err != nil {

@@ -1,11 +1,12 @@
 package main
 
 import (
-	_func "github.com/mapprotocol/fe-backend/utils/func"
 	blog "log"
 	"os"
 	"os/signal"
 	"syscall"
+
+	_func "github.com/mapprotocol/fe-backend/utils/func"
 
 	"github.com/spf13/viper"
 

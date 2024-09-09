@@ -17,6 +17,6 @@ const (
 )
 
 const (
-	USDTOfChainPool = "0x33daba9618a75a7aff103e53afe530fbacf4a3dd"
+	USDTOfChainPool = "0xc2132d05d31c914a87c6611c10748aeb04b58e8f"
 	USDTOfEthereum  = "0xdac17f958d2ee523a2206206994597c13d831ec7"
 )
