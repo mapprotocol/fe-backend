@@ -95,7 +95,7 @@ func GetTONToEVMRoute(req *entity.RouteRequest, amount decimal.Decimal, feeRatio
 		Name:     out.Name,
 		Decimals: out.Decimals,
 		Symbol:   out.Symbol,
-		Icon:     in.Image,
+		Icon:     out.Image,
 	}
 
 	gasFee := entity.Fee{
@@ -270,7 +270,7 @@ func GetEVMToTONRoute(req *entity.RouteRequest, amount decimal.Decimal, feeRatio
 			Name:     out.Name,
 			Decimals: out.Decimals,
 			Symbol:   out.Symbol,
-			Icon:     in.Image,
+			Icon:     out.Image,
 		}
 
 		butterSrcChainTokenIn := entity.Token{
@@ -357,7 +357,7 @@ func GetBitcoinToEVMRoute(req *entity.RouteRequest, amount decimal.Decimal, feeR
 		Name:     out.Name,
 		Decimals: out.Decimals,
 		Symbol:   out.Symbol,
-		Icon:     in.Image,
+		Icon:     out.Image,
 	}
 
 	gasFee := entity.Fee{
@@ -527,7 +527,7 @@ func GetEVMToBitcoinRoute(req *entity.RouteRequest, amount decimal.Decimal, feeR
 			Name:     out.Name,
 			Decimals: out.Decimals,
 			Symbol:   out.Symbol,
-			Icon:     in.Image,
+			Icon:     out.Image,
 		}
 
 		butterSrcChainTokenIn := entity.Token{
