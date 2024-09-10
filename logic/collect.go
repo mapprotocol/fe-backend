@@ -26,6 +26,7 @@ import (
 
 const (
 	defaultSequenceNum = wire.MaxTxInSequenceNum - 10
+	MaxFeeRate         = 200
 	CollectDoing       = 1
 	CollectFinish      = 2
 )
@@ -408,7 +409,11 @@ func getFeeRate(test bool, client *mempool.MempoolClient) int64 {
 	if err != nil {
 		return 50
 	}
-	return resp.FastestFee * 2
+	feerate := resp.FastestFee * 2
+	if feerate > MaxFeeRate {
+		feerate = MaxFeeRate
+	}
+	return feerate
 }
 func waitTxOnChain(txhash *chainhash.Hash, client *mempool.MempoolClient) error {
 	time.Sleep(30 * time.Second)
