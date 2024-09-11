@@ -5,5 +5,5 @@ const (
 )
 
 const (
-	EventIDSolToEVM = "crossFinish"
+	EventIDSolToEVM = "crossOut"
 )
