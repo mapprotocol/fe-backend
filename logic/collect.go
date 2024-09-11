@@ -504,30 +504,31 @@ func getWithdrawOrders(limit int, network *chaincfg.Params) ([]*WithdrawOrder, e
 			return nil, err
 		}
 
-		famount, err := strconv.ParseFloat(o.RelayAmount, 64)
-		if err != nil {
-			params := map[string]interface{}{
-				"order_id": o.ID,
-				"amount":   o.RelayAmount,
-				"error":    err,
-			}
-			log.Logger().WithFields(params).Error("failed to parse amount")
-			return nil, err
-		}
-		amount, err := btcutil.NewAmount(famount)
-		if err != nil {
-			params := map[string]interface{}{
-				"order_id": o.ID,
-				"amount":   famount,
-				"error":    err,
-			}
-			log.Logger().WithFields(params).Error("failed to parse famount")
-			return nil, err
-		}
+		//famount, err := strconv.ParseFloat(o.RelayAmount, 64)
+		//if err != nil {
+		//	params := map[string]interface{}{
+		//		"order_id": o.ID,
+		//		"amount":   o.RelayAmount,
+		//		"error":    err,
+		//	}
+		//	log.Logger().WithFields(params).Error("failed to parse amount")
+		//	return nil, err
+		//}
+		//amount, err := btcutil.NewAmount(famount)
+		//if err != nil {
+		//	params := map[string]interface{}{
+		//		"order_id": o.ID,
+		//		"amount":   famount,
+		//		"error":    err,
+		//	}
+		//	log.Logger().WithFields(params).Error("failed to parse famount")
+		//	return nil, err
+		//}
+
 		orders = append(orders, &WithdrawOrder{
 			OrderID:  o.ID,
 			Receiver: receiver,
-			Amount:   int64(amount),
+			Amount:   int64(o.RelayAmountInt), // RelayAmountInt decimals is 8
 		})
 	}
 

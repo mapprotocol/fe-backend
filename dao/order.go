@@ -36,28 +36,29 @@ const (
 )
 
 type BitcoinOrder struct {
-	ID            uint64    `gorm:"column:id;type:bigint(20);primaryKey;autoIncrement:true" json:"id"`
-	SrcChain      uint64    `gorm:"column:src_chain;type:bigint(20)" json:"src_chain"`
-	SrcToken      string    `gorm:"column:src_token;type:varchar(255)" json:"src_token"`
-	Sender        string    `gorm:"column:sender;type:varchar(255)" json:"sender"`
-	InAmount      string    `gorm:"column:in_amount;type:varchar(255)" json:"in_amount"`
-	InTxHash      string    `gorm:"column:in_tx_hash;type:varchar(255)" json:"in_tx_hash"`
-	DstChain      uint64    `gorm:"column:dst_chain;type:bigint(20)" json:"dst_chain"`
-	DstToken      string    `gorm:"column:dst_token;type:varchar(255)" json:"dst_token"`
-	Receiver      string    `gorm:"column:receiver;type:varchar(255)" json:"receiver"`
-	OutAmount     string    `gorm:"column:out_amount;type:varchar(255)" json:"out_amount"`
-	OutTxHash     string    `gorm:"column:out_tx_hash;type:varchar(255)" json:"out_tx_hash"`
-	Action        uint8     `gorm:"column:action;type:tinyint(4)" json:"action"`
-	Stage         uint8     `gorm:"column:stage;type:tinyint(4)" json:"stage"`
-	Status        uint8     `gorm:"column:status;type:tinyint(4)" json:"status"`
-	CreatedAt     time.Time `gorm:"column:created_at;type:datetime" json:"created_at"`
-	UpdatedAt     time.Time `gorm:"column:updated_at;type:datetime" json:"updated_at"`
-	Relayer       string    `gorm:"column:relayer;type:varchar(255)" json:"relayer"`
-	RelayerKey    string    `gorm:"column:relayer_key;type:varchar(255)" json:"relayer_key"`
-	RelayToken    string    `gorm:"column:relay_token;type:varchar(255)" json:"relay_token"`
-	RelayAmount   string    `gorm:"column:relay_amount;type:varchar(255)" json:"relay_amount"`
-	InAmountSat   string    `gorm:"column:in_amount_sat;type:varchar(255)" json:"in_amount_sat"`
-	CollectStatus uint8     `gorm:"column:collect_status;type:tinyint(4)" json:"collect_status"`
+	ID             uint64    `gorm:"column:id;type:bigint(20);primaryKey;autoIncrement:true" json:"id"`
+	SrcChain       uint64    `gorm:"column:src_chain;type:bigint(20)" json:"src_chain"`
+	SrcToken       string    `gorm:"column:src_token;type:varchar(255)" json:"src_token"`
+	Sender         string    `gorm:"column:sender;type:varchar(255)" json:"sender"`
+	InAmount       string    `gorm:"column:in_amount;type:varchar(255)" json:"in_amount"`
+	InTxHash       string    `gorm:"column:in_tx_hash;type:varchar(255)" json:"in_tx_hash"`
+	DstChain       uint64    `gorm:"column:dst_chain;type:bigint(20)" json:"dst_chain"`
+	DstToken       string    `gorm:"column:dst_token;type:varchar(255)" json:"dst_token"`
+	Receiver       string    `gorm:"column:receiver;type:varchar(255)" json:"receiver"`
+	OutAmount      string    `gorm:"column:out_amount;type:varchar(255)" json:"out_amount"`
+	OutTxHash      string    `gorm:"column:out_tx_hash;type:varchar(255)" json:"out_tx_hash"`
+	Action         uint8     `gorm:"column:action;type:tinyint(4)" json:"action"`
+	Stage          uint8     `gorm:"column:stage;type:tinyint(4)" json:"stage"`
+	Status         uint8     `gorm:"column:status;type:tinyint(4)" json:"status"`
+	CreatedAt      time.Time `gorm:"column:created_at;type:datetime" json:"created_at"`
+	UpdatedAt      time.Time `gorm:"column:updated_at;type:datetime" json:"updated_at"`
+	Relayer        string    `gorm:"column:relayer;type:varchar(255)" json:"relayer"`
+	RelayerKey     string    `gorm:"column:relayer_key;type:varchar(255)" json:"relayer_key"`
+	RelayToken     string    `gorm:"column:relay_token;type:varchar(255)" json:"relay_token"`
+	RelayAmount    string    `gorm:"column:relay_amount;type:varchar(255)" json:"relay_amount"`
+	RelayAmountInt uint64    `gorm:"column:relay_amount_int;type:bigint(20)" json:"relay_amount_int"`
+	InAmountSat    string    `gorm:"column:in_amount_sat;type:varchar(255)" json:"in_amount_sat"`
+	CollectStatus  uint8     `gorm:"column:collect_status;type:tinyint(4)" json:"collect_status"`
 }
 
 func NewOrder() *BitcoinOrder {
