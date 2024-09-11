@@ -1,6 +1,9 @@
 package logic
 
 import (
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/mapprotocol/fe-backend/bindings/erc20"
 	"github.com/shopspring/decimal"
 	"math/big"
 	"reflect"
@@ -36,7 +39,7 @@ func Test_calcBridgeAndProtocolFees(t *testing.T) {
 		//	name: "t-2",
 		//	args: args{
 		//		amount:          func() decimal.Decimal { return decimal.NewFromFloat(100.123456789123456789123456789123456789) }, // replace to decimal.NewFromString()
-		//		bridgeFeeRate:   decimal.NewFromFloat(70.0 / 10000.0),
+		//		BridgeFeeRate:   decimal.NewFromFloat(70.0 / 10000.0),
 		//		protocolFeeRate: decimal.NewFromFloat(70.0 / 10000.0),
 		//	},
 		//	wantBridgeFeesStr:   "0.700864197523864197523864197523864197523",
@@ -233,7 +236,7 @@ func TestCalcFees(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	//bridgeFeeRate := decimal.NewFromFloat(0.007)   // 0.700864197523864197523864197523864197523
+	//BridgeFeeRate := decimal.NewFromFloat(0.007)   // 0.700864197523864197523864197523864197523
 	//protocolFeeRate := decimal.NewFromFloat(0.007) // 0.700864197523864197523864197523864197523
 
 	bridgeFeeRate := decimal.NewFromFloat(0.007)     // 0.700864197523864197523864197523864197523
@@ -246,4 +249,23 @@ func TestCalcFees(t *testing.T) {
 	t.Log(bridgeFees.String())
 	t.Log(protocolFees.String())
 	t.Log(afterAmount.String())
+}
+
+func TestName(t *testing.T) {
+	endpoint := "https://polygon-mainnet.blastapi.io/33eb9b6e-02d9-4cb9-9a6c-b7ecff4293c3"
+	cli, err := ethclient.Dial(endpoint)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	caller, err := erc20.NewErc20Caller(common.HexToAddress("0x1BFD67037B42Cf73acF2047067bd4F2C47D9BfD6"), cli)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	bal, err := caller.BalanceOf(nil, common.HexToAddress("0x3D1BE6ff3eAB2f0273Fc137cA2a89af1329ce725"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Log("balance: ", bal)
 }

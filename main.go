@@ -7,6 +7,7 @@ import (
 	"github.com/mapprotocol/fe-backend/third-party/butter"
 	"github.com/mapprotocol/fe-backend/third-party/tonrouter"
 	"github.com/spf13/viper"
+	"runtime/debug"
 
 	"github.com/mapprotocol/fe-backend/config"
 	"github.com/mapprotocol/fe-backend/resource/db"
@@ -30,7 +31,24 @@ func main() {
 	bitcoinConf := viper.GetStringMapString("bitcoin")
 	logic.InitMempoolClient(bitcoinConf["network"], bitcoinConf["vault"])
 
+	task()
+
 	engine := gin.Default()
 	router.Register(engine)
 	_ = endless.ListenAndServe(viper.GetString("address"), engine)
+}
+
+func task() {
+	go func() {
+		defer func() {
+			stack := string(debug.Stack())
+			log.Logger().WithField("stack", stack).Error("failed to get fee rate")
+
+			if r := recover(); r != nil {
+				log.Logger().WithField("error", r).Error("failed to recover get fee rate")
+			}
+		}()
+
+		logic.GetFeeRate()
+	}()
 }

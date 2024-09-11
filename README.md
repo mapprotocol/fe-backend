@@ -1,6 +1,10 @@
 # fe-backend
 
+| 交易方向       | protocol fee 扣除阶段 | protocol fee symbol | protocol fee 规则                                      | bridge fee 扣除阶段 | bridge fee symbol | bridge fee 规则                         |
+|------------|-------------------|---------------------|------------------------------------------------------|-----------------|-------------------|---------------------------------------|
+| ton to evm | 第一阶段              | USDT                | 根据代扣参数从 ton router 获取 protocol fee， 并返回 protocol fee | 第二阶段            | USDT              | 根据规则计算(比例 + base tx fee)并返回 bridge fe |
+| btc to evm | 第一阶段              | WBTC                | 根据代扣参数闪兑服务计算并返回 protocol fee                         | 第二阶段            | WBTC              | 根据规则计算(比例 + base tx fee)并返回 bridge fe |
+| from evm   | 第一阶段              | src token symbol    | 根据代扣参数闪兑服务计算并返回 protocol fee                         | 第二阶段            | USDT              | 根据规则计算(比例 + base tx fee)并返回 bridge fe |
 
-当 action 为 1 时， fromChainId 必须为 1360104473493505
-当 action 为 2 时， toChainId 必须为 1360104473493505
-fromChainId 和 toChainId 不能相同
+
+

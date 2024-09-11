@@ -1,27 +1,29 @@
 package constants
 
 const (
-	ChainIDOfChainPool = "22776"
+	ChainIDOfChainPool = "137"
 	ChainIDOfEthereum  = "1"
 )
 
 const (
-	USDTDecimalOfChainPool = 1e18
+	USDTDecimalOfChainPool = 1e6
 	USDTDecimalOfEthereum  = 1e6
 )
 
 const (
-	WBTCDecimalOfChainPool = 1e18
+	WBTCDecimalOfChainPool = 1e8
 	WBTCDecimalOfEthereum  = 1e8
 )
 
-const USDTDecimalNumberOfChainPool = 18
-const BTCDecimalNumberOfChainPool = 18
+const USDTDecimalNumberOfChainPool = 6
+const BTCDecimalNumberOfChainPool = 8
+
+const BTCDecimal = 1e8
 
 const (
-	WBTCOfChainPool = "0xb877e3562a660c7861117c2f1361a26abaf19beb"
+	WBTCOfChainPool = "0x1bfd67037b42cf73acf2047067bd4f2c47d9bfd6"
 	WBTCOfEthereum  = "0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599"
-	USDTOfChainPool = "0x33daba9618a75a7aff103e53afe530fbacf4a3dd"
+	USDTOfChainPool = "0xc2132d05d31c914a87c6611c10748aeb04b58e8f"
 	USDTOfEthereum  = "0xdac17f958d2ee523a2206206994597c13d831ec7"
 	USDTOfTON       = "EQCxE6mUtQJKFnGfaROTKOt1lZbDiiX1kCixRv7Nw2Id_sDs"
 )
@@ -42,12 +44,12 @@ const (
 	ExchangeNameFlushExchange = "MAP FE"
 )
 
-const BridgeFeeSymbolOfTON = "USDT"
-const BridgeFeeSymbolOfBTC = "BTC"
+const USDTSymbol = "USDT"
+const WBTCSymbol = "WBTC"
 
-const NativeSymbolOfChainPool = "MAPO"
+const NativeSymbolOfChainPool = "MATIC"
 
-const LocalRouteGasFee = "0.121116"
+const LocalRouteGasFee = "0.03"
 
 // LocalRouteHash is the hash of local route for chain pool
 // This route indicates that the `deliver` method of the chain pool needs to be called to exchange

@@ -45,6 +45,8 @@ type BridgeRouteRequest struct {
 	Amount          string `json:"amount"`
 	TonSlippage     uint64 `json:"tonSlippage"`
 	Slippage        uint64 `json:"slippage"`
+	FeeCollector    string `json:"feeCollector"`
+	FeeRatio        string `json:"feeRatio"`
 }
 
 type BridgeRouteResponse struct {
@@ -70,10 +72,14 @@ type RouteData struct {
 		Amount string `json:"amount"`
 		Symbol string `json:"symbol"`
 	} `json:"bridgeFee"`
-	GasFee struct {
+	ProtocolFee struct {
 		Amount string `json:"amount"`
 		Symbol string `json:"symbol"`
 	} `json:"gasFee"`
+	GasFee struct {
+		Amount string `json:"amount"`
+		Symbol string `json:"symbol"`
+	} `json:"protocolFee"`
 	MinAmountOut struct {
 		Amount string `json:"amount"`
 		Symbol string `json:"symbol"`
@@ -152,6 +158,7 @@ func Route(request *RouteRequest) (*RouteData, error) {
 			url,
 			reqerror.WithCode(strconv.Itoa(response.Errno)),
 			reqerror.WithMessage(response.Message),
+			reqerror.WithPublicError(response.Message),
 		)
 	}
 	return response.Data[0], nil
@@ -159,8 +166,8 @@ func Route(request *RouteRequest) (*RouteData, error) {
 
 func BridgeRoute(request *BridgeRouteRequest) (*RouteData, error) {
 	params := fmt.Sprintf(
-		"toChainId=%s&tokenInAddress=%s&tokenOutAddress=%s&amount=%s&tonSlippage=%d&slippage=%d",
-		request.ToChainID, request.TokenInAddress, request.TokenOutAddress, request.Amount, request.TonSlippage, request.Slippage,
+		"toChainId=%s&tokenInAddress=%s&tokenOutAddress=%s&amount=%s&tonSlippage=%d&slippage=%d&feeCollector=%s&feeRatio=%s",
+		request.ToChainID, request.TokenInAddress, request.TokenOutAddress, request.Amount, request.TonSlippage, request.Slippage, request.FeeCollector, request.FeeRatio,
 	)
 	url := fmt.Sprintf("%s%s?%s", endpoint, PathBridgeRoute, params)
 	log.Logger().Debugf("ton bridge route url: %s", url)
@@ -184,6 +191,7 @@ func BridgeRoute(request *BridgeRouteRequest) (*RouteData, error) {
 			url,
 			reqerror.WithCode(strconv.Itoa(response.Errno)),
 			reqerror.WithMessage(response.Message),
+			reqerror.WithPublicError(response.Message),
 		)
 	}
 	return response.Data[0], nil
