@@ -22,6 +22,8 @@ import (
 	"github.com/spf13/viper"
 )
 
+const NativeTokenAddress = "0x0000000000000000000000000000000000000000"
+
 var isMultiChainPool bool
 var feRouterContract string
 var feRouterAddress common.Address
@@ -1281,12 +1283,12 @@ func getWBTCDecimalOfChainPool(chain string) (decimal *big.Float) {
 //func calcBridgeFee(amount, feeRate *big.Float) (feeAmount *big.Float) {
 //	feeAmount = new(big.Float).Mul(amount, feeRate)
 //	feeAmount = new(big.Float).Quo(feeAmount, big.NewFloat(10000))
-//	log.Logger().WithField("amount", amount).WithField("BridgeFeeRate", feeRate).WithField("feeAmount", feeAmount).Info("calc bridge fee")
+//	log.Logger().WithField("amount", amount).WithField("bridgeFeeRate", feeRate).WithField("feeAmount", feeAmount).Info("calc bridge fee")
 //	return feeAmount
 //}
 
 func calcBridgeAndProtocolFees(amount, bridgeFeeRate, protocolFeeRate decimal.Decimal) (bridgeFeesStr, protocolFeesStr, afterAmountStr string) {
-	//bridgeFees := amount.Mul(BridgeFeeRate).Div(decimal.New(1, 4))
+	//bridgeFees := amount.Mul(bridgeFeeRate).Div(decimal.New(1, 4))
 	//protocolFees := amount.Mul(protocolFeeRate).Div(decimal.New(1, 4))
 	//afterAmount := amount.Sub(bridgeFees).Sub(protocolFees)
 
@@ -1298,7 +1300,7 @@ func calcBridgeAndProtocolFees(amount, bridgeFeeRate, protocolFeeRate decimal.De
 		"bridgeFees":      bridgeFees,
 		"protocolFees":    protocolFees,
 		"afterAmount":     afterAmount,
-		"BridgeFeeRate":   bridgeFeeRate,
+		"bridgeFeeRate":   bridgeFeeRate,
 		"protocolFeeRate": protocolFeeRate,
 	}
 
@@ -1470,7 +1472,7 @@ func calcBridgeAndProtocolFees1(amount, bridgeFeeRate, protocolFeeRate *big.Floa
 		"bridgeFees":      bridgeFees,
 		"protocolFees":    protocolFees,
 		"afterAmount":     afterAmount,
-		"BridgeFeeRate":   bridgeFeeRate,
+		"bridgeFeeRate":   bridgeFeeRate,
 		"protocolFeeRate": protocolFeeRate,
 	}
 
@@ -1492,7 +1494,7 @@ func calcBridgeAndProtocolFees2(amount, bridgeFeeRate, protocolFeeRate *big.Rat)
 		"bridgeFees":      bridgeFees,
 		"protocolFees":    protocolFees,
 		"afterAmount":     afterAmount,
-		"BridgeFeeRate":   bridgeFeeRate,
+		"bridgeFeeRate":   bridgeFeeRate,
 		"protocolFeeRate": protocolFeeRate,
 	}
 

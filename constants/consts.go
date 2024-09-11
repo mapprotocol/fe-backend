@@ -41,7 +41,7 @@ const (
 
 const (
 	ExchangeNameButter        = "Butter"
-	ExchangeNameFlushExchange = "MAP FE"
+	ExchangeNameFlushExchange = "mapoX"
 )
 
 const USDTSymbol = "USDT"
