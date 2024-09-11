@@ -15,3 +15,7 @@ const (
 	InAmountDecimalOfTON = 1e10
 	USDTDecimalOfTON     = 1e6
 )
+
+const (
+	USDTDecimalNumberOfTON = 6
+)

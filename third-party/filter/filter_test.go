@@ -1,10 +1,22 @@
 package filter
 
 import (
-	"github.com/spf13/viper"
+	"github.com/mapprotocol/fe-backend/utils"
+	"log"
+	"os"
 	"reflect"
 	"testing"
 )
+
+func TestMain(m *testing.M) {
+	endpoint := os.Getenv("FILTER_ROUTER_ENDPOINT")
+	if utils.IsEmpty(endpoint) {
+		log.Fatal("FILTER_ROUTER_ENDPOINT environment variable is not set")
+	}
+	Domain = endpoint
+
+	m.Run()
+}
 
 func TestGetLogs(t *testing.T) {
 	type args struct {
@@ -51,7 +63,6 @@ func TestGetLogs(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			viper.Set("endpoints.filter", "")
 			got, err := GetLogs(tt.args.id, tt.args.chainID, tt.args.topic, tt.args.limit)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("GetLogs() error = %v, wantErr %v", err, tt.wantErr)

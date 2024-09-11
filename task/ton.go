@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/shopspring/decimal"
 	blog "log"
 	"math/big"
 	"strconv"
@@ -30,8 +31,6 @@ import (
 	"github.com/xssnick/tonutils-go/address"
 	"github.com/xssnick/tonutils-go/tlb"
 )
-
-var FeeRate = big.NewFloat(70) // 70/10000
 
 const (
 	EventIDTONToEVM = "34a7e0e8"
@@ -345,25 +344,34 @@ func HandlePendingOrdersOfFirstStageFromTONToEVM() {
 			if srcTokenStr == params.NoneAddress {
 				srcTokenStr = params.NativeOfTON
 			}
-			_, afterAmount := deductFees(new(big.Float).SetUint64(relayAmount), FeeRate)
-			// convert token to float like 0.089
-			afterAmountFloat := new(big.Float).Quo(afterAmount, big.NewFloat(params.USDTDecimalOfTON))
-			inAmountFloat := new(big.Float).Quo(new(big.Float).SetUint64(inAmount), big.NewFloat(params.InAmountDecimalOfTON))
+
+			//_, afterAmount := deductFees(new(big.Float).SetUint64(relayAmount), FeeRate)
+			bridgeFees, afterAmount := deductTONToEVMBridgeFees(new(big.Int).SetUint64(relayAmount), big.NewInt(BridgeFeeRate))
+			//afterAmountFloat := new(big.Float).Quo(new(big.Float).SetInt(afterAmount), big.NewFloat(params.USDTDecimalOfTON))
+
+			//afterAmountFloat := decimal.NewFromBigInt(afterAmount, 0).Div(decimal.NewFromFloat(params.USDTDecimalOfTON))
+
+			afterAmountWithFixedDecimal := convertDecimal(afterAmount, params.USDTDecimalNumberOfTON, params.FixedDecimalNumber) // todo * 100
+
+			//inAmountFloat := new(big.Float).Quo(new(big.Float).SetUint64(inAmount), big.NewFloat(params.InAmountDecimalOfTON))
+			inAmountFloat := decimal.NewFromUint64(inAmount).Div(decimal.NewFromFloat(params.InAmountDecimalOfTON))
 			order := &dao.Order{
 				OrderIDFromContract: orderID,
 				SrcChain:            strconv.FormatUint(srcChain, 10),
 				SrcToken:            srcTokenStr,
 				Sender:              sender.String(),
-				InAmount:            inAmountFloat.Text('f', -1),
-				RelayToken:          params.USDTOfTON,
-				RelayAmount:         afterAmountFloat.String(),
-				DstChain:            strconv.FormatUint(dstChain, 10),
-				DstToken:            common.BytesToAddress(dstToken.Bytes()).String(),
-				Receiver:            common.BytesToAddress(receiver.Bytes()).String(),
-				Action:              dao.OrderActionToEVM,
-				Stage:               dao.OrderStag1,
-				Status:              dao.OrderStatusTxConfirmed,
-				Slippage:            slippage,
+				//InAmount:            inAmountFloat.Text('f', params.USDTDecimalNumberOfTON),
+				InAmount:       inAmountFloat.StringFixedBank(params.USDTDecimalNumberOfTON),
+				BridgeFee:      bridgeFees.Uint64(),
+				RelayToken:     params.USDTOfChainPool,
+				RelayAmountInt: afterAmountWithFixedDecimal.Uint64(),
+				DstChain:       strconv.FormatUint(dstChain, 10),
+				DstToken:       common.BytesToAddress(dstToken.Bytes()).String(),
+				Receiver:       common.BytesToAddress(receiver.Bytes()).String(),
+				Action:         dao.OrderActionToEVM,
+				Stage:          dao.OrderStag1,
+				Status:         dao.OrderStatusTxConfirmed,
+				Slippage:       slippage,
 			}
 
 			if err := order.Create(); err != nil {
@@ -423,12 +431,14 @@ func HandleConfirmedOrdersOfFirstStageFromTONToEVM() {
 				}
 
 				usdt := params.USDTOfChainPool
-				decimal := params.USDTDecimalOfChainPool
+				//usdtDecimal := params.USDTDecimalOfChainPool
+				usdtDecimalNumber := params.USDTDecimalNumberOfChainPool
 				chainIDOfChainPool := params.ChainIDOfChainPool
 				chainInfo := &dao.ChainPool{}
 				if isMultiChainPool && o.SrcChain == params.ChainIDOfEthereum {
 					usdt = params.USDTOfEthereum
-					decimal = params.USDTDecimalOfEthereum
+					//usdtDecimal = params.USDTDecimalOfEthereum
+					usdtDecimalNumber = params.USDTDecimalNumberOfEthereum
 					chainIDOfChainPool = params.ChainIDOfEthereum
 					chainInfo, err = dao.NewChainPoolWithChainID(params.ChainIDOfEthereum).First()
 					if err != nil {
@@ -474,23 +484,45 @@ func HandleConfirmedOrdersOfFirstStageFromTONToEVM() {
 					continue
 				}
 
-				orderID := utils.Uint64ToByte32(o.OrderIDFromContract)
-				amount, ok := new(big.Float).SetString(o.RelayAmount)
-				if !ok {
-					fields := map[string]interface{}{
-						"orderId": o.ID,
-						"amount":  o.RelayAmount,
-						"error":   err,
-					}
-					log.Logger().WithFields(fields).Error("failed to parse string to big int")
-					alarm.Slack(context.Background(), "failed to parse string to big int")
-					continue
-				}
-				amount = new(big.Float).Mul(amount, big.NewFloat(decimal))
-				amountInt, _ := amount.Int(nil)
+				//amount, ok := new(big.Float).SetString(o.RelayAmountInt)
+				//if !ok {
+				//	fields := map[string]interface{}{
+				//		"orderId": o.ID,
+				//		"amount":  o.RelayAmountInt,
+				//		"error":   err,
+				//	}
+				//	log.Logger().WithFields(fields).Error("failed to parse string to big int")
+				//	alarm.Slack(context.Background(), "failed to parse string to big int")
+				//	continue
+				//}
+				//amount = new(big.Float).Mul(amount, big.NewFloat(usdtDecimal))
+				//amountInt, _ := amount.Int(nil)
+
+				//relayAmount, err := decimal.NewFromString(o.RelayAmountInt)
+				//if err != nil {
+				//	fields := map[string]interface{}{
+				//		"orderId": o.ID,
+				//		"amount":  o.RelayAmountInt,
+				//		"error":   err,
+				//	}
+				//	log.Logger().WithFields(fields).Error("failed to parse string to decimal")
+				//}
+				//
+				//relayAmount = relayAmount.Mul(decimal.NewFromFloat(usdtDecimal))
+				//amountInt := relayAmount.BigInt()
 
 				txHash := common.Hash{}
+				orderID := utils.Uint64ToByte32(o.OrderIDFromContract)
+				relayAmountBigInt := convertDecimal(new(big.Int).SetUint64(o.RelayAmountInt), params.FixedDecimalNumber, uint64(usdtDecimalNumber))
 				if o.DstChain == chainIDOfChainPool && strings.ToLower(o.DstToken) == strings.ToLower(usdt) {
+					//if params.WBTCDecimalNumberOfChainPool > params.FixedDecimalNumber {
+					//	exp := new(big.Int).Exp(big.NewInt(10), new(big.Int).SetUint64(params.WBTCDecimalNumberOfChainPool-params.FixedDecimalNumber), nil)
+					//	amountInt = new(big.Int).Mul(amountInt, exp)
+					//} else if params.WBTCDecimalNumberOfChainPool < params.FixedDecimalNumber {
+					//	exp := new(big.Int).Exp(big.NewInt(10), new(big.Int).SetUint64(params.WBTCDecimalNumberOfChainPool-params.FixedDecimalNumber), nil)
+					//	amountInt = new(big.Int).Div(amountInt, exp)
+					//}
+
 					update := &dao.Order{
 						Stage:  dao.OrderStag2,
 						Status: dao.OrderStatusTxPrepareSend,
@@ -507,7 +539,7 @@ func HandleConfirmedOrdersOfFirstStageFromTONToEVM() {
 						continue
 					}
 
-					txHash, err = deliver(transactor, common.HexToAddress(usdt), orderID, amountInt, common.HexToAddress(o.Receiver), Big0, EmptyAddress)
+					txHash, err = deliver(transactor, common.HexToAddress(usdt), orderID, relayAmountBigInt, common.HexToAddress(o.Receiver), Big0, EmptyAddress)
 					if err != nil {
 						log.Logger().WithField("error", err.Error()).Error("failed to send deliver transaction")
 						alarm.Slack(context.Background(), "failed to send deliver transaction")
@@ -515,10 +547,27 @@ func HandleConfirmedOrdersOfFirstStageFromTONToEVM() {
 						continue
 					}
 				} else {
+					//relayAmountStr := strconv.FormatFloat(float64(o.RelayAmountInt)/params.FixedDecimalNumber, 'f', params.USDTDecimalNumberOfChainPool, 64)
+					//relayAmountStr := decimal.NewFromUint64(o.RelayAmountInt).Div(decimal.NewFromUint64(params.FixedDecimal)).StringFixedBank(params.USDTDecimalNumberOfChainPool)
+
+					//relayAmountStr := unwrapFixedDecimal(decimal.NewFromUint64(o.RelayAmountInt)).StringFixedBank(params.USDTDecimalNumberOfChainPool)
+					relayAmountStr := unwrapFixedDecimal(decimal.NewFromUint64(o.RelayAmountInt)).String()
+					//relayAmount, err := decimal.NewFromString(relayAmountStr)
+					//if err != nil {
+					//	fields := map[string]interface{}{
+					//		"orderId": o.ID,
+					//		"amount":  o.RelayAmountInt,
+					//		"error":   err,
+					//	}
+					//	log.Logger().WithFields(fields).Error("failed to parse string to float")
+					//	continue
+					//}
+					//relayAmountBigInt := relayAmount.Mul(decimal.NewFromUint64(usdtDecimal)).BigInt()
+
 					request := &butter.RouterAndSwapRequest{
 						FromChainID:     params.ChainIDOfChainPool,
 						ToChainID:       o.DstChain,
-						Amount:          o.RelayAmount,
+						Amount:          relayAmountStr,
 						TokenInAddress:  params.USDTOfChainPool,
 						TokenOutAddress: o.DstToken,
 						Type:            SwapType,
@@ -563,7 +612,7 @@ func HandleConfirmedOrdersOfFirstStageFromTONToEVM() {
 						continue
 					}
 
-					txHash, err = deliverAndSwap(transactor, common.HexToAddress(usdt), orderID, amountInt, decodeData, Big0, EmptyAddress, value)
+					txHash, err = deliverAndSwap(transactor, common.HexToAddress(usdt), orderID, relayAmountBigInt, decodeData, Big0, EmptyAddress, value)
 					if err != nil {
 						log.Logger().WithField("error", err.Error()).Error("failed to send deliver and swap transaction")
 						alarm.Slack(context.Background(), "failed to send deliver and swap transaction")
@@ -840,8 +889,12 @@ func HandleConfirmedOrdersOfFirstStageFromEVMToTON() {
 					id = o.ID + 1
 				}
 
+				//relayAmount := strconv.FormatFloat(float64(o.RelayAmountInt)/params.FixedDecimalNumber, 'f', params.USDTDecimalNumberOfChainPool, 64)
+				//relayAmountStr := unwrapFixedDecimal(decimal.NewFromUint64(o.RelayAmountInt)).StringFixedBank(params.USDTDecimalNumberOfChainPool)
+
+				relayAmountStr := unwrapFixedDecimal(decimal.NewFromUint64(o.RelayAmountInt)).String()
 				request := &tonrouter.BridgeSwapRequest{
-					Amount:          o.RelayAmount,
+					Amount:          relayAmountStr,
 					Slippage:        o.Slippage / 3 * 1,
 					TokenOutAddress: o.DstToken,
 					Receiver:        o.Receiver,
@@ -941,7 +994,6 @@ func HandleConfirmedOrdersOfFirstStageFromEVMToTON() {
 }
 
 // HandlePendingOrdersOfSecondSStageFromEVMToTON
-// action = 2, stage = 2, status = 1 ==> status = 2
 // action=2, stage=2, status=2(TxSent) ==> status=4(TxConfirmed)
 func HandlePendingOrdersOfSecondSStageFromEVMToTON() {
 	chainID := params.TONChainID
@@ -1100,21 +1152,22 @@ func HandlePendingOrdersOfSecondSStageFromEVMToTON() {
 }
 
 func deliver(transactor *tx.Transactor, token common.Address, orderID [32]byte, amount *big.Int, receiver common.Address, fee *big.Int, feeReceiver common.Address) (txHash common.Hash, err error) {
+	fields := map[string]interface{}{
+		"orderID":     hex.EncodeToString(orderID[:]),
+		"token":       token,
+		"amount":      amount,
+		"receiver":    receiver,
+		"fee":         fee,
+		"feeReceiver": feeReceiver,
+	}
 	txHash, err = transactor.Deliver(orderID, token, amount, receiver, fee, feeReceiver)
 	if err != nil {
-		fields := map[string]interface{}{
-			"orderID":     hex.EncodeToString(orderID[:]),
-			"token":       token,
-			"amount":      amount,
-			"receiver":    receiver,
-			"fee":         fee,
-			"feeReceiver": feeReceiver,
-			"error":       err.Error(),
-		}
+		fields["error"] = err.Error()
 		log.Logger().WithFields(fields).Error("failed to send deliver transaction")
 		return txHash, err
 	}
-	log.Logger().WithField("hash", txHash).Info("completed send deliver transaction")
+	fields["hash"] = txHash.Hex()
+	log.Logger().WithFields(fields).Info("completed send deliver transaction")
 	return txHash, nil
 }
 

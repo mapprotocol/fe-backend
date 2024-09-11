@@ -9,7 +9,10 @@ import (
 	"github.com/btcsuite/btcd/txscript"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/mapprotocol/fe-backend/params"
+	"github.com/shopspring/decimal"
 	"math/big"
+	"reflect"
 	"testing"
 )
 
@@ -80,6 +83,12 @@ func TestEventHash(t *testing.T) {
 	t.Log("event hash: ", eventHash)
 }
 
+func TestConvert(t *testing.T) {
+	amount := 0.12345678
+	amountSat := amount / 1e8
+	t.Log("amountSat: ", amountSat)
+}
+
 func generateKey() (*btcec.PrivateKey, error) {
 	privateKey, err := btcec.NewPrivateKey()
 	if err != nil {
@@ -100,3 +109,222 @@ func makeTaprootAddress(privKey *btcec.PrivateKey, netParams *chaincfg.Params) (
 	}
 	return address, nil
 }
+
+func Test_deductFees(t *testing.T) {
+	type args struct {
+		amount  *big.Int
+		feeRate *big.Int
+	}
+	tests := []struct {
+		name            string
+		args            args
+		wantFeeAmount   *big.Int
+		wantAfterAmount *big.Int
+	}{
+		{
+			name: "case1",
+			args: args{
+				amount:  big.NewInt(12345678),
+				feeRate: big.NewInt(70),
+			},
+			wantFeeAmount:   big.NewInt(86419),
+			wantAfterAmount: big.NewInt(12259259),
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gotFeeAmount, gotAfterAmount := deductFees(tt.args.amount, tt.args.feeRate)
+			if !reflect.DeepEqual(gotFeeAmount, tt.wantFeeAmount) {
+				t.Errorf("deductFees() gotFeeAmount = %v, want %v", gotFeeAmount, tt.wantFeeAmount)
+			}
+			if !reflect.DeepEqual(gotAfterAmount, tt.wantAfterAmount) {
+				t.Errorf("deductFees() gotAfterAmount = %v, want %v", gotAfterAmount, tt.wantAfterAmount)
+			}
+		})
+	}
+}
+
+func Test_deductToTonBridgeFees(t *testing.T) {
+	type args struct {
+		amount        *big.Int
+		bridgeFeeRate *big.Int
+	}
+	tests := []struct {
+		name            string
+		args            args
+		wantBridgeFees  *big.Int
+		wantAfterAmount *big.Int
+	}{
+		{
+			name: "t-1",
+			args: args{
+				amount:        big.NewInt(100000000), // 100 USDT
+				bridgeFeeRate: big.NewInt(30),
+			},
+			wantBridgeFees:  big.NewInt(1800000),  // 0.3 + 1.5 = 1.8 USDT
+			wantAfterAmount: big.NewInt(98200000), // 98.2 USDT
+		},
+		// 32000000 * 30 / 10000 = 96000
+		{
+			name: "t-2",
+			args: args{
+				amount:        big.NewInt(32000000), // 320 USDT
+				bridgeFeeRate: big.NewInt(30),
+			},
+			wantBridgeFees:  big.NewInt(1596000),  // 0.096 + 1.5 = 1.596 USDT
+			wantAfterAmount: big.NewInt(30404000), // 30.404 USDT
+		},
+		// 69000000 * 30 / 10000 = 207000
+		{
+			name: "t-3",
+			args: args{
+				amount:        big.NewInt(69000000), // 69 USDT
+				bridgeFeeRate: big.NewInt(30),
+			},
+			wantBridgeFees:  big.NewInt(1707000),  // 207000 + 1500000 = 1.707000 USDT
+			wantAfterAmount: big.NewInt(67293000), // 67.293 USDT
+		},
+		// 238457000000 * 30 / 10000 = 715371000
+		// 715371000 + 1500000 = 716871000
+		// 238457000000 - 716871000 = 237741629000
+		{
+			name: "t-3",
+			args: args{
+				amount:        big.NewInt(238457000000), // 238457 USDT
+				bridgeFeeRate: big.NewInt(30),
+			},
+			wantBridgeFees:  big.NewInt(716871000),    // 715371000 + 1500000 = 716.871 USDT
+			wantAfterAmount: big.NewInt(237741629000), // 237741.629 USDT
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gotBridgeFees, gotAfterAmount := deductToTONBridgeFees(tt.args.amount, tt.args.bridgeFeeRate)
+			if !reflect.DeepEqual(gotBridgeFees, tt.wantBridgeFees) {
+				t.Errorf("deductToTonBridgeFees() gotBridgeFees = %v, want %v", gotBridgeFees, tt.wantBridgeFees)
+			}
+			if !reflect.DeepEqual(gotAfterAmount, tt.wantAfterAmount) {
+				t.Errorf("deductToTonBridgeFees() gotAfterAmount = %v, want %v", gotAfterAmount, tt.wantAfterAmount)
+			}
+		})
+	}
+}
+
+func Test_getFeeRate(t *testing.T) {
+	amount := big.NewInt(100000000) //100 USDT
+	bridgeFeeRate := big.NewInt(30)
+	bridgeFees := new(big.Int).Mul(amount, bridgeFeeRate)
+	bridgeFees = new(big.Int).Div(bridgeFees, big.NewInt(BridgeFeeRateDenominator))
+	bridgeFees = new(big.Int).Add(bridgeFees, ToTONBaseTxFee)
+
+	afterAmount := new(big.Int).Sub(amount, bridgeFees)
+
+	t.Log(bridgeFees, afterAmount)
+}
+
+func Test_convertDecimal(t *testing.T) {
+	type args struct {
+		amount     *big.Int
+		srcDecimal uint64
+		dstDecimal uint64
+	}
+	tests := []struct {
+		name string
+		args args
+		want *big.Int
+	}{
+		{
+			name: "t-1",
+			args: args{
+				amount:     big.NewInt(100),
+				srcDecimal: 2,
+				dstDecimal: 4,
+			},
+			want: big.NewInt(10000),
+		},
+		{
+			name: "t-2",
+			args: args{
+				amount:     big.NewInt(10000),
+				srcDecimal: 4,
+				dstDecimal: 2,
+			},
+			want: big.NewInt(100),
+		},
+		{
+			name: "t-3",
+			args: args{
+				amount:     big.NewInt(100),
+				srcDecimal: 2,
+				dstDecimal: 2,
+			},
+			want: big.NewInt(100),
+		},
+		{
+			name: "t-4",
+			args: args{
+				amount:     big.NewInt(50000),
+				srcDecimal: 8,
+				dstDecimal: 8,
+			},
+			want: big.NewInt(50000),
+		},
+		{
+			name: "t-5",
+			args: args{
+				amount:     big.NewInt(50000),
+				srcDecimal: 8,
+				dstDecimal: 6,
+			},
+			want: big.NewInt(500),
+		},
+		{
+			name: "t-6",
+			args: args{
+				amount:     big.NewInt(50000),
+				srcDecimal: 6,
+				dstDecimal: 8,
+			},
+			want: big.NewInt(5000000),
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := convertDecimal(tt.args.amount, tt.args.srcDecimal, tt.args.dstDecimal); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("convertDecimal() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestDecimalPrecision(t *testing.T) {
+	// DivisionPrecision = 16(default)
+	d1 := decimal.NewFromFloat(2).Div(decimal.NewFromFloat(3))
+	t.Log(d1.String()) // output: "0.6666666666666667"
+	d2 := decimal.NewFromFloat(2).Div(decimal.NewFromFloat(30000))
+	t.Log(d2.String()) // output: "0.0000666666666667"
+	d3 := decimal.NewFromFloat(20000).Div(decimal.NewFromFloat(3))
+	t.Log(d3.String()) // output: "6666.6666666666666667"
+	decimal.DivisionPrecision = 3
+	d4 := decimal.NewFromFloat(2).Div(decimal.NewFromFloat(3))
+	t.Log(d4.String()) // output: "0.667"
+	decimal.DivisionPrecision = 24
+	d5 := decimal.NewFromFloat(2).Div(decimal.NewFromFloat(3))
+	t.Log(d5.String()) // output: "0.666666666666666666666667"
+}
+
+func TestCompare(t *testing.T) {
+	//amount := uint64(912_12345678)
+	amount := uint64(912_12340000)
+
+	fee := calcProtocolFees(new(big.Int).SetUint64(amount), 70, 1e8) //big int
+	t.Log("fee:", fee)
+	relayAmount := decimal.NewFromUint64(amount).Sub(decimal.NewFromUint64(fee.Uint64())) // decimal
+	t.Log("relayAmount:", relayAmount)
+	relayAmountStr := unwrapFixedDecimal(relayAmount).StringFixedBank(params.WBTCDecimalNumberOfChainPool)
+	t.Log("relayAmountStr:", relayAmountStr)
+
+	t.Log(912_12340000 - 638486380)
+}
+
+// 73859259

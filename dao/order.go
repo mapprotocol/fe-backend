@@ -45,10 +45,12 @@ type Order struct {
 	Sender              string    `gorm:"column:sender;type:varchar(255)" json:"sender"`
 	InAmount            string    `gorm:"column:in_amount;type:varchar(255)" json:"in_amount"`
 	InTxHash            string    `gorm:"column:in_tx_hash;type:varchar(255)" json:"in_tx_hash"`
+	BridgeFee           uint64    `gorm:"column:bridge_fee;type:bigint(20)" json:"bridge_fee"`
 	Relayer             string    `gorm:"column:relayer;type:varchar(255)" json:"relayer"`
 	RelayerKey          string    `gorm:"column:relayer_key;type:varchar(255)" json:"relayer_key"`
 	RelayToken          string    `gorm:"column:relay_token;type:varchar(255)" json:"relay_token"`
 	RelayAmount         string    `gorm:"column:relay_amount;type:varchar(255)" json:"relay_amount"`
+	RelayAmountInt      uint64    `gorm:"column:relay_amount_int;type:bigint(20)" json:"relay_amount_int"`
 	DstChain            string    `gorm:"column:dst_chain;type:varchar(255)" json:"dst_chain"`
 	DstToken            string    `gorm:"column:dst_token;type:varchar(255)" json:"dst_token"`
 	Receiver            string    `gorm:"column:receiver;type:varchar(255)" json:"receiver"`

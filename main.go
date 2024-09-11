@@ -1,13 +1,19 @@
 package main
 
 import (
+	"fmt"
 	blog "log"
 	"os"
 	"os/signal"
 	"runtime/debug"
+	"strings"
 	"syscall"
 
+	"github.com/ethereum/go-ethereum/accounts/keystore"
+	"github.com/ethereum/go-ethereum/common/hexutil"
+	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/spf13/viper"
+	"golang.org/x/term"
 
 	"github.com/mapprotocol/fe-backend/config"
 	"github.com/mapprotocol/fe-backend/resource/db"
@@ -23,6 +29,17 @@ import (
 func main() {
 	// init config
 	config.Init()
+
+	tips := "Enter the chain pool manager password on the EVM chain: "
+	privateKey, err := GetWalletKey(tips, viper.GetStringMapString("chainPool")["keystore"])
+	if err != nil {
+		panic(err)
+	}
+	passwd, err := getPassphrase("Enter the chain pool manager password on the TON chain: ")
+	if err != nil {
+		panic(err)
+	}
+
 	// init log
 	log.Init(viper.GetString("env"), viper.GetString("logDir"))
 	// init db
@@ -30,11 +47,8 @@ func main() {
 	db.Init(dbConfig["user"], dbConfig["password"], dbConfig["host"], dbConfig["port"], dbConfig["name"])
 
 	task.InitMempoolClient(viper.GetString("network"))
-
-	tx.InitTransactor(viper.GetStringMapString("chainPool")["senderprivatekey"])
-
-	tonConfig := viper.GetStringMapString("ton")
-	tonclient.Init(tonConfig["words"], tonConfig["password"])
+	tx.InitTransactor(privateKey)
+	tonclient.Init(viper.GetStringMapString("ton")["words"], passwd)
 
 	filter.Init()
 	butter.Init()
@@ -70,6 +84,19 @@ func runTask() {
 }
 
 func runBTCTask() {
+	go func() {
+		defer func() {
+			stack := string(debug.Stack())
+			log.Logger().WithField("stack", stack).Error("failed to GetFeeRate")
+
+			if r := recover(); r != nil {
+				log.Logger().WithField("error", r).Error("failed to recover GetFeeRate")
+			}
+		}()
+
+		task.GetFeeRate()
+	}()
+
 	go func() {
 		defer func() {
 			stack := string(debug.Stack())
@@ -175,4 +202,32 @@ func runTONTask() {
 
 		task.HandlePendingOrdersOfSecondSStageFromEVMToTON()
 	}()
+}
+
+func getPassphrase(tips string) (string, error) {
+	fmt.Print(tips)
+	password, err := term.ReadPassword(syscall.Stdin)
+	if err != nil {
+		return "", err
+	}
+	fmt.Printf("\n")
+	return strings.TrimSpace(string(password)), nil
+}
+
+func GetWalletKey(tips, filepath string) (string, error) {
+	// Read key from file.
+	keyjson, err := os.ReadFile(filepath)
+	if err != nil {
+		return "", err
+	}
+	// Decrypt key with passphrase.
+	passphrase, err := getPassphrase(tips)
+	if err != nil {
+		return "", err
+	}
+	key, err := keystore.DecryptKey(keyjson, passphrase)
+	if err != nil {
+		return "", err
+	}
+	return hexutil.Encode(crypto.FromECDSA(key.PrivateKey)), nil
 }

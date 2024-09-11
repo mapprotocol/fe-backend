@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"github.com/mapprotocol/fe-backend/third-party/filter"
+	"github.com/shopspring/decimal"
 	blog "log"
 	"math/big"
 	"strconv"
@@ -13,10 +14,8 @@ import (
 
 	"github.com/btcsuite/btcd/btcutil"
 	"github.com/btcsuite/btcd/chaincfg"
-	"github.com/btcsuite/btcd/chaincfg/chainhash"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
-
 	"github.com/mapprotocol/fe-backend/dao"
 	"github.com/mapprotocol/fe-backend/params"
 	"github.com/mapprotocol/fe-backend/resource/log"
@@ -36,6 +35,18 @@ const (
 	NetworkTestnet = "testnet"
 )
 
+const (
+	FeeRateMultiple = 2
+	FeeRateLimit    = 200
+)
+
+const (
+	BridgeFeeRate            int64 = 30
+	BridgeFeeRateDenominator int64 = 10000
+)
+
+const BaseTxFeeMultiplier = 1.5
+
 var Initiator = common.HexToAddress("0x22776") // todo
 
 var (
@@ -43,10 +54,12 @@ var (
 	btcApiClient = &mempool.MempoolClient{}
 )
 
-//var (
-//	senderAddress    btcutil.Address
-//	senderPrivateKey *btcec.PrivateKey
-//)
+var globalFeeRate int64 = 20
+
+var ToTONBaseTxFee = new(big.Int).SetUint64(uint64(params.USDTDecimalOfTON * 1.5)) // 1.5 USDT
+var TONToEVMBaseTxFee = new(big.Int).SetUint64(params.USDTDecimalOfChainPool)      // 1 USDT
+var BitcoinToEVMBaseTxFee = new(big.Int).SetUint64(700 * BaseTxFeeMultiplier)      // 0.0000105 WBTC
+var BitcoinTxBytes = new(big.Int).SetUint64(200)
 
 func InitMempoolClient(network string) {
 	switch network {
@@ -113,14 +126,8 @@ func HandlePendingOrdersOfFirstStageFromBTCToEVM() {
 					continue
 				}
 
-				inAmountSat, err := strconv.ParseInt(o.InAmountSat, 10, 64)
-				if err != nil {
-					log.Logger().WithField("inAmountSat", o.InAmountSat).WithField("error", err.Error()).Error("failed to parse in amount sat")
-					alarm.Slack(context.Background(), "failed to parse in amount sat")
-					continue
-				}
 				value := utxo[0].Output.Value
-				if value < inAmountSat {
+				if uint64(value) < o.InAmountSat {
 					log.Logger().WithField("relayer", o.Relayer).WithField("value", value).WithField("inAmountSat", o.InAmountSat).Debug("get utxo value is less than in amount sat")
 					alarm.Slack(context.Background(), "get utxo value is less than in amount sat")
 
@@ -135,15 +142,22 @@ func HandlePendingOrdersOfFirstStageFromBTCToEVM() {
 					continue
 				}
 
-				inAmount := new(big.Float).Quo(new(big.Float).SetInt64(value), big.NewFloat(params.BTCDecimal))
-				_, afterAmount := deductFees(new(big.Float).SetInt64(value), FeeRate)
-				afterAmountFloat := new(big.Float).Quo(afterAmount, big.NewFloat(params.BTCDecimal))
+				//inAmount := new(big.Float).Quo(new(big.Float).SetInt64(value), big.NewFloat(params.BTCDecimal))
+				inAmount := decimal.NewFromInt(value).Div(decimal.NewFromFloat(params.BTCDecimal))
+
+				bridgeFees, afterAmount := deductBitcoinToEVMBridgeFees(new(big.Int).SetInt64(value), big.NewInt(BridgeFeeRate))
+				//afterAmountFloat := new(big.Float).Quo(new(big.Float).SetInt(afterAmount), big.NewFloat(params.BTCDecimal))
+				//afterAmountFloat := decimal.NewFromBigInt(afterAmount, 0).Div(decimal.NewFromFloat(params.BTCDecimal))
+				afterAmountWithFixedDecimal := convertDecimal(afterAmount, params.BTCDecimalNumber, params.FixedDecimalNumber)
+
 				update := &dao.BitcoinOrder{
-					InAmount:    inAmount.Text('f', -1),
-					InAmountSat: strconv.FormatInt(utxo[0].Output.Value, 10),
-					RelayToken:  params.BTCTokenAddress,
-					RelayAmount: afterAmountFloat.Text('f', 8),
-					Status:      dao.OrderStatusTxConfirmed,
+					//InAmount:    inAmount.Text('f', params.BTCDecimalNumber),
+					InAmount:       inAmount.StringFixedBank(params.BTCDecimalNumber),
+					InAmountSat:    uint64(utxo[0].Output.Value),
+					BridgeFee:      bridgeFees.Uint64(),
+					RelayToken:     params.WBTCOfChainPool,
+					RelayAmountInt: afterAmountWithFixedDecimal.Uint64(),
+					Status:         dao.OrderStatusTxConfirmed,
 				}
 				if err := dao.NewBitcoinOrderWithID(o.ID).Updates(update); err != nil {
 					log.Logger().WithField("update", utils.JSON(update)).WithField("error", err.Error()).Error("failed to update bitcoin order status")
@@ -153,7 +167,7 @@ func HandlePendingOrdersOfFirstStageFromBTCToEVM() {
 				}
 
 			}
-			time.Sleep(10 * time.Second)
+			time.Sleep(30 * time.Second)
 		}
 	}
 }
@@ -192,12 +206,14 @@ func HandleConfirmedOrdersOfFirstStageFromBTCToEVM() {
 				}
 
 				wbtc := params.WBTCOfChainPool
-				decimal := params.WBTCDecimalOfChainPool
+				wbtcDecimal := params.WBTCDecimalOfChainPool
+				wbtcDecimalNumber := params.WBTCDecimalNumberOfChainPool
 				chainIDOfChainPool := params.ChainIDOfChainPool
 				chainInfo := &dao.ChainPool{}
 				if isMultiChainPool && o.SrcChain == params.ChainIDOfEthereum {
 					wbtc = params.WBTCOfEthereum
-					decimal = params.WBTCDecimalOfEthereum
+					wbtcDecimal = params.WBTCDecimalOfEthereum
+					wbtcDecimalNumber = params.WBTCDecimalNumberOfEthereum
 					chainIDOfChainPool = params.ChainIDOfEthereum
 					chainInfo, err = dao.NewChainPoolWithChainID(params.ChainIDOfEthereum).First()
 					if err != nil {
@@ -244,32 +260,49 @@ func HandleConfirmedOrdersOfFirstStageFromBTCToEVM() {
 				}
 
 				orderID := utils.Uint64ToByte32(o.ID)
-				amount, ok := new(big.Rat).SetString(o.RelayAmount)
-				if !ok {
-					fields := map[string]interface{}{
-						"orderId": o.ID,
-						"amount":  o.RelayAmount,
-						"error":   err,
-					}
-					log.Logger().WithFields(fields).Error("failed to parse string to big rat")
-					alarm.Slack(context.Background(), "failed to parse string to big rat")
-					continue
-				}
-				amount = new(big.Rat).Mul(amount, new(big.Rat).SetUint64(decimal))
-				amountInt := amount.Num()
-				inAmountSat, ok := new(big.Int).SetString(o.InAmountSat, 10)
-				if !ok {
-					fields := map[string]interface{}{
-						"orderId": o.ID,
-						"amount":  o.InAmountSat,
-						"error":   err,
-					}
-					log.Logger().WithFields(fields).Error("failed to parse string to big int")
-					alarm.Slack(context.Background(), "failed to parse string to big int")
-					continue
-				}
+				//amount, ok := new(big.Rat).SetString(o.RelayAmountInt)
+				//if !ok {
+				//	fields := map[string]interface{}{
+				//		"orderId": o.ID,
+				//		"amount":  o.RelayAmountInt,
+				//		"error":   err,
+				//	}
+				//	log.Logger().WithFields(fields).Error("failed to parse string to big rat")
+				//	alarm.Slack(context.Background(), "failed to parse string to big rat")
+				//	continue
+				//}
+				//amount = new(big.Rat).Mul(amount, new(big.Rat).SetUint64(decimal))
+				//amountInt := amount.Num()
 
-				fee := calcProtocolFees(inAmountSat, o.FeeRatio, decimal)
+				//relayAmount, err := decimal.NewFromString(o.RelayAmountInt)
+				//if err != nil {
+				//	fields := map[string]interface{}{
+				//		"orderId": o.ID,
+				//		"amount":  o.RelayAmountInt,
+				//		"error":   err,
+				//	}
+				//	log.Logger().WithFields(fields).Error("failed to parse string to decimal")
+				//	continue
+				//}
+				//
+				//relayAmount = relayAmount.Mul(decimal.NewFromUint64(wbtcDecimal))
+				//amountInt := relayAmount.BigInt()
+
+				//inAmountSat, ok := new(big.Int).SetString(o.InAmountSat, 10)
+				//if !ok {
+				//	fields := map[string]interface{}{
+				//		"orderId": o.ID,
+				//		"amount":  o.InAmountSat,
+				//		"error":   err,
+				//	}
+				//	log.Logger().WithFields(fields).Error("failed to parse string to big int")
+				//	alarm.Slack(context.Background(), "failed to parse string to big int")
+				//	continue
+				//}
+
+				fee := calcProtocolFees(new(big.Int).SetUint64(o.InAmountSat), o.FeeRatio, wbtcDecimal)
+				fee = convertDecimal(fee, uint64(wbtcDecimalNumber), params.FixedDecimalNumber)
+				amountBigInt := convertDecimal(new(big.Int).SetUint64(o.RelayAmountInt), params.FixedDecimalNumber, uint64(wbtcDecimalNumber))
 				txHash := common.Hash{}
 				if o.DstChain == chainIDOfChainPool && strings.ToLower(o.DstToken) == strings.ToLower(wbtc) {
 					update := &dao.BitcoinOrder{
@@ -283,7 +316,8 @@ func HandleConfirmedOrdersOfFirstStageFromBTCToEVM() {
 						continue
 					}
 
-					txHash, err = deliver(transactor, common.HexToAddress(wbtc), orderID, amountInt, common.HexToAddress(o.Receiver), fee, common.HexToAddress(o.FeeCollector))
+					//amountBigInt := convertDecimal(new(big.Int).SetUint64(o.RelayAmountInt), params.FixedDecimalNumber, uint64(wbtcDecimalNumber))
+					txHash, err = deliver(transactor, common.HexToAddress(wbtc), orderID, amountBigInt, common.HexToAddress(o.Receiver), fee, common.HexToAddress(o.FeeCollector))
 					if err != nil {
 						log.Logger().WithField("error", err.Error()).Error("failed to send deliver transaction")
 						alarm.Slack(context.Background(), "failed to send deliver transaction")
@@ -291,26 +325,45 @@ func HandleConfirmedOrdersOfFirstStageFromBTCToEVM() {
 						continue
 					}
 				} else {
-					relayAmountStr := o.RelayAmount
-					if fee.Cmp(big.NewInt(0)) == 1 {
-						relayAmount, err := strconv.ParseFloat(o.RelayAmount, 10)
-						if err != nil {
-							log.Logger().WithField("amount", o.RelayAmount).WithField("error", err.Error()).Error("failed to parse relay amount")
-							alarm.Slack(context.Background(), "failed to parse relay amount")
-							continue
-						}
-						relayAmountSat, err := btcutil.NewAmount(relayAmount)
-						if err != nil {
-							log.Logger().WithField("amount", relayAmount).WithField("error", err.Error()).Error("failed to convert relay amount to satoshi")
-							alarm.Slack(context.Background(), "failed to convert relay amount to satoshi")
-							continue
-						}
+					//relayAmountStr := strconv.FormatFloat(float64(o.RelayAmountInt-fee.Uint64())/params.FixedDecimal, 'f', params.WBTCDecimalNumberOfChainPool, 64)
+					//relayAmount := decimal.NewFromUint64(o.RelayAmountInt).Sub(decimal.NewFromUint64(fee.Uint64())) // todo big int calc
+					//relayAmountStr := unwrapFixedDecimal(relayAmount).StringFixedBank(params.WBTCDecimalNumberOfChainPool)
+					//relayAmount, err := decimal.NewFromString(relayAmountStr)
 
-						fee := new(big.Int).Mul(inAmountSat, new(big.Int).SetUint64(o.FeeRatio))
-						fee = new(big.Int).Div(fee, big.NewInt(10000))
-						relayAmountStr = strconv.FormatFloat(float64(int64(relayAmountSat)-fee.Int64())/params.BTCDecimal, 'f', -1, 64)
-					}
+					relayAmount := new(big.Int).Sub(new(big.Int).SetUint64(o.RelayAmountInt), fee)
+					relayAmountStr := unwrapFixedDecimal(decimal.NewFromBigInt(relayAmount, 0)).String()
 
+					//relayAmount, err := decimal.NewFromString(relayAmountStr)
+					//if err != nil {
+					//	fields := map[string]interface{}{
+					//		"orderId": o.ID,
+					//		"amount":  o.RelayAmountInt,
+					//		"error":   err,
+					//	}
+					//	log.Logger().WithFields(fields).Error("failed to parse string to float")
+					//	continue
+					//}
+					//
+					//relayAmountBigInt := relayAmount.Add(decimal.NewFromBigInt(fee, 0)).Mul(decimal.NewFromUint64(wbtcDecimal)).BigInt()
+
+					//if fee.Cmp(big.NewInt(0)) == 1 {
+					//	//relayAmount, err := strconv.ParseFloat(o.RelayAmountInt, 10)
+					//	//if err != nil {
+					//	//	log.Logger().WithField("amount", o.RelayAmountInt).WithField("error", err.Error()).Error("failed to parse relay amount")
+					//	//	alarm.Slack(context.Background(), "failed to parse relay amount")
+					//	//	continue
+					//	//}
+					//	//relayAmountSat, err := btcutil.NewAmount(relayAmount)
+					//	//if err != nil {
+					//	//	log.Logger().WithField("amount", relayAmount).WithField("error", err.Error()).Error("failed to convert relay amount to satoshi")
+					//	//	alarm.Slack(context.Background(), "failed to convert relay amount to satoshi")
+					//	//	continue
+					//	//}
+					//
+					//	fee := new(big.Int).Mul(inAmountSat, new(big.Int).SetUint64(o.FeeRatio))
+					//	fee = new(big.Int).Div(fee, big.NewInt(10000))
+					//	relayAmountStr = strconv.FormatFloat(float64(int64(relayAmountSat)-fee.Int64())/params.BTCDecimal, 'f', -1, 64)
+					//}
 					request := &butter.RouterAndSwapRequest{
 						FromChainID:     params.ChainIDOfChainPool,
 						ToChainID:       o.DstChain,
@@ -354,7 +407,7 @@ func HandleConfirmedOrdersOfFirstStageFromBTCToEVM() {
 						continue
 					}
 
-					txHash, err = deliverAndSwap(transactor, common.HexToAddress(wbtc), orderID, amountInt, decodeData, fee, common.HexToAddress(o.FeeCollector), value)
+					txHash, err = deliverAndSwap(transactor, common.HexToAddress(wbtc), orderID, amountBigInt, decodeData, fee, common.HexToAddress(o.FeeCollector), value)
 					if err != nil {
 						log.Logger().WithField("error", err.Error()).Error("failed to send deliver and swap transaction")
 						alarm.Slack(context.Background(), "failed to send deliver and swap transaction")
@@ -431,8 +484,8 @@ func HandlePendingOrdersOfSecondStageFromBTCToEVM() {
 				}
 				pending, err := transactor.TransactionIsPending(common.HexToHash(o.OutTxHash))
 				if err != nil {
-					log.Logger().WithField("endpoint", chainInfo.ChainRPC).WithField("error", err.Error()).Error("failed to create transactor")
-					alarm.Slack(context.Background(), "failed to create transactor")
+					log.Logger().WithField("endpoint", chainInfo.ChainRPC).WithField("error", err.Error()).Error("failed to judge transaction is pending")
+					alarm.Slack(context.Background(), "failed to judge transaction is pending")
 					time.Sleep(5 * time.Second)
 					continue
 				}
@@ -542,24 +595,32 @@ func HandlePendingOrdersOfFirstStageFromEVM() {
 				continue
 			}
 
-			_, afterAmount := deductFees(new(big.Float).SetInt(onReceived.ChainPoolTokenAmount), FeeRate)
 			if onReceived.DstChain.String() == params.TONChainID {
-				afterAmountFloat := new(big.Float).Quo(afterAmount, big.NewFloat(params.USDTDecimalOfChainPool))
+				bridgeFees, afterAmount := deductToTONBridgeFees(onReceived.ChainPoolTokenAmount, big.NewInt(BridgeFeeRate))
+				//afterAmountFloat := new(big.Float).Quo(new(big.Float).SetInt(afterAmount), big.NewFloat(float64(params.USDTDecimalOfChainPool)))
+
+				//afterAmountFloat := decimal.NewFromBigInt(afterAmount, 0).Div(decimal.NewFromUint64(params.USDTDecimalOfChainPool)) // todo * 100
+				//afterAmount := new(big.Int).Div(afterAmount, new(big.Int).SetUint64(params.USDTDecimalOfChainPool))
+
+				afterAmountWithFixedDecimal := convertDecimal(afterAmount, params.USDTDecimalNumberOfChainPool, params.FixedDecimalNumber)
+
 				order := &dao.Order{
 					OrderIDFromContract: onReceived.BridgeId,
 					SrcChain:            onReceived.SrcChain.String(),
 					SrcToken:            string(onReceived.SrcToken),
 					Sender:              string(onReceived.Sender),
 					InAmount:            onReceived.InAmount,
+					BridgeFee:           bridgeFees.Uint64(),
 					RelayToken:          params.USDTOfChainPool,
-					RelayAmount:         afterAmountFloat.String(),
-					DstChain:            onReceived.DstChain.String(),
-					DstToken:            string(onReceived.DstToken),
-					Receiver:            string(onReceived.Receiver),
-					Action:              dao.OrderActionFromEVM,
-					Stage:               dao.OrderStag1,
-					Status:              dao.OrderStatusTxConfirmed,
-					Slippage:            onReceived.Slippage,
+					//RelayAmountInt:         wrapFixedDecimal(afterAmountFloat),
+					RelayAmountInt: afterAmountWithFixedDecimal.Uint64(),
+					DstChain:       onReceived.DstChain.String(),
+					DstToken:       string(onReceived.DstToken),
+					Receiver:       string(onReceived.Receiver),
+					Action:         dao.OrderActionFromEVM,
+					Stage:          dao.OrderStag1,
+					Status:         dao.OrderStatusTxConfirmed,
+					Slippage:       onReceived.Slippage,
 				}
 				if err := order.Create(); err != nil {
 					log.Logger().WithField("order", utils.JSON(order)).WithField("error", err).Error("failed to create order")
@@ -568,21 +629,30 @@ func HandlePendingOrdersOfFirstStageFromEVM() {
 					continue
 				}
 			} else if onReceived.DstChain.String() == params.BTCChainID {
-				afterAmountFloat := new(big.Float).Quo(afterAmount, new(big.Float).SetUint64(params.WBTCDecimalOfChainPool))
+				bridgeFees, afterAmount := deductToBitcoinBridgeFees(onReceived.ChainPoolTokenAmount, big.NewInt(BridgeFeeRate))
+				//afterAmountFloat := new(big.Float).Quo(new(big.Float).SetInt(afterAmount), big.NewFloat(params.WBTCDecimalOfChainPool))
+
+				//afterAmountFloat := decimal.NewFromBigInt(afterAmount, 0).Div(decimal.NewFromUint64(params.WBTCDecimalOfChainPool))
+				//afterAmount := new(big.Int).Div(afterAmount, new(big.Int).SetUint64(params.WBTCDecimalOfChainPool))
+
+				afterAmountWithFixedDecimal := convertDecimal(afterAmount, params.WBTCDecimalNumberOfChainPool, params.FixedDecimalNumber)
+
 				order := &dao.BitcoinOrder{
-					SrcChain:    onReceived.SrcChain.String(),
-					SrcToken:    string(onReceived.SrcToken),
-					Sender:      string(onReceived.Sender),
-					InAmount:    onReceived.InAmount,
-					RelayToken:  params.WBTCOfChainPool,
-					RelayAmount: afterAmountFloat.String(),
-					DstChain:    onReceived.DstChain.String(),
-					DstToken:    string(onReceived.DstToken),
-					Receiver:    string(onReceived.Receiver),
-					Action:      dao.OrderActionFromEVM,
-					Stage:       dao.OrderStag1,
-					Status:      dao.OrderStatusTxConfirmed,
-					Slippage:    onReceived.Slippage,
+					SrcChain:   onReceived.SrcChain.String(),
+					SrcToken:   string(onReceived.SrcToken),
+					Sender:     string(onReceived.Sender),
+					InAmount:   onReceived.InAmount,
+					BridgeFee:  bridgeFees.Uint64(),
+					RelayToken: params.WBTCOfChainPool,
+					//RelayAmountInt: wrapFixedDecimal(afterAmountFloat), // todo multi chain pool
+					RelayAmountInt: afterAmountWithFixedDecimal.Uint64(),
+					DstChain:       onReceived.DstChain.String(),
+					DstToken:       string(onReceived.DstToken),
+					Receiver:       string(onReceived.Receiver),
+					Action:         dao.OrderActionFromEVM,
+					Stage:          dao.OrderStag1,
+					Status:         dao.OrderStatusTxConfirmed,
+					Slippage:       onReceived.Slippage,
 				}
 
 				if err := order.Create(); err != nil {
@@ -605,157 +675,36 @@ func HandlePendingOrdersOfFirstStageFromEVM() {
 	}
 }
 
-//func HandleConfirmedOrdersOfFirstStageFromEVM() {
-//	order := dao.NewOrder()
-//	for {
-//		for id := uint64(1); ; {
-//			orders, err := order.GetOldest10ByStatus(id, dao.OrderActionFromEVM, dao.OrderStag1, dao.OrderStatusConfirmed)
-//			if err != nil {
-//				// todo query parameters write to log
-//				log.Logger().WithField("error", err.Error()).Error("failed to get confirmed status order")
-//				alarm.Slack(context.Background(), "failed to get confirmed status order")
-//				time.Sleep(5 * time.Second)
-//				continue
-//			}
-//
-//			length := len(orders)
-//			if length == 0 {
-//				log.Logger().Info("not found confirmed status order", "time", time.Now())
-//				time.Sleep(10 * time.Second)
-//				break
-//			}
-//
-//			for i, o := range orders {
-//				if i == length-1 {
-//					id = o.ID + 1
-//				}
-//				// send transaction to bitcoin
-//				fees, err := btcApiClient.RecommendedFees()
-//				if err != nil {
-//					log.Logger().WithField("error", err).Error("failed to get fee rate from mempool")
-//					alarm.Slack(context.Background(), "failed to get fee rate from mempool")
-//					time.Sleep(10 * time.Second)
-//					continue
-//				}
-//
-//				amount, err := strconv.ParseInt(o.InAmount, 10, 64)
-//				if err != nil {
-//					log.Logger().WithField("amount", o.InAmount).WithField("error", err.Error()).Error("failed to parse amount")
-//					alarm.Slack(context.Background(), "failed to parse amount")
-//					continue
-//				}
-//				receiver, err := btcutil.DecodeAddress(o.Receiver, netParams)
-//				if err != nil {
-//					log.Logger().WithField("address", o.Receiver).WithField("error", err.Error()).Error("failed to decode receiver address")
-//					alarm.Slack(context.Background(), "failed to decode receiver address")
-//					continue
-//				}
-//				hash, err := SendTransaction(btcApiClient, fees.FastestFee, amount, senderAddress, receiver, senderPrivateKey)
-//				if err != nil {
-//					log.Logger().WithField("error", err.Error()).Error("failed to send transaction to bitcoin")
-//					alarm.Slack(context.Background(), "failed to send transaction to bitcoin")
-//					time.Sleep(10 * time.Second)
-//					continue
-//				}
-//
-//				update := &dao.BitcoinOrder{
-//					ID:        o.ID,
-//					Stage:     dao.OrderStag2,
-//					Status:    dao.OrderStatusPending,
-//					OutTxHash: hash.String(),
-//				}
-//				if err := dao.NewOrderWithID(o.ID).Updates(update); err != nil {
-//					log.Logger().WithField("update", utils.JSON(update)).WithField("error", err.Error()).Error("failed to update bitcoin order status")
-//					alarm.Slack(context.Background(), "failed to update bitcoin order status")
-//					time.Sleep(5 * time.Second)
-//					continue
-//				}
-//
-//			}
-//			time.Sleep(10 * time.Second)
-//		}
-//	}
-//}
-//
-//func HandlePendingOrdersOfSecondStageFromEVM() {
-//	order := dao.NewOrder()
-//	for {
-//		for id := uint64(1); ; {
-//			orders, err := order.GetOldest10ByStatus(id, dao.OrderActionFromEVM, dao.OrderStag2, dao.OrderStatusPending)
-//			if err != nil {
-//				log.Logger().WithField("error", err.Error()).Error("failed to get confirmed status order")
-//				alarm.Slack(context.Background(), "failed to get confirmed status order")
-//				time.Sleep(5 * time.Second)
-//				continue
-//			}
-//
-//			length := len(orders)
-//			if length == 0 {
-//				log.Logger().Info("not found confirmed status order", "time", time.Now())
-//				time.Sleep(10 * time.Second)
-//				break
-//			}
-//
-//			for i, o := range orders {
-//				if i == length-1 {
-//					id = o.ID + 1
-//				}
-//
-//				hash, err := chainhash.NewHashFromStr(o.OutTxHash)
-//				if err != nil {
-//					log.Logger().WithField("txHash", o.InTxHash).WithField("error", err.Error()).Error("failed to creates a hash from a hash string")
-//					alarm.Slack(context.Background(), "failed to creates a hash from a hash string")
-//					continue
-//				}
-//				ret, err := btcApiClient.TransactionStatus(hash)
-//				if err != nil {
-//					log.Logger().WithField("error", err.Error()).Error("failed to get transaction status from bitcoin")
-//					alarm.Slack(context.Background(), "failed to get transaction status from bitcoin")
-//					continue
-//				}
-//				// todo tx failed
-//				if !ret.Confirmed {
-//					continue
-//				}
-//				// todo get block number to judge whether the transaction is confirmed
-//
-//				update := &dao.BitcoinOrder{
-//					Status: dao.OrderStatusConfirmed,
-//				}
-//				if err := dao.NewOrderWithID(o.ID).Updates(update); err != nil {
-//					log.Logger().WithField("update", utils.JSON(update)).WithField("error", err.Error()).Error("failed to update bitcoin order status")
-//					alarm.Slack(context.Background(), "failed to update bitcoin order status")
-//					time.Sleep(5 * time.Second)
-//					continue
-//				}
-//			}
-//			time.Sleep(10 * time.Second)
-//		}
-//	}
-//}
+func GetFeeRate() {
+	logger := log.Logger().WithField("func", "GetFeeRate")
+	for {
+		fees, err := btcApiClient.RecommendedFees()
+		if err != nil {
+			logger.WithField("error", err).Error("failed to get fee rate")
+			time.Sleep(10 * time.Second)
+			continue
+		}
 
-func TransactionIsConfirmed(txHash string) (bool, error) {
-	hash, err := chainhash.NewHashFromStr(txHash)
-	if err != nil {
-		log.Logger().WithField("txHash", txHash).WithField("error", err.Error()).Error("failed to creates a hash from a hash string")
-		return false, err
+		feeRate := fees.FastestFee * FeeRateMultiple
+		if feeRate > FeeRateLimit {
+			feeRate = FeeRateLimit
+		}
+
+		setGlobalFeeRate(feeRate)
+
+		logger.WithField("fastestFee", fees.FastestFee).WithField("feeRate", globalFeeRate).Info("got fee rate")
+		time.Sleep(30 * time.Minute)
+		continue
 	}
-
-	ret, err := btcApiClient.TransactionStatus(hash)
-	if err != nil {
-		log.Logger().WithField("error", err.Error()).Error("failed to get transaction status")
-		return false, err
-	}
-
-	return ret.Confirmed, nil
 }
 
-//func fees(amount, feeRate *big.Int) (feeAmount, afterAmount *big.Int) {
-//	feeRate = new(big.Int).Div(feeRate, big.NewInt(1000))
-//	feeAmount = new(big.Int).Mul(amount, feeRate)
-//	afterAmount = new(big.Int).Sub(amount, feeAmount)
-//	return feeAmount, afterAmount
-//}
+func setGlobalFeeRate(feeRate int64) { // todo use CAS
+	globalFeeRate = feeRate
+}
+
+func GetGlobalFeeRate() int64 { // todo use CAS
+	return globalFeeRate
+}
 
 func UpdateLogID(chainID, topic string, logID uint64) {
 	if err := dao.NewFilterLog(chainID, topic).UpdateLatestLogID(logID); err != nil {
@@ -770,16 +719,122 @@ func UpdateLogID(chainID, topic string, logID uint64) {
 	}
 }
 
-func deductFees(amount, feeRate *big.Float) (feeAmount, afterAmount *big.Float) {
-	log.Logger().WithField("amount", amount).WithField("feeRate", feeRate).Info("before deduction of fees")
-	feeRate = new(big.Float).Quo(feeRate, big.NewFloat(10000))
-	feeAmount = new(big.Float).Mul(amount, feeRate)
-	afterAmount = new(big.Float).Sub(amount, feeAmount)
-	log.Logger().WithField("amount", amount).WithField("feeAmount", feeAmount).Info("after deduction of fees")
+func wrapFixedDecimal(amount decimal.Decimal) uint64 {
+	//exp := new(big.Int).Exp(big.NewInt(10), big.NewInt(params.FixedDecimalNumber), nil)
+	//amt, _ := new(big.Float).Mul(amount, new(big.Float).SetInt(exp)).Int(nil)
+	exp := decimal.NewFromInt(10).Pow(decimal.NewFromUint64(params.FixedDecimalNumber))
+	return amount.Mul(exp).BigInt().Uint64()
+}
+
+func unwrapFixedDecimal(amount decimal.Decimal) decimal.Decimal {
+	exp := decimal.NewFromInt(10).Pow(decimal.NewFromUint64(params.FixedDecimalNumber))
+	return amount.Div(exp)
+}
+
+//func deductFees(amount, feeRate *big.Float) (feeAmount, afterAmount *big.Float) {
+//	log.Logger().WithField("amount", amount).WithField("feeRate", feeRate).Info("before deduction of fees")
+//	feeRate = new(big.Float).Quo(feeRate, big.NewFloat(10000))
+//	feeAmount = new(big.Float).Mul(amount, feeRate)
+//	afterAmount = new(big.Float).Sub(amount, feeAmount)
+//	log.Logger().WithField("amount", amount).WithField("feeAmount", feeAmount).Info("after deduction of fees")
+//	return feeAmount, afterAmount
+//}
+
+func deductFees(amount, feeRate *big.Int) (feeAmount, afterAmount *big.Int) {
+	feeAmount = new(big.Int).Mul(amount, feeRate)
+	feeAmount = new(big.Int).Div(feeAmount, big.NewInt(10000))
+	afterAmount = new(big.Int).Sub(amount, feeAmount)
+
+	fields := map[string]interface{}{
+		"amount":      amount,
+		"afterAmount": afterAmount,
+		"feeAmount":   feeAmount,
+	}
+	log.Logger().WithFields(fields).Info("completed the deduction bridge fees")
 	return feeAmount, afterAmount
 }
 
+func deductToTONBridgeFees(amount, bridgeFeeRate *big.Int) (bridgeFees, afterAmount *big.Int) {
+	bridgeFees = new(big.Int).Mul(amount, bridgeFeeRate)
+	bridgeFees = new(big.Int).Div(bridgeFees, big.NewInt(BridgeFeeRateDenominator))
+	bridgeFees = new(big.Int).Add(bridgeFees, ToTONBaseTxFee)
+
+	afterAmount = new(big.Int).Sub(amount, bridgeFees)
+
+	fields := map[string]interface{}{
+		"amount":        amount,
+		"afterAmount":   afterAmount,
+		"bridgeFees":    bridgeFees,
+		"bridgeFeeRate": bridgeFeeRate,
+		"baseTxFee":     ToTONBaseTxFee,
+	}
+	log.Logger().WithFields(fields).Info("completed the deduction to ton bridge fees")
+	return bridgeFees, afterAmount
+}
+
+func deductToBitcoinBridgeFees(amount, bridgeFeeRate *big.Int) (bridgeFees, afterAmount *big.Int) {
+	feeRate := GetGlobalFeeRate()
+	baseTxFee := new(big.Int).Mul(BitcoinTxBytes, big.NewInt(int64(float64(feeRate)*BaseTxFeeMultiplier)))
+
+	bridgeFees = new(big.Int).Mul(amount, bridgeFeeRate)
+	bridgeFees = new(big.Int).Div(bridgeFees, big.NewInt(BridgeFeeRateDenominator))
+	bridgeFees = new(big.Int).Add(bridgeFees, baseTxFee)
+
+	afterAmount = new(big.Int).Sub(amount, bridgeFees)
+
+	fields := map[string]interface{}{
+		"amount":        amount,
+		"afterAmount":   afterAmount,
+		"bridgeFees":    bridgeFees,
+		"bridgeFeeRate": bridgeFeeRate,
+		"feeRate":       feeRate,
+		"baseTxFee":     baseTxFee,
+	}
+	log.Logger().WithFields(fields).Info("completed the deduction to bitcoin bridge fees")
+	return bridgeFees, afterAmount
+}
+
+func deductTONToEVMBridgeFees(amount, bridgeFeeRate *big.Int) (bridgeFees, afterAmount *big.Int) {
+	bridgeFees = new(big.Int).Mul(amount, bridgeFeeRate)
+	bridgeFees = new(big.Int).Div(bridgeFees, big.NewInt(BridgeFeeRateDenominator))
+	bridgeFees = new(big.Int).Add(bridgeFees, TONToEVMBaseTxFee)
+
+	afterAmount = new(big.Int).Sub(amount, bridgeFees)
+
+	fields := map[string]interface{}{
+		"amount":        amount,
+		"afterAmount":   afterAmount,
+		"bridgeFees":    bridgeFees,
+		"bridgeFeeRate": bridgeFeeRate,
+		"baseTxFee":     TONToEVMBaseTxFee,
+	}
+	log.Logger().WithFields(fields).Info("complete the deduction to evm bridge fees")
+	return bridgeFees, afterAmount
+}
+
+func deductBitcoinToEVMBridgeFees(amount, bridgeFeeRate *big.Int) (bridgeFees, afterAmount *big.Int) {
+	bridgeFees = new(big.Int).Mul(amount, bridgeFeeRate)
+	bridgeFees = new(big.Int).Div(bridgeFees, big.NewInt(BridgeFeeRateDenominator))
+	bridgeFees = new(big.Int).Add(bridgeFees, BitcoinToEVMBaseTxFee)
+
+	afterAmount = new(big.Int).Sub(amount, bridgeFees)
+
+	fields := map[string]interface{}{
+		"amount":        amount,
+		"afterAmount":   afterAmount,
+		"bridgeFees":    bridgeFees,
+		"bridgeFeeRate": bridgeFeeRate,
+		"baseTxFee":     BitcoinToEVMBaseTxFee,
+	}
+	log.Logger().WithFields(fields).Info("complete the deduction to evm bridge fees")
+	return bridgeFees, afterAmount
+}
+
 func calcProtocolFees(inAmountSat *big.Int, feeRatio uint64, wbtcDecimal uint64) *big.Int {
+	if feeRatio == 0 {
+		return big.NewInt(0)
+	}
+
 	fee := new(big.Int).Mul(inAmountSat, new(big.Int).SetUint64(feeRatio))
 	fee = new(big.Int).Div(fee, big.NewInt(10000))
 	if wbtcDecimal != params.BTCDecimal {
@@ -787,4 +842,16 @@ func calcProtocolFees(inAmountSat *big.Int, feeRatio uint64, wbtcDecimal uint64)
 		fee = new(big.Int).Div(fee, new(big.Int).SetUint64(params.BTCDecimal))
 	}
 	return fee
+}
+
+func convertDecimal(amount *big.Int, srcDecimal uint64, dstDecimal uint64) *big.Int {
+	dstAmount := amount
+	if srcDecimal > dstDecimal {
+		exp := new(big.Int).Exp(big.NewInt(10), new(big.Int).SetUint64(srcDecimal-dstDecimal), nil)
+		dstAmount = new(big.Int).Div(amount, exp)
+	} else if srcDecimal < dstDecimal {
+		exp := new(big.Int).Exp(big.NewInt(10), new(big.Int).SetUint64(dstDecimal-srcDecimal), nil)
+		dstAmount = new(big.Int).Mul(amount, exp)
+	}
+	return dstAmount
 }
