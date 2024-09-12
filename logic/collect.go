@@ -5,11 +5,12 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	localErr "github.com/mapprotocol/fe-backend/resource/err"
-	"github.com/mapprotocol/fe-backend/utils"
 	"strconv"
 	"sync"
 	"time"
+
+	localErr "github.com/mapprotocol/fe-backend/resource/err"
+	"github.com/mapprotocol/fe-backend/utils"
 
 	"github.com/btcsuite/btcd/btcec/v2"
 	"github.com/btcsuite/btcd/btcutil"
@@ -500,7 +501,7 @@ func getWithdrawOrders(limit int, network *chaincfg.Params) ([]*WithdrawOrder, e
 				"relayer":  o.Relayer,
 				"error":    err,
 			}
-			log.Logger().WithFields(params).Error("decode relayer address failed")
+			log.Logger().WithFields(params).Error("decode receiver address failed")
 			return nil, err
 		}
 
