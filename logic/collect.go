@@ -488,8 +488,9 @@ func getWithdrawOrders(limit int, lastOrderID uint64, network *chaincfg.Params) 
 	}
 	gotOrders, _, err := order.Find(nil, dao.Paginate(1, limit))
 	if err != nil {
-		return nil, 0, err
+		return nil, lastOrderID, err
 	}
+	log.Logger().WithField("last order", lastOrderID).Info("-------getWithdrawOrders-----")
 
 	orders := make([]*WithdrawOrder, 0, len(gotOrders))
 	for _, o := range gotOrders {
@@ -515,6 +516,10 @@ func getWithdrawOrders(limit int, lastOrderID uint64, network *chaincfg.Params) 
 			Amount:   int64(o.RelayAmountInt), // RelayAmountInt decimals is 8
 		})
 	}
+	if len(gotOrders) == 0 {
+		lastOrderID = 1
+	}
+
 	return orders, lastOrderID, nil
 }
 
