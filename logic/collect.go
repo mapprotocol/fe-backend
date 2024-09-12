@@ -480,7 +480,7 @@ func withdrawOrdersInfos(items []*WithdrawOrder) string {
 	return str0
 }
 
-func getWithdrawOrders(limit int, network *chaincfg.Params) ([]*WithdrawOrder, error) {
+func getWithdrawOrders(limit int, lastOrderID uint64, network *chaincfg.Params) ([]*WithdrawOrder, uint64, error) {
 	order := dao.BitcoinOrder{
 		Action: dao.OrderActionFromEVM,
 		Stage:  dao.OrderStag1,
@@ -488,43 +488,26 @@ func getWithdrawOrders(limit int, network *chaincfg.Params) ([]*WithdrawOrder, e
 	}
 	gotOrders, _, err := order.Find(nil, dao.Paginate(1, limit))
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
 	orders := make([]*WithdrawOrder, 0, len(gotOrders))
 	for _, o := range gotOrders {
+		if o.ID > lastOrderID {
+			lastOrderID = o.ID
+		}
+
 		receiver, err := btcutil.DecodeAddress(o.Receiver, network)
 		if err != nil {
 			params := map[string]interface{}{
 				"order_id": o.ID,
 				"network":  network.Net.String(),
-				"relayer":  o.Relayer,
+				"receiver": o.Receiver,
 				"error":    err,
 			}
 			log.Logger().WithFields(params).Error("decode receiver address failed")
-			return nil, err
+			continue
 		}
-
-		//famount, err := strconv.ParseFloat(o.RelayAmount, 64)
-		//if err != nil {
-		//	params := map[string]interface{}{
-		//		"order_id": o.ID,
-		//		"amount":   o.RelayAmount,
-		//		"error":    err,
-		//	}
-		//	log.Logger().WithFields(params).Error("failed to parse amount")
-		//	return nil, err
-		//}
-		//amount, err := btcutil.NewAmount(famount)
-		//if err != nil {
-		//	params := map[string]interface{}{
-		//		"order_id": o.ID,
-		//		"amount":   famount,
-		//		"error":    err,
-		//	}
-		//	log.Logger().WithFields(params).Error("failed to parse famount")
-		//	return nil, err
-		//}
 
 		orders = append(orders, &WithdrawOrder{
 			OrderID:  o.ID,
@@ -532,8 +515,7 @@ func getWithdrawOrders(limit int, network *chaincfg.Params) ([]*WithdrawOrder, e
 			Amount:   int64(o.RelayAmountInt), // RelayAmountInt decimals is 8
 		})
 	}
-
-	return orders, nil
+	return orders, lastOrderID, nil
 }
 
 // state = 1 | 2
@@ -1055,10 +1037,13 @@ func RunBtcWithdraw(cfg *CollectCfg) error {
 	ticker := time.NewTicker(2 * time.Minute)
 	defer ticker.Stop()
 
+	maxOrderID := uint64(1)
+
 	for {
 		select {
 		case <-ticker.C:
-			orders, err := getWithdrawOrders(20, network)
+			orders, maxID, err := getWithdrawOrders(20, maxOrderID, network)
+			maxOrderID = maxID
 			if err != nil {
 				log.Logger().WithField("error", err).Error("failed to get orders")
 				alarm.Slack(context.Background(), "failed to get withdraw orders")
