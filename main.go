@@ -75,8 +75,8 @@ func runTONTask() {
 }
 
 func runSolTask() {
-	// _func.Go(task.FilterEventToSol, "FilterEventToSol")
-	// _func.Go(task.HandlerEvm2Sol, "HandlerEvm2Sol")
+	_func.Go(task.FilterEventToSol, "FilterEventToSol")
+	_func.Go(task.HandlerEvm2Sol, "HandlerEvm2Sol")
 	_func.Go(task.FilterSol2Evm, "FilterSol2Evm")
 	_func.Go(task.HandleSol2EvmButter, "HandleSol2EvmButter")
 	_func.Go(task.HandleSol2EvmFinish, "HandleSol2EvmFinish")
