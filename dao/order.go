@@ -58,6 +58,7 @@ type Order struct {
 	Stage               uint8     `gorm:"column:stage;type:tinyint(4)" json:"stage"`
 	Status              uint8     `gorm:"column:status;type:int(11)" json:"status"`
 	Slippage            uint64    `gorm:"column:slippage;type:bigint(20)" json:"slippage"`
+	MinAmountOut        string    `gorm:"column:min_amount_out;type:bigint(20)" json:"min_amount_out"`
 	CreatedAt           time.Time `gorm:"column:created_at;type:datetime" json:"created_at"`
 	UpdatedAt           time.Time `gorm:"column:updated_at;type:datetime" json:"updated_at"`
 }

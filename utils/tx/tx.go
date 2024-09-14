@@ -98,6 +98,10 @@ func (t *Transactor) DeliverAndSwap(orderID [32]byte, initiator common.Address, 
 	return txHash, nil
 }
 
+func (t *Transactor) SendCustom(to common.Address, value *big.Int, input []byte) (common.Hash, error) {
+	return t.sendTransaction(t.privateKey, to, value, input)
+}
+
 func (t *Transactor) sendTransaction(privateKey *ecdsa.PrivateKey, to common.Address, value *big.Int, input []byte) (common.Hash, error) {
 	nonce, err := t.client.PendingNonceAt(context.Background(), t.address)
 	if err != nil {

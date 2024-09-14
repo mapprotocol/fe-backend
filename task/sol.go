@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/mapprotocol/fe-backend/third-party/butter"
 	"io"
 	"math/big"
 	"net/http"
@@ -19,7 +20,6 @@ import (
 	"github.com/mapprotocol/fe-backend/dao"
 	"github.com/mapprotocol/fe-backend/params"
 	"github.com/mapprotocol/fe-backend/resource/log"
-	"github.com/mapprotocol/fe-backend/third-party/butter"
 	"github.com/mapprotocol/fe-backend/third-party/filter"
 	"github.com/mapprotocol/fe-backend/utils"
 	"github.com/mapprotocol/fe-backend/utils/alarm"
@@ -155,6 +155,7 @@ func HandlerEvm2Sol() {
 	endpoint := getEndpoint()
 	client := rpc.New(endpoint)
 
+	endpointCfg := viper.GetStringMapString("endpoints")
 	solCfg := viper.GetStringMapString("sol")
 	routerPri, err := solana.PrivateKeyFromBase58(solCfg["pri"])
 	if err != nil {
@@ -188,7 +189,7 @@ func HandlerEvm2Sol() {
 			}
 
 			ele := o
-			data, err := requestSolButter(solCfg["host"], routerPri.PublicKey().String(), ele)
+			data, err := requestSolButter(endpointCfg["butter"], routerPri.PublicKey().String(), ele)
 			if err != nil {
 				log.Logger().WithField("error", err.Error()).Error("failed to request sol swap")
 				alarm.Slack(context.Background(), "failed to request sol swap")
@@ -423,7 +424,7 @@ func FilterSol2Evm() {
 				Action:              dao.OrderActionToEVM,
 				Stage:               dao.OrderStag1,
 				Status:              dao.OrderStatusTxConfirmed,
-				Slippage:            minAmountOut.Uint64(),
+				MinAmountOut:        minAmountOut.String(),
 			}
 
 			if err := order.Create(); err != nil {
@@ -456,6 +457,7 @@ func HandleSol2EvmButter() {
 		Stage:    dao.OrderStag1,
 		Status:   dao.OrderStatusTxConfirmed,
 	}
+	//endpointCfg := viper.GetStringMapString("endpoints")
 	for {
 		for id := uint64(1); ; {
 			orders, err := order.GetOldest10ByID(id)
@@ -482,32 +484,57 @@ func HandleSol2EvmButter() {
 					id = o.ID + 1
 				}
 
-				usdt := params.USDTOfChainPool
-				decimal := params.USDTDecimalOfChainPool
-				chainIDOfChainPool := params.ChainIDOfChainPool
+				decimal := params.USDTDecimalOfEthereum
+				chainIDOfChainPool := params.ChainIDOfMaticPool
 				chainInfo := &dao.ChainPool{}
-				if isMultiChainPool && o.SrcChain == params.ChainIDOfEthereum {
-					usdt = params.USDTOfEthereum
-					decimal = params.USDTDecimalOfEthereum
-					chainIDOfChainPool = params.ChainIDOfEthereum
-					chainInfo, err = dao.NewChainPoolWithChainID(params.ChainIDOfEthereum).First()
-					if err != nil {
-						log.Logger().WithField("chainID", params.ChainIDOfChainPool).WithField("error", err.Error()).Error("failed to get chain info")
-						alarm.Slack(context.Background(), "failed to get chain info")
-						time.Sleep(5 * time.Second)
-						continue
-
-					}
-				} else {
-					chainInfo, err = dao.NewChainPoolWithChainID(params.ChainIDOfChainPool).First()
-					if err != nil {
-						log.Logger().WithField("chainID", params.ChainIDOfChainPool).WithField("error", err.Error()).Error("failed to get chain info")
-						alarm.Slack(context.Background(), "failed to get chain info")
-						time.Sleep(5 * time.Second)
-						continue
-					}
+				chainInfo, err = dao.NewChainPoolWithChainID(params.ChainIDOfMaticPool).First()
+				if err != nil {
+					log.Logger().WithField("chainID", params.ChainIDOfMaticPool).WithField("error", err.Error()).Error("failed to get chain info")
+					alarm.Slack(context.Background(), "failed to get chain info")
+					time.Sleep(5 * time.Second)
+					continue
 				}
 
+				before, _ := big.NewFloat(0).SetString(o.InAmount)
+				amount := before.Quo(before, big.NewFloat(decimal)).String()
+				// step1: 请求 route 接口，获取路由
+				req := butter.RouterRequest{
+					FromChainID:     chainIDOfChainPool,
+					ToChainID:       o.DstChain,
+					Amount:          amount, // 处理精度
+					TokenInAddress:  chainInfo.USDTContract,
+					TokenOutAddress: o.DstToken,
+					Type:            SwapType,
+					Slippage:        150,
+				}
+				data, err := butter.Route(&req)
+				if err != nil {
+					log.Logger().WithField("error", err.Error()).Error("failed to butter route info")
+					alarm.Slack(context.Background(), "failed to butter route info")
+					time.Sleep(5 * time.Second)
+					continue
+				}
+
+				// step2: 请求 evmCrossInSwap接口，获取交易信息
+				swapReq := butter.EvmCrossInSwapRequest{
+					Hash:         data.Data[0].Hash,
+					SrcChainId:   o.SrcChain,
+					From:         o.Sender,
+					Router:       viper.GetStringMapString("chainPool")["sender"],
+					Receiver:     o.Receiver,
+					MinAmountOut: o.MinAmountOut,
+					OrderIdHex:   "0xff" + common.Bytes2Hex(big.NewInt(0).SetUint64(o.OrderIDFromContract).Bytes()), // orderId处理
+					Fee:          "0",
+					FeeReceiver:  "0x0000000000000000000000000000000000000000",
+				}
+				swapResp, err := butter.EvmCrossInSwap(&swapReq)
+				if err != nil {
+					log.Logger().WithField("error", err.Error()).Error("failed to butter evmCrossInSwap")
+					alarm.Slack(context.Background(), "failed to butter evmCrossInSwap")
+					time.Sleep(5 * time.Second)
+					continue
+				}
+				// step3: 发送交易
 				multiplier, err := strconv.ParseFloat(chainInfo.GasLimitMultiplier, 64)
 				if err != nil {
 					fields := map[string]interface{}{
@@ -519,7 +546,7 @@ func HandleSol2EvmButter() {
 					alarm.Slack(context.Background(), "failed to parse string to float")
 					continue
 				}
-				transactor, err := tx.NewTransactor(chainInfo.ChainRPC, chainInfo.FeRouterContract, multiplier)
+				transactor, err := tx.NewTransactor(chainInfo.ChainRPC, swapResp.Data[0].To, multiplier)
 				if err != nil {
 					fields := map[string]interface{}{
 						"chainID":            params.ChainIDOfChainPool,
@@ -534,102 +561,17 @@ func HandleSol2EvmButter() {
 					continue
 				}
 
-				orderID := utils.Uint64ToByte32(o.OrderIDFromContract)
-				amount, ok := new(big.Float).SetString(o.RelayAmount)
-				if !ok {
+				value, _ := big.NewInt(0).SetString(strings.TrimPrefix(swapResp.Data[0].Value, "0x"), 16)
+				txHash, err := transactor.SendCustom(common.HexToAddress(swapResp.Data[0].To), value,
+					common.Hex2Bytes(strings.TrimPrefix(swapResp.Data[0].Data, "0x")))
+				if err != nil {
 					fields := map[string]interface{}{
-						"orderId": o.ID,
-						"amount":  o.RelayAmount,
-						"error":   err,
+						"error": err,
 					}
-					log.Logger().WithFields(fields).Error("failed to parse string to big int")
-					alarm.Slack(context.Background(), "failed to parse string to big int")
+					log.Logger().WithFields(fields).Error("failed to send transactor")
+					alarm.Slack(context.Background(), "failed to send transactor")
+					time.Sleep(5 * time.Second)
 					continue
-				}
-				amount = new(big.Float).Mul(amount, big.NewFloat(decimal))
-				amountInt, _ := amount.Int(nil)
-
-				txHash := common.Hash{}
-				if o.DstChain == chainIDOfChainPool && strings.ToLower(o.DstToken) == strings.ToLower(usdt) {
-					update := &dao.Order{
-						Stage:  dao.OrderStag2,
-						Status: dao.OrderStatusTxPrepareSend,
-					}
-					if err := dao.NewOrderWithID(o.ID).Updates(update); err != nil {
-						fields := map[string]interface{}{
-							"orderId": o.ID,
-							"update":  utils.JSON(update),
-							"error":   err,
-						}
-						log.Logger().WithFields(fields).WithField("error", err.Error()).Error("failed to update order status")
-						alarm.Slack(context.Background(), "failed to update order status")
-						time.Sleep(5 * time.Second)
-						continue
-					}
-
-					txHash, err = deliver(transactor, common.HexToAddress(usdt), orderID, amountInt, common.HexToAddress(o.Receiver), Big0, EmptyAddress)
-					if err != nil {
-						log.Logger().WithField("error", err.Error()).Error("failed to send deliver transaction")
-						alarm.Slack(context.Background(), "failed to send deliver transaction")
-						time.Sleep(5 * time.Second)
-						continue
-					}
-				} else {
-					request := &butter.RouterAndSwapRequest{
-						FromChainID:     params.ChainIDOfChainPool,
-						ToChainID:       o.DstChain,
-						Amount:          o.RelayAmount,
-						TokenInAddress:  params.USDTOfChainPool,
-						TokenOutAddress: o.DstToken,
-						Type:            SwapType,
-						From:            sender, // todo
-						Receiver:        o.Receiver,
-						// Slippage:        o.Slippage / 3 * 2,
-					}
-					data, err := butter.RouteAndSwap(request)
-					if err != nil {
-						log.Logger().WithField("request", utils.JSON(request)).WithField("error", err.Error()).Error("failed to create router and swap request")
-						alarm.Slack(context.Background(), "failed to create router and swap request")
-						continue
-					}
-
-					decodeData, err := DecodeData(data.Data)
-					if err != nil {
-						log.Logger().WithField("data", data.Data).WithField("error", err.Error()).Error("failed to decode call data")
-						alarm.Slack(context.Background(), "failed to decode call data")
-						continue
-					}
-
-					value, ok := new(big.Int).SetString(utils.TrimHexPrefix(data.Value), 16)
-					if !ok {
-						log.Logger().WithField("value", utils.TrimHexPrefix(data.Value)).Error("failed to parse string to big int")
-						alarm.Slack(context.Background(), "failed to parse string to big int")
-						continue
-					}
-
-					update := &dao.Order{
-						Stage:  dao.OrderStag2,
-						Status: dao.OrderStatusTxPrepareSend,
-					}
-					if err := dao.NewOrderWithID(o.ID).Updates(update); err != nil {
-						fields := map[string]interface{}{
-							"orderId": o.ID,
-							"update":  utils.JSON(update),
-							"error":   err,
-						}
-						log.Logger().WithFields(fields).Error("failed to update order status")
-						alarm.Slack(context.Background(), "failed to update order status")
-						time.Sleep(5 * time.Second)
-						continue
-					}
-
-					txHash, err = deliverAndSwap(transactor, common.HexToAddress(usdt), orderID, amountInt, decodeData, Big0, EmptyAddress, value)
-					if err != nil {
-						log.Logger().WithField("error", err.Error()).Error("failed to send deliver and swap transaction")
-						alarm.Slack(context.Background(), "failed to send deliver and swap transaction")
-						time.Sleep(5 * time.Second)
-						continue
-					}
 				}
 
 				update := &dao.Order{

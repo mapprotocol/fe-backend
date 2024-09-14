@@ -12,7 +12,11 @@ import (
 
 const SuccessCode = 0
 
-const PathRouteAndSwap = "/routeAndSwap"
+const (
+	PathRouteAndSwap   = "/routeAndSwap"
+	PathRoute          = "/route"
+	PathEvmCrossInSwap = "/evmCrossInSwap"
+)
 
 var Domain string
 var entrance string
@@ -27,6 +31,29 @@ type RouterAndSwapRequest struct {
 	Slippage        uint64 `json:"slippage"`
 	From            string `json:"from"`
 	Receiver        string `json:"receiver"`
+}
+
+type RouterRequest struct {
+	FromChainID     string `json:"fromChainId"`
+	ToChainID       string `json:"toChainId"`
+	Amount          string `json:"amount"`
+	TokenInAddress  string `json:"tokenInAddress"`
+	TokenOutAddress string `json:"tokenOutAddress"`
+	Type            string `json:"type"`
+	Slippage        uint64 `json:"slippage"`
+	Entrance        string `json:"entrance"`
+}
+
+type EvmCrossInSwapRequest struct {
+	Hash         string `json:"hash"`
+	SrcChainId   string `json:"srcChainId"`
+	From         string `json:"from"`
+	Router       string `json:"router"`   // 签名地址
+	Receiver     string `json:"receiver"` // 接受者
+	MinAmountOut string `json:"minAmountOut"`
+	OrderIdHex   string `json:"orderIdHex"`
+	Fee          string `json:"fee"`
+	FeeReceiver  string `json:"feeReceiver"`
 }
 
 type RouterAndSwapResponse struct {
@@ -46,6 +73,100 @@ type TxData struct {
 	Data    string `json:"data"`
 	Value   string `json:"value"`
 	ChainId string `json:"chainId"`
+}
+
+type RouteData struct {
+	Errno   int    `json:"errno"`
+	Message string `json:"message"`
+	Data    []struct {
+		Diff      string `json:"diff"`
+		BridgeFee struct {
+			Amount string `json:"amount"`
+		} `json:"bridgeFee"`
+		TradeType int `json:"tradeType"`
+		GasFee    struct {
+			Amount string `json:"amount"`
+			Symbol string `json:"symbol"`
+		} `json:"gasFee"`
+		SwapFee struct {
+			NativeFee string `json:"nativeFee"`
+			TokenFee  string `json:"tokenFee"`
+		} `json:"swapFee"`
+		FeeConfig struct {
+			FeeType         int    `json:"feeType"`
+			Referrer        string `json:"referrer"`
+			RateOrNativeFee int    `json:"rateOrNativeFee"`
+		} `json:"feeConfig"`
+		GasEstimated       string `json:"gasEstimated"`
+		GasEstimatedTarget string `json:"gasEstimatedTarget"`
+		TimeEstimated      int    `json:"timeEstimated"`
+		Hash               string `json:"hash"`
+		Entrance           string `json:"entrance"`
+		Timestamp          int64  `json:"timestamp"`
+		HasLiquidity       bool   `json:"hasLiquidity"`
+		SrcChain           struct {
+			ChainID string `json:"chainId"`
+			TokenIn struct {
+				Address  string `json:"address"`
+				Name     string `json:"name"`
+				Decimals int    `json:"decimals"`
+				Symbol   string `json:"symbol"`
+				Icon     string `json:"icon"`
+			} `json:"tokenIn"`
+			TokenOut struct {
+				Address  string `json:"address"`
+				Name     string `json:"name"`
+				Decimals int    `json:"decimals"`
+				Symbol   string `json:"symbol"`
+				Icon     string `json:"icon"`
+			} `json:"tokenOut"`
+			TotalAmountIn  string `json:"totalAmountIn"`
+			TotalAmountOut string `json:"totalAmountOut"`
+			Route          []struct {
+				AmountIn  string        `json:"amountIn"`
+				AmountOut string        `json:"amountOut"`
+				DexName   string        `json:"dexName"`
+				Path      []interface{} `json:"path"`
+				Extra     string        `json:"extra"`
+			} `json:"route"`
+			Bridge string `json:"bridge"`
+		} `json:"srcChain"`
+		Contract     string `json:"contract"`
+		MinAmountOut struct {
+			Amount string `json:"amount"`
+			Symbol string `json:"symbol"`
+		} `json:"minAmountOut"`
+	} `json:"data"`
+}
+
+type EvmCrossInSwapData struct {
+	Errno   int    `json:"errno"`
+	Message string `json:"message"`
+	Data    []struct {
+		To      string `json:"to"`
+		Data    string `json:"data"`
+		Value   string `json:"value"`
+		ChainID string `json:"chainId"`
+		Method  string `json:"method"`
+		Args    []struct {
+			Type  string `json:"type"`
+			Value struct {
+				OrderID  string `json:"orderId"`
+				Receiver string `json:"receiver"`
+				Token    string `json:"token"`
+				Amount   struct {
+					Type string `json:"type"`
+					Hex  string `json:"hex"`
+				} `json:"amount"`
+				FromChain   int64  `json:"fromChain"`
+				ToChain     string `json:"toChain"`
+				Fee         string `json:"fee"`
+				FeeReceiver string `json:"feeReceiver"`
+				From        string `json:"from"`
+				ButterData  string `json:"butterData"`
+			} `json:"value"`
+		} `json:"args"`
+	} `json:"data"`
 }
 
 func Init() {
@@ -86,4 +207,72 @@ func RouteAndSwap(req *RouterAndSwapRequest) (*TxData, error) {
 		)
 	}
 	return response.Data[0].TxParam.Data[0], nil
+}
+
+func Route(req *RouterRequest) (*RouteData, error) {
+	params := fmt.Sprintf(
+		"fromChainId=%s&toChainId=%s&amount=%s&tokenInAddress=%s&tokenOutAddress=%s&type=%s&slippage=%d&entrance=%s",
+		req.FromChainID, req.ToChainID, req.Amount, req.TokenInAddress, req.TokenOutAddress, req.Type, req.Slippage, entrance,
+	)
+	url := fmt.Sprintf("%s%s?%s", Domain, PathRoute, params)
+	log.Logger().Debug(fmt.Sprintf("route and swap url: %s", url))
+	ret, err := uhttp.Get(url, nil, nil)
+	if err != nil {
+		return nil, reqerror.NewExternalRequestError(
+			url,
+			reqerror.WithError(err),
+		)
+	}
+	response := RouteData{}
+	if err := json.Unmarshal(ret, &response); err != nil {
+		return nil, err
+	}
+	if response.Errno != SuccessCode {
+		return nil, reqerror.NewExternalRequestError(
+			url,
+			reqerror.WithCode(strconv.Itoa(response.Errno)),
+			reqerror.WithMessage(response.Message),
+		)
+	}
+	if len(response.Data) == 0 {
+		return nil, reqerror.NewExternalRequestError(
+			url,
+			reqerror.WithMessage("route back zero"),
+		)
+	}
+	return &response, nil
+}
+
+func EvmCrossInSwap(req *EvmCrossInSwapRequest) (*EvmCrossInSwapData, error) {
+	params := fmt.Sprintf(
+		"hash=%s&srcChainId=%s&from=%s&router=%s&receiver=%s&minAmountOut=%s&orderIdHex=%s&fee=%s&feeReceiver=%s",
+		req.Hash, req.SrcChainId, req.From, req.Router, req.Receiver, req.MinAmountOut, req.OrderIdHex, req.Fee, req.FeeReceiver,
+	)
+	url := fmt.Sprintf("%s%s?%s", Domain, PathEvmCrossInSwap, params)
+	log.Logger().Debug(fmt.Sprintf("route and swap url: %s", url))
+	ret, err := uhttp.Get(url, nil, nil)
+	if err != nil {
+		return nil, reqerror.NewExternalRequestError(
+			url,
+			reqerror.WithError(err),
+		)
+	}
+	response := EvmCrossInSwapData{}
+	if err := json.Unmarshal(ret, &response); err != nil {
+		return nil, err
+	}
+	if response.Errno != SuccessCode {
+		return nil, reqerror.NewExternalRequestError(
+			url,
+			reqerror.WithCode(strconv.Itoa(response.Errno)),
+			reqerror.WithMessage(response.Message),
+		)
+	}
+	if len(response.Data) == 0 {
+		return nil, reqerror.NewExternalRequestError(
+			url,
+			reqerror.WithMessage("evmCrossInSwap back zero"),
+		)
+	}
+	return &response, nil
 }
