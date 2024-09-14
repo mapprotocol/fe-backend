@@ -731,16 +731,17 @@ func convert2Bytes(data []interface{}) []byte {
 }
 
 func requestSolButter(host, router string, param *dao.SolOrder) (string, error) {
+	orderIdHex := big.NewInt(0).SetUint64(param.BridgeId)
 	url := fmt.Sprintf("%s/solanaCrossIn?fromChainId=%d&chainPoolChain=%d&"+
 		"chainPoolTokenAddress=%s&chainPoolTokenAmount=%s&"+
 		"tokenOutAddress=%s&fromChainTokenInAddress=%s&"+
 		"fromChainTokenAmount=%s&slippage=%d&"+
-		"router=%s&minAmountOut=%d&from=%s&orderIdHex=%d&receiver=%s",
+		"router=%s&minAmountOut=%d&from=%s&orderIdHex=%s&receiver=%s",
 		host, MaticChainId, MaticChainId,
 		param.ChainPoolToken, param.RelayAmount,
 		param.DstToken, param.SrcToken,
 		param.InAmount, 100,
-		router, param.Slippage, param.Sender, param.BridgeId, param.Receiver,
+		router, param.Slippage, param.Sender, "0x"+common.Bytes2Hex(orderIdHex.Bytes()), param.Receiver,
 	)
 	fmt.Println("requestSolButter url ", url)
 	resp, err := http.Get(url)
