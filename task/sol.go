@@ -111,7 +111,7 @@ func FilterEventToSol() {
 				}
 				order := &dao.SolOrder{
 					SrcChain:       onReceived.SrcChain.String(),
-					SrcToken:       string(onReceived.SrcToken),
+					SrcToken:       "0x" + common.BytesToAddress(onReceived.SrcToken).String(),
 					Sender:         "0x" + common.Bytes2Hex(onReceived.Sender),
 					InAmount:       onReceived.InAmount,
 					RelayToken:     params.USDTOfChainPool,
