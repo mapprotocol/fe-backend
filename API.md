@@ -625,11 +625,11 @@ curl --location 'http://127.0.0.1:8181/api/v1/order/list?sender=EQAQkdeIVxGcH67f
 }
 ```
 
-## order detail
+## order detail by order id
 
 ### request path
 
-/api/v1/order/detail
+/api/v1/order/detail-by-order-id
 
 ### request method
 
@@ -639,7 +639,7 @@ GET
 
 | parameter | type   | required | default | description |
 |-----------|--------|----------|---------|-------------|
-| sender    | string | Yes      |         |             |
+| chainId   | string | Yes      |         |             |
 | orderId   | number | Yes      |         |             |
 
 ### response params
@@ -652,28 +652,27 @@ GET
 
 #### data structure
 
-| parameter | type   | description                            |
-|-----------|--------|----------------------------------------|
-| orderId   | number |                                        |
-| srcChain  | string |                                        |
-| srcToken  | string |                                        |
-| sender    | string |                                        |
-| inAmount  | string |                                        |
-| dstChain  | string |                                        |
-| dstToken  | string |                                        |
-| receiver  | string |                                        |
-| outAmount | string |                                        |
-| action    | number | swap direction, 1: to evm, 2: from evm |                                                                                                                                                  |
-| stage     | number |                                        |                                                                                                                                                  |
-| status    | number |                                        |                                                                                                                                                  |
-| createdAt | number |                                        |                                                                                                                                                  |
+| parameter | type   | description                                                   |
+|-----------|--------|---------------------------------------------------------------|
+| srcChain  | string |                                                               |
+| srcToken  | string |                                                               |
+| sender    | string |                                                               |
+| inAmount  | string |                                                               |
+| dstChain  | string |                                                               |
+| dstToken  | string |                                                               |
+| receiver  | string |                                                               |
+| outAmount | string |                                                               |
+| action    | number | swap direction, 1: to evm, 2: from evm                        |                                                                                                                                                  |
+| stage     | number | 1: stage 1, 2: stage 2                                        |                                                                                                                                                  |
+| status    | number | 1: tx prepare send, 2: tx sent, 3: tx failed, 4: tx confirmed |                                                                                                                                                  |
+| createdAt | number |                                                               |                                                                                                                                                  |
 
 ### Example
 
 **request**:
 
 ```shell
-curl --location 'http://127.0.0.1:8181/api/v1/order/detail?ender=EQAQkdeIVxGcH67fRM6duM2o0KociERYIhMiZW5cZ0kgrM8R&orderId=14'
+curl --location 'http://127.0.0.1:8181/api/v1/order/detail-by-order-id?chainId=1360104473493505&orderId=5044031782654955525'
 ```
 
 **response**
@@ -683,19 +682,18 @@ curl --location 'http://127.0.0.1:8181/api/v1/order/detail?ender=EQAQkdeIVxGcH67
   "code": 2000,
   "msg": "Success",
   "data": {
-    "orderId": 14,
     "srcChain": "1360104473493505",
     "srcToken": "EQCxE6mUtQJKFnGfaROTKOt1lZbDiiX1kCixRv7Nw2Id_sDs",
     "sender": "EQAQkdeIVxGcH67fRM6duM2o0KociERYIhMiZW5cZ0kgrM8R",
-    "inAmount": "5.916",
-    "dstChain": "22776",
-    "dstToken": "0x0000000000000000000000000000000000000000",
+    "inAmount": "6.000000",
+    "dstChain": "137",
+    "dstToken": "0xc2132d05d31c914a87c6611c10748aeb04b58e8f",
     "receiver": "0x2E9B4be739453cdDbB3641FB61052BA46873D41f",
     "outAmount": "",
     "action": 1,
     "stage": 2,
     "status": 4,
-    "createdAt": 1724405186
+    "createdAt": 1726217636
   }
 }
 ```

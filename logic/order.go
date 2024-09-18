@@ -263,6 +263,58 @@ func BitcoinOrderDetail(orderID uint64, sender string) (ret *entity.OrderDetailR
 	}, resp.CodeSuccess
 }
 
+func OrderDetailByOrderID(orderID uint64) (ret *entity.OrderDetailByOrderIDResponse, code int) {
+	order, err := dao.NewOrderWithOrderID(orderID).First()
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		log.Logger().WithField("orderID", orderID).WithField("error", err).Error("failed to get order")
+		return nil, resp.CodeInternalServerError
+	}
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, resp.CodeOrderNotFound
+	}
+
+	return &entity.OrderDetailByOrderIDResponse{
+		SrcChain:  order.SrcChain,
+		SrcToken:  order.SrcToken,
+		Sender:    order.Sender,
+		InAmount:  order.InAmount,
+		DstChain:  order.DstChain,
+		DstToken:  order.DstToken,
+		Receiver:  order.Receiver,
+		OutAmount: order.OutAmount,
+		Action:    order.Action,
+		Stage:     order.Stage,
+		Status:    order.Status,
+		CreatedAt: order.CreatedAt.Unix(),
+	}, resp.CodeSuccess
+}
+
+func BitcoinOrderDetailByOrderID(orderID uint64) (ret *entity.OrderDetailByOrderIDResponse, code int) {
+	order, err := dao.NewBitcoinOrderWithID(orderID, "").First()
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		log.Logger().WithField("orderID", orderID).WithField("error", err).Error("failed to get bitcoin order")
+		return nil, resp.CodeInternalServerError
+	}
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, resp.CodeOrderNotFound
+	}
+
+	return &entity.OrderDetailByOrderIDResponse{
+		SrcChain:  order.SrcChain,
+		SrcToken:  order.SrcToken,
+		Sender:    order.Sender,
+		InAmount:  order.InAmount,
+		DstChain:  order.DstChain,
+		DstToken:  order.DstToken,
+		Receiver:  order.Receiver,
+		OutAmount: order.OutAmount,
+		Action:    order.Action,
+		Stage:     order.Stage,
+		Status:    order.Status,
+		CreatedAt: order.CreatedAt.Unix(),
+	}, resp.CodeSuccess
+}
+
 func generateKey() (*btcec.PrivateKey, error) {
 	privateKey, err := btcec.NewPrivateKey()
 	if err != nil {

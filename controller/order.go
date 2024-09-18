@@ -2,6 +2,7 @@ package controller
 
 import (
 	"github.com/gin-gonic/gin"
+	"github.com/mapprotocol/fe-backend/constants"
 	"github.com/mapprotocol/fe-backend/entity"
 	"github.com/mapprotocol/fe-backend/logic"
 	"github.com/mapprotocol/fe-backend/resp"
@@ -141,6 +142,35 @@ func OrderDetail(c *gin.Context) {
 			resp.Error(c, code)
 			return
 		}
+	}
+
+	resp.Success(c, ret)
+}
+
+func OrderDetailByOrderID(c *gin.Context) {
+	req := &entity.OrderDetailByOrderIDRequest{}
+	if err := c.ShouldBindQuery(req); err != nil {
+		resp.ParameterErr(c, "")
+		return
+	}
+
+	code := resp.CodeSuccess
+	ret := &entity.OrderDetailByOrderIDResponse{}
+	if req.ChainID == constants.BTCChainID {
+		ret, code = logic.BitcoinOrderDetailByOrderID(req.OrderID)
+		if code != resp.CodeSuccess {
+			resp.Error(c, code)
+			return
+		}
+	} else if req.ChainID == constants.TONChainID {
+		ret, code = logic.OrderDetailByOrderID(req.OrderID)
+		if code != resp.CodeSuccess {
+			resp.Error(c, code)
+			return
+		}
+	} else {
+		resp.ParameterErr(c, "unsupported chain id")
+		return
 	}
 
 	resp.Success(c, ret)

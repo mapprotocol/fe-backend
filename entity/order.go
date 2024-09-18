@@ -29,6 +29,11 @@ type OrderDetailRequest struct {
 	OrderID uint64 `form:"orderId"`
 }
 
+type OrderDetailByOrderIDRequest struct {
+	ChainID string `form:"chainId"`
+	OrderID uint64 `form:"orderId"`
+}
+
 // response
 
 type CreateOrderResponse struct {
@@ -54,6 +59,21 @@ type OrderListResponse struct {
 
 type OrderDetailResponse struct {
 	OrderID   uint64 `json:"orderId"`
+	SrcChain  string `json:"srcChain"`
+	SrcToken  string `json:"srcToken"`
+	Sender    string `json:"sender"`
+	InAmount  string `json:"inAmount"`
+	DstChain  string `json:"dstChain"`
+	DstToken  string `json:"dstToken"`
+	Receiver  string `json:"receiver"`
+	OutAmount string `json:"outAmount"`
+	Action    uint8  `json:"action"`
+	Stage     uint8  `json:"stage"`
+	Status    uint8  `json:"status"`
+	CreatedAt int64  `json:"createdAt"`
+}
+
+type OrderDetailByOrderIDResponse struct {
 	SrcChain  string `json:"srcChain"`
 	SrcToken  string `json:"srcToken"`
 	Sender    string `json:"sender"`

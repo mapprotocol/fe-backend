@@ -14,4 +14,5 @@ func Register(engine *gin.Engine) {
 	//v1.GET("/order/update", controller.UpdateOrder)
 	v1.GET("/order/list", controller.OrderList)
 	v1.GET("/order/detail", controller.OrderDetail)
+	v1.GET("/order/detail-by-order-id", controller.OrderDetailByOrderID)
 }
