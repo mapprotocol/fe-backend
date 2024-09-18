@@ -7,7 +7,7 @@ import (
 	"github.com/mapprotocol/fe-backend/utils"
 )
 
-const TableNameFilterLog = "filter_log"
+const TableNameFilterLog = "sol_filter_log"
 
 type FilterLog struct {
 	ID          uint64    `gorm:"column:id;type:bigint(20);primaryKey;autoIncrement:true" json:"id"`
