@@ -78,10 +78,12 @@ type OrderDetailByOrderIDResponse struct {
 	SrcToken  string `json:"srcToken"`
 	Sender    string `json:"sender"`
 	InAmount  string `json:"inAmount"`
+	InTxHash  string `json:"inTxHash"`
 	DstChain  string `json:"dstChain"`
 	DstToken  string `json:"dstToken"`
 	Receiver  string `json:"receiver"`
 	OutAmount string `json:"outAmount"`
+	OutTxHash string `json:"outTxHash"`
 	Action    uint8  `json:"action"`
 	Stage     uint8  `json:"stage"`
 	Status    uint8  `json:"status"`

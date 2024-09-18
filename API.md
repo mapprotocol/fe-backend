@@ -658,10 +658,12 @@ GET
 | srcToken  | string |                                                               |
 | sender    | string |                                                               |
 | inAmount  | string |                                                               |
+| inTxHash  | string |                                                               |   
 | dstChain  | string |                                                               |
 | dstToken  | string |                                                               |
 | receiver  | string |                                                               |
 | outAmount | string |                                                               |
+| outTxHash | string |                                                               |
 | action    | number | swap direction, 1: to evm, 2: from evm                        |                                                                                                                                                  |
 | stage     | number | 1: stage 1, 2: stage 2                                        |                                                                                                                                                  |
 | status    | number | 1: tx prepare send, 2: tx sent, 3: tx failed, 4: tx confirmed |                                                                                                                                                  |
