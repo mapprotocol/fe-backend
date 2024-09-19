@@ -197,6 +197,7 @@ func HandlerEvm2Sol() {
 				continue
 			}
 
+			fmt.Println(" data ------------------------ ", data)
 			bbs, err := hex.DecodeString(data)
 			if err != nil {
 				log.Logger().WithField("error", err.Error()).Error("failed to hex data")
@@ -204,6 +205,7 @@ func HandlerEvm2Sol() {
 				time.Sleep(5 * time.Second)
 				continue
 			}
+			fmt.Println(" data ------------------------ 1111 ")
 			trx, err := solana.TransactionFromBytes(bbs)
 			if err != nil {
 				log.Logger().WithField("error", err.Error()).Error("failed to get trx")
@@ -218,6 +220,7 @@ func HandlerEvm2Sol() {
 				time.Sleep(5 * time.Second)
 				continue
 			}
+			fmt.Println(" data ------------------------ 222 ")
 			trx.Message.RecentBlockhash = resp.Value.Blockhash
 			// sign
 			_, err = trx.Sign(func(key solana.PublicKey) *solana.PrivateKey {
@@ -232,6 +235,7 @@ func HandlerEvm2Sol() {
 				time.Sleep(5 * time.Second)
 				continue
 			}
+			fmt.Println(" data ------------------------ 333 ")
 			sig, err := client.SendTransaction(context.TODO(), trx)
 			if err != nil {
 				log.Logger().WithField("error", err.Error()).Error("failed to send trx")
