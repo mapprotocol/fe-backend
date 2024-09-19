@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-func TestSkack(t *testing.T) {
+func TestSlack(t *testing.T) {
 	type args struct {
 		ctx context.Context
 		msg string

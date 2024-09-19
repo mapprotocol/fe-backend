@@ -38,7 +38,7 @@ func ValidateEnv() {
 	if hooks == "" {
 		blog.Fatal("FE_TASK_SLACK_HOOKS is empty")
 	}
-	blog.Printf("env: %s", Env)
+	blog.Printf("env: %s", env)
 }
 
 func Slack(ctx context.Context, msg string) {
@@ -53,7 +53,7 @@ func Slack(ctx context.Context, msg string) {
 	}
 
 	body, err := json.Marshal(map[string]interface{}{
-		"text": fmt.Sprintf("Project: %s\nEnv: %s\nMsg: %s", Project, Env, msg),
+		"text": fmt.Sprintf("Project: %s\nEnv: %s\nMsg: %s", Project, env, msg),
 	})
 	if err != nil {
 		params := map[string]interface{}{
