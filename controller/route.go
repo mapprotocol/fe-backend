@@ -11,7 +11,6 @@ import (
 	"github.com/shopspring/decimal"
 	"math/big"
 	"strconv"
-	"strings"
 )
 
 const (
@@ -255,27 +254,27 @@ func Swap(c *gin.Context) {
 	ret := &entity.SwapResponse{}
 
 	// call the `deliver` method of the chain pool to exchange the same token on the same chain.
-	if strings.ToLower(req.Hash) == constants.LocalRouteHash {
-		exp := new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(req.Decimal)), nil)
-		amount := new(big.Float).Mul(amountBigFloat, new(big.Float).SetInt(exp))
-		amountBigInt, _ := amount.Int(nil)
-
-		if req.DstChain == constants.TONChainID {
-			ret, msg, code = logic.GetLocalRouteSwapFromEVMToTON(srcChain, req.SrcToken, req.Sender, req.Amount, amountBigFloat, amountBigInt, dstChain, req.DstToken, req.Receiver, slippage)
-			if code != resp.CodeSuccess {
-				resp.Error(c, code)
-				return
-			}
-		} else if req.DstChain == constants.BTCChainID {
-			ret, msg, code = logic.GetLocalRouteSwapFromEVMToBitcoin(srcChain, req.SrcToken, req.Sender, req.Amount, amountBigFloat, amountBigInt, dstChain, req.DstToken, req.Receiver, slippage)
-			if code != resp.CodeSuccess {
-				resp.Error(c, code)
-				return
-			}
-		}
-		resp.Success(c, ret)
-		return
-	}
+	//if strings.ToLower(req.Hash) == constants.LocalRouteHash {
+	//	exp := new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(req.Decimal)), nil)
+	//	amount := new(big.Float).Mul(amountBigFloat, new(big.Float).SetInt(exp))
+	//	amountBigInt, _ := amount.Int(nil)
+	//
+	//	if req.DstChain == constants.TONChainID {
+	//		ret, msg, code = logic.GetLocalRouteSwapFromEVMToTON(srcChain, req.SrcToken, req.Sender, req.Amount, amountBigFloat, amountBigInt, dstChain, req.DstToken, req.Receiver, slippage)
+	//		if code != resp.CodeSuccess {
+	//			resp.Error(c, code)
+	//			return
+	//		}
+	//	} else if req.DstChain == constants.BTCChainID {
+	//		ret, msg, code = logic.GetLocalRouteSwapFromEVMToBitcoin(srcChain, req.SrcToken, req.Sender, req.Amount, amountBigFloat, amountBigInt, dstChain, req.DstToken, req.Receiver, slippage)
+	//		if code != resp.CodeSuccess {
+	//			resp.Error(c, code)
+	//			return
+	//		}
+	//	}
+	//	resp.Success(c, ret)
+	//	return
+	//}
 
 	if req.SrcChain == constants.TONChainID {
 		ret, msg, code = logic.GetSwapFromTONToEVM(req.Sender, req.DstChain, req.Receiver, req.FeeCollector, req.FeeRatio, req.Hash)

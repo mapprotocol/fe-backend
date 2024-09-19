@@ -4,11 +4,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"github.com/btcsuite/btcd/btcutil"
-	"github.com/shopspring/decimal"
-	"math/big"
-	"strings"
-	"sync"
-
 	"github.com/mapprotocol/fe-backend/bindings/erc20"
 	"github.com/mapprotocol/fe-backend/constants"
 	"github.com/mapprotocol/fe-backend/dao"
@@ -19,6 +14,8 @@ import (
 	"github.com/mapprotocol/fe-backend/third-party/tonrouter"
 	"github.com/mapprotocol/fe-backend/utils"
 	"github.com/mapprotocol/fe-backend/utils/reqerror"
+	"github.com/shopspring/decimal"
+	"math/big"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
@@ -31,7 +28,14 @@ var isMultiChainPool bool
 var feRouterContract string
 var feRouterAddress common.Address
 
-var bridgeFeeRate = decimal.NewFromFloat(70.0 / 10000.0) // 70/10000
+var BridgeFeeRate = decimal.NewFromFloat(30.0 / 10000.0) // 30/10000
+
+const BaseTxFeeMultiplier = 1.5
+
+var ToTONBaseTxFee = decimal.NewFromFloat(1 * BaseTxFeeMultiplier)               // unit: USDT
+var TONToEVMBaseTxFee = decimal.NewFromFloat(1)                                  // unit: USDT
+var BitcoinToEVMBaseTxFee = decimal.NewFromFloat(0.000007 * BaseTxFeeMultiplier) // unit: WBTC
+var BitcoinTxBytes = decimal.NewFromFloat(200)
 
 func Init() {
 	isMultiChainPool = viper.GetBool("isMultiChainPool")
@@ -54,15 +58,15 @@ func GetTONToEVMRoute(req *entity.RouteRequest, amount decimal.Decimal, feeRatio
 		tonTokenOut entity.Token
 	)
 
-	bridgeFees, protocolFees, afterAmount := calcBridgeAndProtocolFees(amount, bridgeFeeRate, decimal.NewFromFloat(float64(feeRatio)/10000.0))
-
 	tonRequest := &tonrouter.BridgeRouteRequest{
 		ToChainID:       req.ToChainID,
 		TokenInAddress:  req.TokenInAddress,
 		TokenOutAddress: req.TokenOutAddress,
-		Amount:          afterAmount,
+		Amount:          req.Amount,
 		TonSlippage:     slippage / 3,
 		Slippage:        slippage,
+		FeeCollector:    req.FeeCollector,
+		FeeRatio:        req.FeeRatio,
 	}
 	tonRoute, err := tonrouter.BridgeRoute(tonRequest)
 	if err != nil {
@@ -77,6 +81,22 @@ func GetTONToEVMRoute(req *entity.RouteRequest, amount decimal.Decimal, feeRatio
 		}
 		return ret, "", resp.CodeTONRouteServerError
 	}
+
+	bridgeAmountIn, err := decimal.NewFromString(tonRoute.SrcChain.TokenAmountOut)
+	if err != nil {
+		params := map[string]interface{}{
+			"tokenAmountOut": tonRoute.SrcChain.TokenAmountOut,
+			"error":          err,
+		}
+		log.Logger().WithFields(params).Error("failed to parse token amount out to decimal")
+		return ret, "", resp.CodeInternalServerError
+	}
+
+	bridgeFees := calcTONToEVMBridgeFees(bridgeAmountIn, BridgeFeeRate)
+	if bridgeAmountIn.Compare(bridgeFees) != 1 {
+		return ret, "", resp.CodeAmountTooFew
+	}
+	//bridgeFees := calcToEVMBridgeFees(bridgeAmountIn, BridgeFeeRate)
 
 	in := tonRoute.SrcChain.Route[0].Path[0].TokenIn
 	tonTokenIn = entity.Token{
@@ -103,12 +123,12 @@ func GetTONToEVMRoute(req *entity.RouteRequest, amount decimal.Decimal, feeRatio
 		Symbol: tonRoute.GasFee.Symbol,
 	}
 	bridgeFee := entity.Fee{
-		Amount: bridgeFees,
-		Symbol: constants.BridgeFeeSymbolOfTON,
+		Amount: bridgeFees.StringFixedBank(6),
+		Symbol: constants.USDTSymbol,
 	}
 	protocolFee := entity.Fee{
-		Amount: protocolFees,
-		Symbol: constants.BridgeFeeSymbolOfTON,
+		Amount: tonRoute.ProtocolFee.Amount,
+		Symbol: tonRoute.ProtocolFee.Symbol,
 	}
 
 	request := &butter.RouteRequest{
@@ -118,7 +138,7 @@ func GetTONToEVMRoute(req *entity.RouteRequest, amount decimal.Decimal, feeRatio
 		Slippage:        slippage,
 		FromChainID:     constants.ChainIDOfChainPool,
 		ToChainID:       req.ToChainID,
-		Amount:          tonRoute.SrcChain.TokenAmountOut,
+		Amount:          bridgeAmountIn.Sub(bridgeFees).String(),
 	}
 
 	butterRoutes, err := butter.Route(request)
@@ -134,60 +154,60 @@ func GetTONToEVMRoute(req *entity.RouteRequest, amount decimal.Decimal, feeRatio
 		}
 		return ret, "", resp.CodeInternalServerError
 	}
-	ret = make([]*entity.RouteResponse, 0, len(butterRoutes))
-	for _, r := range butterRoutes {
-		butterSrcChainTokenIn := entity.Token{
-			ChainId:  r.SrcChain.ChainId,
-			Address:  r.SrcChain.TokenIn.Address,
-			Name:     r.SrcChain.TokenIn.Name,
-			Decimals: r.SrcChain.TokenIn.Decimals,
-			Symbol:   r.SrcChain.TokenIn.Symbol,
-			Icon:     r.SrcChain.TokenIn.Icon,
-		}
-		butterDstChainTokenOut := entity.Token{
-			ChainId:  r.DstChain.ChainId,
-			Address:  r.DstChain.TokenOut.Address,
-			Name:     r.DstChain.TokenOut.Name,
-			Decimals: r.DstChain.TokenOut.Decimals,
-			Symbol:   r.DstChain.TokenOut.Symbol,
-			Icon:     r.DstChain.TokenOut.Icon,
-		}
 
-		n := &entity.RouteResponse{
-			Hash:      tonRoute.Hash,
-			TokenIn:   tonTokenIn,
-			TokenOut:  butterDstChainTokenOut,
-			AmountIn:  tonRoute.SrcChain.TokenAmountIn,
-			AmountOut: r.DstChain.TotalAmountOut,
-			Path: []entity.Path{
-				{
-					Name:      tonRoute.SrcChain.Route[0].DexName,
-					AmountIn:  tonRoute.SrcChain.TokenAmountIn,
-					AmountOut: tonRoute.SrcChain.TokenAmountOut,
-					TokenIn:   tonTokenIn,
-					TokenOut:  tonTokenOut,
-				},
-				{
-					Name:      constants.ExchangeNameFlushExchange,
-					AmountIn:  tonRoute.SrcChain.TokenAmountOut,
-					AmountOut: r.SrcChain.TotalAmountIn,
-					TokenIn:   tonTokenOut,
-					TokenOut:  butterSrcChainTokenIn,
-				},
-				{
-					Name:      constants.ExchangeNameButter,
-					AmountIn:  r.SrcChain.TotalAmountIn,
-					AmountOut: r.DstChain.TotalAmountOut,
-					TokenIn:   butterSrcChainTokenIn,
-					TokenOut:  butterDstChainTokenOut,
-				},
-			},
-			GasFee:      gasFee,
-			BridgeFee:   bridgeFee,
-			ProtocolFee: protocolFee,
-		}
-		ret = append(ret, n)
+	r := butterRoutes[0]
+	ret = make([]*entity.RouteResponse, 0, len(butterRoutes))
+	butterSrcChainTokenIn := entity.Token{
+		ChainId:  r.SrcChain.ChainId,
+		Address:  r.SrcChain.TokenIn.Address,
+		Name:     r.SrcChain.TokenIn.Name,
+		Decimals: r.SrcChain.TokenIn.Decimals,
+		Symbol:   r.SrcChain.TokenIn.Symbol,
+		Icon:     r.SrcChain.TokenIn.Icon,
 	}
+	butterDstChainTokenOut := entity.Token{
+		ChainId:  r.DstChain.ChainId,
+		Address:  r.DstChain.TokenOut.Address,
+		Name:     r.DstChain.TokenOut.Name,
+		Decimals: r.DstChain.TokenOut.Decimals,
+		Symbol:   r.DstChain.TokenOut.Symbol,
+		Icon:     r.DstChain.TokenOut.Icon,
+	}
+
+	n := &entity.RouteResponse{
+		Hash:      tonRoute.Hash,
+		TokenIn:   tonTokenIn,
+		TokenOut:  butterDstChainTokenOut,
+		AmountIn:  tonRoute.SrcChain.TokenAmountIn,
+		AmountOut: r.DstChain.TotalAmountOut,
+		Path: []entity.Path{
+			{
+				Name:      tonRoute.SrcChain.Route[0].DexName,
+				AmountIn:  tonRoute.SrcChain.TokenAmountIn,
+				AmountOut: tonRoute.SrcChain.TokenAmountOut,
+				TokenIn:   tonTokenIn,
+				TokenOut:  tonTokenOut,
+			},
+			{
+				Name:      constants.ExchangeNameFlushExchange,
+				AmountIn:  tonRoute.SrcChain.TokenAmountOut,
+				AmountOut: r.SrcChain.TotalAmountIn,
+				TokenIn:   tonTokenOut,
+				TokenOut:  butterSrcChainTokenIn,
+			},
+			{
+				Name:      constants.ExchangeNameButter,
+				AmountIn:  r.SrcChain.TotalAmountIn,
+				AmountOut: r.DstChain.TotalAmountOut,
+				TokenIn:   butterSrcChainTokenIn,
+				TokenOut:  butterDstChainTokenOut,
+			},
+		},
+		GasFee:      gasFee,
+		BridgeFee:   bridgeFee,
+		ProtocolFee: protocolFee,
+	}
+	ret = append(ret, n)
 	return ret, "", resp.CodeSuccess
 }
 
@@ -197,8 +217,6 @@ func GetEVMToTONRoute(req *entity.RouteRequest, amount decimal.Decimal, feeRatio
 		tonTokenOut entity.Token
 	)
 
-	bridgeFees, protocolFees, afterAmount := calcBridgeAndProtocolFees(amount, bridgeFeeRate, decimal.NewFromFloat(float64(feeRatio)/10000.0))
-
 	request := &butter.RouteRequest{
 		TokenInAddress:  req.TokenInAddress,
 		TokenOutAddress: constants.USDTOfChainPool,
@@ -206,7 +224,9 @@ func GetEVMToTONRoute(req *entity.RouteRequest, amount decimal.Decimal, feeRatio
 		Slippage:        slippage / 3 * 2,
 		FromChainID:     req.FromChainID,
 		ToChainID:       constants.ChainIDOfChainPool,
-		Amount:          afterAmount,
+		Amount:          req.Amount,
+		Referrer:        req.FeeCollector,
+		RateOrNativeFee: req.FeeRatio,
 	}
 	butterRoutes, err := butter.Route(request)
 	if err != nil {
@@ -225,109 +245,128 @@ func GetEVMToTONRoute(req *entity.RouteRequest, amount decimal.Decimal, feeRatio
 		return ret, "", resp.CodeButterNotAvailableRoute
 	}
 
+	r := butterRoutes[0]
+	bridgeAmountIn, err := decimal.NewFromString(r.DstChain.TotalAmountOut)
+	if err != nil {
+		params := map[string]interface{}{
+			"tokenAmountOut": r.SrcChain.TotalAmountOut,
+			"error":          err,
+		}
+		log.Logger().WithFields(params).Error("failed to parse token amount out to decimal")
+		return ret, "", resp.CodeInternalServerError
+	}
+	bridgeFees := calcToTONBridgeFees(bridgeAmountIn, BridgeFeeRate)
+	if bridgeAmountIn.Compare(bridgeFees) != 1 {
+		return ret, "", resp.CodeAmountTooFew
+	}
+
+	protocolFees := "0"
+	if feeRatio > 0 {
+		protocolFees = calcProtocolFees(amount, decimal.NewFromFloat(float64(feeRatio)/10000.0)).StringFixedBank(int32(r.SrcChain.TokenIn.Decimals))
+	}
+
 	tonRequest := &tonrouter.RouteRequest{
 		TokenInAddress:  constants.USDTOfTON,
 		TokenOutAddress: req.TokenOutAddress,
+		Amount:          bridgeAmountIn.Sub(bridgeFees).String(),
 		Slippage:        slippage,
 	}
-	tonRoutes, err := getTONRoutes(tonRequest, butterRoutes) // todo skip error ?
+	tonRoute, err := tonrouter.Route(tonRequest)
 	if err != nil {
-		return ret, "", resp.CodeTONRouteServerError
+		params := map[string]interface{}{
+			"request": utils.JSON(request),
+			"error":   err,
+		}
+		log.Logger().WithFields(params).Error("failed to request ton route")
+		ext, ok := err.(*reqerror.ExternalRequestError)
+		if ok && ext.HasPublicError() {
+			return nil, ext.PublicError(), resp.CodeExternalServerError
+		}
+		return ret, "", resp.CodeInternalServerError
 	}
-	if len(tonRoutes) != len(butterRoutes) {
-		return ret, "", resp.CodeTONRouteServerError
+
+	in := tonRoute.SrcChain.Route[0].Path[0].TokenIn
+	tonTokenIn = entity.Token{
+		ChainId:  tonRoute.SrcChain.ChainId,
+		Address:  in.Address,
+		Name:     in.Name,
+		Decimals: in.Decimals,
+		Symbol:   in.Symbol,
+		Icon:     in.Image,
 	}
 
-	bridgeFee := entity.Fee{
-		Amount: bridgeFees,
-		Symbol: constants.BridgeFeeSymbolOfTON,
+	out := tonRoute.SrcChain.Route[0].Path[0].TokenOut
+	tonTokenOut = entity.Token{
+		ChainId:  tonRoute.SrcChain.ChainId,
+		Address:  out.Address,
+		Name:     out.Name,
+		Decimals: out.Decimals,
+		Symbol:   out.Symbol,
+		Icon:     out.Image,
 	}
-	protocolFee := entity.Fee{
-		Amount: protocolFees,
-		Symbol: constants.BridgeFeeSymbolOfTON,
+
+	ret = make([]*entity.RouteResponse, 0, 1)
+	butterSrcChainTokenIn := entity.Token{
+		ChainId:  r.SrcChain.ChainId,
+		Address:  r.SrcChain.TokenIn.Address,
+		Name:     r.SrcChain.TokenIn.Name,
+		Decimals: r.SrcChain.TokenIn.Decimals,
+		Symbol:   r.SrcChain.TokenIn.Symbol,
+		Icon:     r.SrcChain.TokenIn.Icon,
 	}
-	ret = make([]*entity.RouteResponse, 0, len(butterRoutes))
-	for _, r := range butterRoutes {
-		tonRoute, ok := tonRoutes[r.Hash]
-		if !ok {
-			continue
-		}
+	butterDstChainTokenOut := entity.Token{
+		ChainId:  r.DstChain.ChainId,
+		Address:  r.DstChain.TokenOut.Address,
+		Name:     r.DstChain.TokenOut.Name,
+		Decimals: r.DstChain.TokenOut.Decimals,
+		Symbol:   r.DstChain.TokenOut.Symbol,
+		Icon:     r.DstChain.TokenOut.Icon,
+	}
 
-		in := tonRoute.SrcChain.Route[0].Path[0].TokenIn
-		tonTokenIn = entity.Token{
-			ChainId:  tonRoute.SrcChain.ChainId,
-			Address:  in.Address,
-			Name:     in.Name,
-			Decimals: in.Decimals,
-			Symbol:   in.Symbol,
-			Icon:     in.Image,
-		}
-
-		out := tonRoute.SrcChain.Route[0].Path[0].TokenOut
-		tonTokenOut = entity.Token{
-			ChainId:  tonRoute.SrcChain.ChainId,
-			Address:  out.Address,
-			Name:     out.Name,
-			Decimals: out.Decimals,
-			Symbol:   out.Symbol,
-			Icon:     out.Image,
-		}
-
-		butterSrcChainTokenIn := entity.Token{
-			ChainId:  r.SrcChain.ChainId,
-			Address:  r.SrcChain.TokenIn.Address,
-			Name:     r.SrcChain.TokenIn.Name,
-			Decimals: r.SrcChain.TokenIn.Decimals,
-			Symbol:   r.SrcChain.TokenIn.Symbol,
-			Icon:     r.SrcChain.TokenIn.Icon,
-		}
-		butterDstChainTokenOut := entity.Token{
-			ChainId:  r.DstChain.ChainId,
-			Address:  r.DstChain.TokenOut.Address,
-			Name:     r.DstChain.TokenOut.Name,
-			Decimals: r.DstChain.TokenOut.Decimals,
-			Symbol:   r.DstChain.TokenOut.Symbol,
-			Icon:     r.DstChain.TokenOut.Icon,
-		}
-
-		n := &entity.RouteResponse{
-			Hash:      r.Hash,
-			TokenIn:   butterSrcChainTokenIn,
-			TokenOut:  tonTokenOut,
-			AmountIn:  r.SrcChain.TotalAmountIn,
-			AmountOut: tonRoute.SrcChain.TokenAmountOut,
-			Path: []entity.Path{
-				{
-					Name:      r.SrcChain.Bridge,
-					AmountIn:  r.SrcChain.TotalAmountIn,
-					AmountOut: r.DstChain.TotalAmountOut,
-					TokenIn:   butterSrcChainTokenIn,
-					TokenOut:  butterDstChainTokenOut,
-				},
-				{
-					Name:      constants.ExchangeNameFlushExchange,
-					AmountIn:  r.DstChain.TotalAmountOut,
-					AmountOut: tonRoute.SrcChain.TokenAmountIn,
-					TokenIn:   butterDstChainTokenOut,
-					TokenOut:  tonTokenIn,
-				},
-				{
-					Name:      tonRoute.SrcChain.Route[0].DexName,
-					AmountIn:  tonRoute.SrcChain.TokenAmountIn,
-					AmountOut: tonRoute.SrcChain.TokenAmountOut,
-					TokenIn:   tonTokenIn,
-					TokenOut:  tonTokenOut,
-				},
+	n := &entity.RouteResponse{
+		Hash:      r.Hash,
+		TokenIn:   butterSrcChainTokenIn,
+		TokenOut:  tonTokenOut,
+		AmountIn:  r.SrcChain.TotalAmountIn,
+		AmountOut: tonRoute.SrcChain.TokenAmountOut,
+		Path: []entity.Path{
+			{
+				Name:      r.SrcChain.Bridge,
+				AmountIn:  r.SrcChain.TotalAmountIn,
+				AmountOut: r.DstChain.TotalAmountOut,
+				TokenIn:   butterSrcChainTokenIn,
+				TokenOut:  butterDstChainTokenOut,
 			},
-			GasFee: entity.Fee{
-				Amount: r.GasFee.Amount,
-				Symbol: r.GasFee.Symbol,
+			{
+				Name:      constants.ExchangeNameFlushExchange,
+				AmountIn:  r.DstChain.TotalAmountOut,
+				AmountOut: tonRoute.SrcChain.TokenAmountIn,
+				TokenIn:   butterDstChainTokenOut,
+				TokenOut:  tonTokenIn,
 			},
-			BridgeFee:   bridgeFee,
-			ProtocolFee: protocolFee,
-		}
-		ret = append(ret, n)
+			{
+				Name:      tonRoute.SrcChain.Route[0].DexName,
+				AmountIn:  tonRoute.SrcChain.TokenAmountIn,
+				AmountOut: tonRoute.SrcChain.TokenAmountOut,
+				TokenIn:   tonTokenIn,
+				TokenOut:  tonTokenOut,
+			},
+		},
+		GasFee: entity.Fee{
+			Amount: r.GasFee.Amount,
+			Symbol: r.GasFee.Symbol,
+		},
+		BridgeFee: entity.Fee{
+			Amount: bridgeFees.StringFixedBank(6),
+			Symbol: constants.USDTSymbol,
+		},
+		ProtocolFee: entity.Fee{
+			Amount: protocolFees,
+			Symbol: r.SrcChain.TokenIn.Symbol,
+		},
 	}
+	ret = append(ret, n)
+
 	return ret, "", resp.CodeSuccess
 }
 
@@ -337,8 +376,25 @@ func GetBitcoinToEVMRoute(req *entity.RouteRequest, amount decimal.Decimal, feeR
 		tonTokenOut entity.Token
 	)
 
-	bridgeFees, protocolFees, afterAmount := calcBridgeAndProtocolFees(amount, bridgeFeeRate, decimal.NewFromFloat(float64(feeRatio)/10000.0))
-	bitcoinRoute := GetBitcoinLocalRoutes(afterAmount)
+	protocolFees := calcProtocolFees(amount, decimal.NewFromFloat(float64(feeRatio)/10000.0))
+	//bitcoinRoute := GetBitcoinLocalRoutes(amount.String())
+	bitcoinRoute := GetBitcoinLocalRoutes(amount.Sub(protocolFees).String())
+
+	bridgeAmountIn, err := decimal.NewFromString(bitcoinRoute.SrcChain.TokenAmountOut)
+	if err != nil {
+		params := map[string]interface{}{
+			"tokenAmountOut": bitcoinRoute.SrcChain.TokenAmountOut,
+			"error":          err,
+		}
+		log.Logger().WithFields(params).Error("failed to parse token amount out to decimal")
+		return ret, "", resp.CodeInternalServerError
+	}
+
+	bridgeFees := calcBitcoinToEVMBridgeFees(bridgeAmountIn, BridgeFeeRate)
+	if bridgeAmountIn.Compare(bridgeFees) != 1 {
+		return ret, "", resp.CodeAmountTooFew
+	}
+	//bridgeFees := calcToEVMBridgeFees(bridgeAmountIn, BridgeFeeRate)
 
 	in := bitcoinRoute.SrcChain.Route[0].Path[0].TokenIn
 	tonTokenIn = entity.Token{
@@ -365,12 +421,12 @@ func GetBitcoinToEVMRoute(req *entity.RouteRequest, amount decimal.Decimal, feeR
 		Symbol: bitcoinRoute.GasFee.Symbol,
 	}
 	bridgeFee := entity.Fee{
-		Amount: bridgeFees,
-		Symbol: constants.BridgeFeeSymbolOfBTC,
+		Amount: bridgeFees.StringFixedBank(8),
+		Symbol: constants.WBTCSymbol,
 	}
 	protocolFee := entity.Fee{
-		Amount: protocolFees,
-		Symbol: constants.BridgeFeeSymbolOfBTC,
+		Amount: protocolFees.StringFixedBank(8),
+		Symbol: constants.WBTCSymbol,
 	}
 
 	request := &butter.RouteRequest{
@@ -380,7 +436,7 @@ func GetBitcoinToEVMRoute(req *entity.RouteRequest, amount decimal.Decimal, feeR
 		Slippage:        slippage,
 		FromChainID:     constants.ChainIDOfChainPool,
 		ToChainID:       req.ToChainID,
-		Amount:          afterAmount,
+		Amount:          bridgeAmountIn.Sub(bridgeFees).String(),
 	}
 
 	butterRoutes, err := butter.Route(request)
@@ -396,60 +452,61 @@ func GetBitcoinToEVMRoute(req *entity.RouteRequest, amount decimal.Decimal, feeR
 		}
 		return ret, "", resp.CodeInternalServerError
 	}
-	ret = make([]*entity.RouteResponse, 0, len(butterRoutes))
-	for _, r := range butterRoutes {
-		butterSrcChainTokenIn := entity.Token{
-			ChainId:  r.SrcChain.ChainId,
-			Address:  r.SrcChain.TokenIn.Address,
-			Name:     r.SrcChain.TokenIn.Name,
-			Decimals: r.SrcChain.TokenIn.Decimals,
-			Symbol:   r.SrcChain.TokenIn.Symbol,
-			Icon:     r.SrcChain.TokenIn.Icon,
-		}
-		butterDstChainTokenOut := entity.Token{
-			ChainId:  r.DstChain.ChainId,
-			Address:  r.DstChain.TokenOut.Address,
-			Name:     r.DstChain.TokenOut.Name,
-			Decimals: r.DstChain.TokenOut.Decimals,
-			Symbol:   r.DstChain.TokenOut.Symbol,
-			Icon:     r.DstChain.TokenOut.Icon,
-		}
 
-		n := &entity.RouteResponse{
-			Hash:      bitcoinRoute.Hash,
-			TokenIn:   tonTokenIn,
-			TokenOut:  butterDstChainTokenOut,
-			AmountIn:  bitcoinRoute.SrcChain.TokenAmountIn,
-			AmountOut: r.DstChain.TotalAmountOut,
-			Path: []entity.Path{
-				{
-					Name:      bitcoinRoute.SrcChain.Route[0].DexName,
-					AmountIn:  bitcoinRoute.SrcChain.TokenAmountIn,
-					AmountOut: bitcoinRoute.SrcChain.TokenAmountOut,
-					TokenIn:   tonTokenIn,
-					TokenOut:  tonTokenOut,
-				},
-				{
-					Name:      constants.ExchangeNameFlushExchange,
-					AmountIn:  bitcoinRoute.SrcChain.TokenAmountOut,
-					AmountOut: r.SrcChain.TotalAmountIn,
-					TokenIn:   tonTokenOut,
-					TokenOut:  butterSrcChainTokenIn,
-				},
-				{
-					Name:      constants.ExchangeNameButter,
-					AmountIn:  r.SrcChain.TotalAmountIn,
-					AmountOut: r.DstChain.TotalAmountOut,
-					TokenIn:   butterSrcChainTokenIn,
-					TokenOut:  butterDstChainTokenOut,
-				},
-			},
-			GasFee:      gasFee,
-			BridgeFee:   bridgeFee,
-			ProtocolFee: protocolFee,
-		}
-		ret = append(ret, n)
+	ret = make([]*entity.RouteResponse, 0, 1)
+	r := butterRoutes[0]
+	butterSrcChainTokenIn := entity.Token{
+		ChainId:  r.SrcChain.ChainId,
+		Address:  r.SrcChain.TokenIn.Address,
+		Name:     r.SrcChain.TokenIn.Name,
+		Decimals: r.SrcChain.TokenIn.Decimals,
+		Symbol:   r.SrcChain.TokenIn.Symbol,
+		Icon:     r.SrcChain.TokenIn.Icon,
 	}
+	butterDstChainTokenOut := entity.Token{
+		ChainId:  r.DstChain.ChainId,
+		Address:  r.DstChain.TokenOut.Address,
+		Name:     r.DstChain.TokenOut.Name,
+		Decimals: r.DstChain.TokenOut.Decimals,
+		Symbol:   r.DstChain.TokenOut.Symbol,
+		Icon:     r.DstChain.TokenOut.Icon,
+	}
+
+	n := &entity.RouteResponse{
+		Hash:      bitcoinRoute.Hash,
+		TokenIn:   tonTokenIn,
+		TokenOut:  butterDstChainTokenOut,
+		AmountIn:  amount.String(), // todo
+		AmountOut: r.DstChain.TotalAmountOut,
+		Path: []entity.Path{
+			{
+				Name:      bitcoinRoute.SrcChain.Route[0].DexName,
+				AmountIn:  amount.String(),
+				AmountOut: bitcoinRoute.SrcChain.TokenAmountOut,
+				TokenIn:   tonTokenIn,
+				TokenOut:  tonTokenOut,
+			},
+			{
+				Name:      constants.ExchangeNameFlushExchange,
+				AmountIn:  bitcoinRoute.SrcChain.TokenAmountOut,
+				AmountOut: r.SrcChain.TotalAmountIn,
+				TokenIn:   tonTokenOut,
+				TokenOut:  butterSrcChainTokenIn,
+			},
+			{
+				Name:      constants.ExchangeNameButter,
+				AmountIn:  r.SrcChain.TotalAmountIn,
+				AmountOut: r.DstChain.TotalAmountOut,
+				TokenIn:   butterSrcChainTokenIn,
+				TokenOut:  butterDstChainTokenOut,
+			},
+		},
+		GasFee:      gasFee,
+		BridgeFee:   bridgeFee,
+		ProtocolFee: protocolFee,
+	}
+	ret = append(ret, n)
+
 	return ret, "", resp.CodeSuccess
 }
 
@@ -459,8 +516,6 @@ func GetEVMToBitcoinRoute(req *entity.RouteRequest, amount decimal.Decimal, feeR
 		tonTokenOut entity.Token
 	)
 
-	bridgeFees, protocolFees, afterAmount := calcBridgeAndProtocolFees(amount, bridgeFeeRate, decimal.NewFromFloat(float64(feeRatio)/10000.0))
-
 	request := &butter.RouteRequest{
 		TokenInAddress:  req.TokenInAddress,
 		TokenOutAddress: constants.WBTCOfChainPool,
@@ -468,7 +523,9 @@ func GetEVMToBitcoinRoute(req *entity.RouteRequest, amount decimal.Decimal, feeR
 		Slippage:        slippage / 3 * 2,
 		FromChainID:     req.FromChainID,
 		ToChainID:       constants.ChainIDOfChainPool,
-		Amount:          afterAmount,
+		Amount:          req.Amount,
+		Referrer:        req.FeeCollector,
+		RateOrNativeFee: req.FeeRatio,
 	}
 	butterRoutes, err := butter.Route(request)
 	if err != nil {
@@ -487,104 +544,109 @@ func GetEVMToBitcoinRoute(req *entity.RouteRequest, amount decimal.Decimal, feeR
 		return ret, "", resp.CodeButterNotAvailableRoute
 	}
 
-	bitcoinRoutes, err := getBitcoinRoutes(butterRoutes)
+	r := butterRoutes[0]
+	amountDecimal, err := decimal.NewFromString(r.DstChain.TotalAmountOut)
 	if err != nil {
-		return ret, "", resp.CodeTONRouteServerError
+		params := map[string]interface{}{
+			"amount": r.DstChain.TotalAmountOut,
+			"error":  err,
+		}
+		log.Logger().WithFields(params).Error("failed to parse total amount out to decimal")
+		return ret, "", resp.CodeInternalServerError
 	}
-	if len(bitcoinRoutes) != len(butterRoutes) {
-		return ret, "", resp.CodeTONRouteServerError
+	bridgeFees := calcToBitcoinBridgeFees(amountDecimal, BridgeFeeRate)
+	if amountDecimal.Compare(bridgeFees) != 1 {
+		return ret, "", resp.CodeAmountTooFew
 	}
 
-	bridgeFee := entity.Fee{
-		Amount: bridgeFees,
-		Symbol: constants.BridgeFeeSymbolOfBTC,
+	protocolFees := "0"
+	if feeRatio > 0 {
+		protocolFees = calcProtocolFees(amount, decimal.NewFromFloat(float64(feeRatio)/10000.0)).StringFixedBank(8)
 	}
-	protocolFee := entity.Fee{
-		Amount: protocolFees,
-		Symbol: constants.BridgeFeeSymbolOfBTC,
-	}
+
+	bitcoinRoute := GetBitcoinLocalRoutes(amountDecimal.StringFixedBank(8))
 	ret = make([]*entity.RouteResponse, 0, len(butterRoutes))
-	for _, r := range butterRoutes {
-		bitcoinRoute, ok := bitcoinRoutes[r.Hash]
-		if !ok {
-			continue
-		}
-
-		in := bitcoinRoute.SrcChain.Route[0].Path[0].TokenIn
-		tonTokenIn = entity.Token{
-			ChainId:  bitcoinRoute.SrcChain.ChainId,
-			Address:  in.Address,
-			Name:     in.Name,
-			Decimals: in.Decimals,
-			Symbol:   in.Symbol,
-			Icon:     in.Image,
-		}
-
-		out := bitcoinRoute.SrcChain.Route[0].Path[0].TokenOut
-		tonTokenOut = entity.Token{
-			ChainId:  bitcoinRoute.SrcChain.ChainId,
-			Address:  out.Address,
-			Name:     out.Name,
-			Decimals: out.Decimals,
-			Symbol:   out.Symbol,
-			Icon:     out.Image,
-		}
-
-		butterSrcChainTokenIn := entity.Token{
-			ChainId:  r.SrcChain.ChainId,
-			Address:  r.SrcChain.TokenIn.Address,
-			Name:     r.SrcChain.TokenIn.Name,
-			Decimals: r.SrcChain.TokenIn.Decimals,
-			Symbol:   r.SrcChain.TokenIn.Symbol,
-			Icon:     r.SrcChain.TokenIn.Icon,
-		}
-		butterDstChainTokenOut := entity.Token{
-			ChainId:  r.DstChain.ChainId,
-			Address:  r.DstChain.TokenOut.Address,
-			Name:     r.DstChain.TokenOut.Name,
-			Decimals: r.DstChain.TokenOut.Decimals,
-			Symbol:   r.DstChain.TokenOut.Symbol,
-			Icon:     r.DstChain.TokenOut.Icon,
-		}
-
-		n := &entity.RouteResponse{
-			Hash:      r.Hash,
-			TokenIn:   butterSrcChainTokenIn,
-			TokenOut:  tonTokenOut,
-			AmountIn:  r.SrcChain.TotalAmountIn,
-			AmountOut: bitcoinRoute.SrcChain.TokenAmountOut,
-			Path: []entity.Path{
-				{
-					Name:      r.SrcChain.Bridge,
-					AmountIn:  r.SrcChain.TotalAmountIn,
-					AmountOut: r.DstChain.TotalAmountOut,
-					TokenIn:   butterSrcChainTokenIn,
-					TokenOut:  butterDstChainTokenOut,
-				},
-				{
-					Name:      constants.ExchangeNameFlushExchange,
-					AmountIn:  r.DstChain.TotalAmountOut,
-					AmountOut: bitcoinRoute.SrcChain.TokenAmountIn,
-					TokenIn:   butterDstChainTokenOut,
-					TokenOut:  tonTokenIn,
-				},
-				{
-					Name:      bitcoinRoute.SrcChain.Route[0].DexName,
-					AmountIn:  bitcoinRoute.SrcChain.TokenAmountIn,
-					AmountOut: bitcoinRoute.SrcChain.TokenAmountOut,
-					TokenIn:   tonTokenIn,
-					TokenOut:  tonTokenOut,
-				},
-			},
-			GasFee: entity.Fee{
-				Amount: r.GasFee.Amount,
-				Symbol: r.GasFee.Symbol,
-			},
-			BridgeFee:   bridgeFee,
-			ProtocolFee: protocolFee,
-		}
-		ret = append(ret, n)
+	in := bitcoinRoute.SrcChain.Route[0].Path[0].TokenIn
+	tonTokenIn = entity.Token{
+		ChainId:  bitcoinRoute.SrcChain.ChainId,
+		Address:  in.Address,
+		Name:     in.Name,
+		Decimals: in.Decimals,
+		Symbol:   in.Symbol,
+		Icon:     in.Image,
 	}
+
+	out := bitcoinRoute.SrcChain.Route[0].Path[0].TokenOut
+	tonTokenOut = entity.Token{
+		ChainId:  bitcoinRoute.SrcChain.ChainId,
+		Address:  out.Address,
+		Name:     out.Name,
+		Decimals: out.Decimals,
+		Symbol:   out.Symbol,
+		Icon:     out.Image,
+	}
+
+	butterSrcChainTokenIn := entity.Token{
+		ChainId:  r.SrcChain.ChainId,
+		Address:  r.SrcChain.TokenIn.Address,
+		Name:     r.SrcChain.TokenIn.Name,
+		Decimals: r.SrcChain.TokenIn.Decimals,
+		Symbol:   r.SrcChain.TokenIn.Symbol,
+		Icon:     r.SrcChain.TokenIn.Icon,
+	}
+	butterDstChainTokenOut := entity.Token{
+		ChainId:  r.DstChain.ChainId,
+		Address:  r.DstChain.TokenOut.Address,
+		Name:     r.DstChain.TokenOut.Name,
+		Decimals: r.DstChain.TokenOut.Decimals,
+		Symbol:   r.DstChain.TokenOut.Symbol,
+		Icon:     r.DstChain.TokenOut.Icon,
+	}
+
+	n := &entity.RouteResponse{
+		Hash:      r.Hash,
+		TokenIn:   butterSrcChainTokenIn,
+		TokenOut:  tonTokenOut,
+		AmountIn:  amount.String(),
+		AmountOut: bitcoinRoute.SrcChain.TokenAmountOut,
+		Path: []entity.Path{
+			{
+				Name:      r.SrcChain.Bridge,
+				AmountIn:  amount.String(),
+				AmountOut: r.SrcChain.TotalAmountOut,
+				TokenIn:   butterSrcChainTokenIn,
+				TokenOut:  butterDstChainTokenOut,
+			},
+			{
+				Name:      constants.ExchangeNameFlushExchange,
+				AmountIn:  r.DstChain.TotalAmountOut,
+				AmountOut: bitcoinRoute.SrcChain.TokenAmountIn,
+				TokenIn:   butterDstChainTokenOut,
+				TokenOut:  tonTokenIn,
+			},
+			{
+				Name:      bitcoinRoute.SrcChain.Route[0].DexName,
+				AmountIn:  bitcoinRoute.SrcChain.TokenAmountIn,
+				AmountOut: bitcoinRoute.SrcChain.TokenAmountOut,
+				TokenIn:   tonTokenIn,
+				TokenOut:  tonTokenOut,
+			},
+		},
+		GasFee: entity.Fee{
+			Amount: r.GasFee.Amount,
+			Symbol: r.GasFee.Symbol,
+		},
+		BridgeFee: entity.Fee{
+			Amount: bridgeFees.StringFixedBank(8),
+			Symbol: constants.WBTCSymbol,
+		},
+		ProtocolFee: entity.Fee{
+			Amount: protocolFees,
+			Symbol: r.SrcChain.TokenIn.Symbol,
+		},
+	}
+	ret = append(ret, n)
+
 	return ret, "", resp.CodeSuccess
 }
 
@@ -893,9 +955,9 @@ func GetSwapFromEVMToBitcoin(srcChain *big.Int, srcToken, sender, amount string,
 
 	request := &butter.SwapRequest{
 		Hash:     hash,
-		Slippage: slippage / 3 * 2, // todo all slippage
+		Slippage: slippage / 3 * 2,
 		From:     sender,
-		Receiver: sender, // todo sender
+		Receiver: sender,
 		CallData: encodedCallback,
 	}
 	txData, err := butter.Swap(request)
@@ -920,164 +982,176 @@ func GetSwapFromEVMToBitcoin(srcChain *big.Int, srcToken, sender, amount string,
 	return ret, "", resp.CodeSuccess
 }
 
-func GetLocalRouteSwapFromEVMToTON(srcChain *big.Int, srcToken, sender, amount string, amountBigFloat *big.Float, amountBigInt, dstChain *big.Int, dstToken, receiver string, slippage uint64) (ret *entity.SwapResponse, msg string, code int) {
-	if amountBigFloat.Cmp(USDTLimit) == -1 {
-		return ret, "", resp.CodeAmountTooFew
-	}
-
-	chainPoolToken := constants.USDTOfChainPool
-	if isMultiChainPool && dstChain.String() == constants.ChainIDOfEthereum {
-		chainPoolToken = constants.USDTOfEthereum
-	}
-	params := ReceiverParam{
-		OrderId:        [32]byte{},
-		SrcChain:       srcChain,
-		SrcToken:       []byte(srcToken),
-		Sender:         []byte(sender),
-		InAmount:       amount,
-		ChainPoolToken: common.HexToAddress(chainPoolToken),
-		DstChain:       dstChain,
-		DstToken:       []byte(dstToken),
-		Receiver:       []byte(receiver),
-		Slippage:       slippage,
-	}
-	packed, err := PackOnReceived(amountBigInt, params)
-	if err != nil {
-		params := map[string]interface{}{
-			"params": utils.JSON(params),
-			"error":  err,
-		}
-		log.Logger().WithFields(params).Error("failed to pack onReceived")
-		return ret, "", resp.CodeInternalServerError
-	}
-
-	value := "0x0"
-	if strings.ToLower(srcToken) == NativeTokenAddress {
-		value = "0x" + amountBigInt.Text(16)
-	}
-	ret = &entity.SwapResponse{
-		To:      feRouterContract,
-		Data:    "0x" + hex.EncodeToString(packed),
-		Value:   value,
-		ChainId: constants.ChainIDOfChainPool,
-	}
-	return ret, "", resp.CodeSuccess
-}
-
-func GetLocalRouteSwapFromEVMToBitcoin(srcChain *big.Int, srcToken, sender, amount string, amountBigFloat *big.Float, amountBigInt, dstChain *big.Int, dstToken, receiver string, slippage uint64) (ret *entity.SwapResponse, msg string, code int) {
-	if amountBigFloat.Cmp(WBTCLimit) == -1 {
-		return ret, "", resp.CodeAmountTooFew
-	}
-
-	chainPoolToken := constants.WBTCOfChainPool
-	if isMultiChainPool && dstChain.String() == constants.ChainIDOfEthereum {
-		chainPoolToken = constants.WBTCOfEthereum
-	}
-	params := ReceiverParam{
-		OrderId:        [32]byte{},
-		SrcChain:       srcChain,
-		SrcToken:       []byte(srcToken),
-		Sender:         []byte(sender),
-		InAmount:       amount,
-		ChainPoolToken: common.HexToAddress(chainPoolToken),
-		DstChain:       dstChain,
-		DstToken:       []byte(dstToken),
-		Receiver:       []byte(receiver),
-		Slippage:       slippage,
-	}
-	packed, err := PackOnReceived(amountBigInt, params)
-	if err != nil {
-		params := map[string]interface{}{
-			"params": utils.JSON(params),
-			"error":  err,
-		}
-		log.Logger().WithFields(params).Error("failed to pack onReceived")
-		return ret, "", resp.CodeInternalServerError
-	}
-
-	value := "0x0"
-	if strings.ToLower(srcToken) == NativeTokenAddress {
-		value = "0x" + amountBigInt.Text(16)
-	}
-	ret = &entity.SwapResponse{
-		To:      feRouterContract,
-		Data:    "0x" + hex.EncodeToString(packed),
-		Value:   value,
-		ChainId: constants.ChainIDOfChainPool,
-	}
-	return ret, "", resp.CodeSuccess
-}
-
-func getTONRoutes(tonRequest *tonrouter.RouteRequest, routes []*butter.RouteResponseData) (map[string]*tonrouter.RouteData, error) {
-	if len(routes) == 0 {
-		return make(map[string]*tonrouter.RouteData), nil
-	}
-
-	var wg sync.WaitGroup
-	result := sync.Map{}
-	errChan := make(chan error, len(routes))
-
-	for _, r := range routes {
-		if r == nil {
-			continue
-		}
-
-		wg.Add(1)
-		go func(hash, amount string, request *tonrouter.RouteRequest) {
-			defer wg.Done()
-
-			request.Amount = amount
-			tonRoute, err := tonrouter.Route(request)
-			if err != nil {
-				params := map[string]interface{}{
-					"request": utils.JSON(request),
-					"error":   err,
-				}
-				log.Logger().WithFields(params).Error("failed to request ton route")
-				errChan <- err
-				return
-			}
-
-			result.Store(hash, tonRoute)
-		}(r.Hash, r.DstChain.TotalAmountOut, tonRequest)
-	}
-
-	wg.Wait()
-	close(errChan)
-
-	if len(errChan) > 0 {
-		return nil, <-errChan
-	}
-
-	finalResult := make(map[string]*tonrouter.RouteData, len(routes))
-	result.Range(func(key, value interface{}) bool {
-		k := key.(string)
-		v := value.(*tonrouter.RouteData)
-		finalResult[k] = v
-		return true
-	})
-
-	return finalResult, nil
-}
-
-func getBitcoinRoutes(routes []*butter.RouteResponseData) (map[string]*Route, error) {
-	if len(routes) == 0 {
-		return make(map[string]*Route), nil
-	}
-	finalResult := make(map[string]*Route, len(routes))
-
-	for _, r := range routes {
-		if r == nil {
-			continue
-		}
-		amount := r.DstChain.TotalAmountOut
-		route := GetBitcoinLocalRoutes(amount)
-
-		finalResult[r.Hash] = route
-	}
-
-	return finalResult, nil
-}
+//func GetLocalRouteSwapFromEVMToTON(srcChain *big.Int, srcToken, sender, amount string, amountBigFloat *big.Float, amountBigInt, dstChain *big.Int, dstToken, receiver string, slippage uint64) (ret *entity.SwapResponse, msg string, code int) {
+//	if amountBigFloat.Cmp(USDTLimit) == -1 {
+//		return ret, "", resp.CodeAmountTooFew
+//	}
+//
+//	chainPoolToken := constants.USDTOfChainPool
+//	if isMultiChainPool && dstChain.String() == constants.ChainIDOfEthereum {
+//		chainPoolToken = constants.USDTOfEthereum
+//	}
+//	params := ReceiverParam{
+//		OrderId:        [32]byte{},
+//		SrcChain:       srcChain,
+//		SrcToken:       []byte(srcToken),
+//		Sender:         []byte(sender),
+//		InAmount:       amount,
+//		ChainPoolToken: common.HexToAddress(chainPoolToken),
+//		DstChain:       dstChain,
+//		DstToken:       []byte(dstToken),
+//		Receiver:       []byte(receiver),
+//		Slippage:       slippage,
+//	}
+//	packed, err := PackOnReceived(amountBigInt, params)
+//	if err != nil {
+//		params := map[string]interface{}{
+//			"params": utils.JSON(params),
+//			"error":  err,
+//		}
+//		log.Logger().WithFields(params).Error("failed to pack onReceived")
+//		return ret, "", resp.CodeInternalServerError
+//	}
+//	ret = &entity.SwapResponse{
+//		To:      feRouterContract,
+//		Data:    "0x" + hex.EncodeToString(packed),
+//		Value:   "0x" + amountBigInt.Text(16),
+//		ChainId: constants.ChainIDOfChainPool,
+//	}
+//	return ret, "", resp.CodeSuccess
+//}
+//
+//func GetLocalRouteSwapFromEVMToBitcoin(srcChain *big.Int, srcToken, sender, amount string, amountBigFloat *big.Float, amountBigInt, dstChain *big.Int, dstToken, receiver string, slippage uint64) (ret *entity.SwapResponse, msg string, code int) {
+//	if amountBigFloat.Cmp(WBTCLimit) == -1 {
+//		return ret, "", resp.CodeAmountTooFew
+//	}
+//
+//	chainPoolToken := constants.WBTCOfChainPool
+//	if isMultiChainPool && dstChain.String() == constants.ChainIDOfEthereum {
+//		chainPoolToken = constants.WBTCOfEthereum
+//	}
+//	params := ReceiverParam{
+//		OrderId:        [32]byte{},
+//		SrcChain:       srcChain,
+//		SrcToken:       []byte(srcToken),
+//		Sender:         []byte(sender),
+//		InAmount:       amount,
+//		ChainPoolToken: common.HexToAddress(chainPoolToken),
+//		DstChain:       dstChain,
+//		DstToken:       []byte(dstToken),
+//		Receiver:       []byte(receiver),
+//		Slippage:       slippage,
+//	}
+//	packed, err := PackOnReceived(amountBigInt, params)
+//	if err != nil {
+//		params := map[string]interface{}{
+//			"params": utils.JSON(params),
+//			"error":  err,
+//		}
+//		log.Logger().WithFields(params).Error("failed to pack onReceived")
+//		return ret, "", resp.CodeInternalServerError
+//	}
+//	ret = &entity.SwapResponse{
+//		To:      feRouterContract,
+//		Data:    "0x" + hex.EncodeToString(packed),
+//		Value:   "0x" + amountBigInt.Text(16),
+//		ChainId: constants.ChainIDOfChainPool,
+//	}
+//	return ret, "", resp.CodeSuccess
+//}
+//
+//func getToTONRoutes(tonRequest *tonrouter.RouteRequest, routes []*butter.RouteResponseData) (map[string]*tonrouter.RouteData, error) {
+//	if len(routes) == 0 {
+//		return make(map[string]*tonrouter.RouteData), nil
+//	}
+//
+//	var wg sync.WaitGroup
+//	result := sync.Map{}
+//	errChan := make(chan error, len(routes))
+//
+//	for _, r := range routes {
+//		if r == nil {
+//			continue
+//		}
+//
+//		wg.Add(1)
+//		go func(hash, amount string, request *tonrouter.RouteRequest) {
+//			defer wg.Done()
+//
+//			amountDecimal, err := decimal.NewFromString(amount)
+//			if err != nil {
+//				params := map[string]interface{}{
+//					"amount": amount,
+//					"error":  err,
+//				}
+//				log.Logger().WithFields(params).Error("failed to parse amount to decimal")
+//				errChan <- err
+//				return
+//			}
+//
+//			bridgeFees := calcToTONBridgeFees(amountDecimal, BridgeFeeRate)
+//			request.Amount = amountDecimal.Sub(bridgeFees).String()
+//			tonRoute, err := tonrouter.Route(request)
+//			if err != nil {
+//				params := map[string]interface{}{
+//					"request": utils.JSON(request),
+//					"error":   err,
+//				}
+//				log.Logger().WithFields(params).Error("failed to request ton route")
+//				errChan <- err
+//				return
+//			}
+//
+//			result.Store(hash, tonRoute)
+//		}(r.Hash, r.DstChain.TotalAmountOut, tonRequest)
+//	}
+//
+//	wg.Wait()
+//	close(errChan)
+//
+//	if len(errChan) > 0 {
+//		return nil, <-errChan
+//	}
+//
+//	finalResult := make(map[string]*tonrouter.RouteData, len(routes))
+//	result.Range(func(key, value interface{}) bool {
+//		k := key.(string)
+//		v := value.(*tonrouter.RouteData)
+//		finalResult[k] = v
+//		return true
+//	})
+//
+//	return finalResult, nil
+//}
+//
+//func getToBitcoinRoutes(routes []*butter.RouteResponseData) (map[string]*Route, error) {
+//	if len(routes) == 0 {
+//		return make(map[string]*Route), nil
+//	}
+//	finalResult := make(map[string]*Route, len(routes))
+//
+//	for _, r := range routes {
+//		if r == nil {
+//			continue
+//		}
+//
+//		amountDecimal, err := decimal.NewFromString(r.DstChain.TotalAmountOut)
+//		if err != nil {
+//			params := map[string]interface{}{
+//				"amount": r.DstChain.TotalAmountOut,
+//				"error":  err,
+//			}
+//			log.Logger().WithFields(params).Error("failed to parse amount to decimal")
+//			return nil, err
+//		}
+//
+//		bridgeFees := calcToBitcoinBridgeFees(amountDecimal, BridgeFeeRate)
+//		route := GetBitcoinLocalRoutes(amountDecimal.Sub(bridgeFees).String())
+//		finalResult[r.Hash] = route
+//	}
+//
+//	return finalResult, nil
+//}
 
 func getChainPoolUSDTBalance(dstChain string) (balance *big.Float, err error) {
 	chainInfo := &dao.ChainPool{}
@@ -1233,6 +1307,156 @@ func calcBridgeAndProtocolFees(amount, bridgeFeeRate, protocolFeeRate decimal.De
 	log.Logger().WithFields(fields).Info("calc bridge and protocol fees")
 	return bridgeFees.String(), protocolFees.String(), afterAmount.String()
 }
+
+func calcToTONBridgeFees(amount, bridgeFeeRate decimal.Decimal) (bridgeFees decimal.Decimal) {
+	bridgeFees = amount.Mul(bridgeFeeRate).Add(ToTONBaseTxFee)
+
+	fields := map[string]interface{}{
+		"amount":        amount,
+		"BridgeFeeRate": bridgeFeeRate,
+		"bridgeFees":    bridgeFees,
+		"baseTxFee":     ToTONBaseTxFee,
+	}
+	log.Logger().WithFields(fields).Info("complete the calc to ton bridge fees")
+	return bridgeFees
+}
+
+func calcToBitcoinBridgeFees(amount, bridgeFeeRate decimal.Decimal) (bridgeFees decimal.Decimal) {
+	feeRate := GetGlobalFeeRate()
+	baseTxFee := BitcoinTxBytes.Mul(decimal.NewFromInt(feeRate)).
+		Mul(decimal.NewFromFloat(BaseTxFeeMultiplier)).
+		Div(decimal.NewFromUint64(constants.BTCDecimal))
+	bridgeFees = amount.Mul(bridgeFeeRate).Add(baseTxFee)
+
+	fields := map[string]interface{}{
+		"amount":        amount,
+		"BridgeFeeRate": bridgeFeeRate,
+		"bridgeFees":    bridgeFees,
+		"btcFeeRate":    feeRate,
+		"baseTxFee":     baseTxFee,
+	}
+	log.Logger().WithFields(fields).Info("completed the calc to bitcoin bridge fees")
+	return bridgeFees
+}
+
+//func calcToEVMBridgeFees(amount, bridgeFeeRate decimal.Decimal) (bridgeFees decimal.Decimal) {
+//	bridgeFees = amount.Mul(bridgeFeeRate).Add(EVMBaseTxFee)
+//
+//	fields := map[string]interface{}{
+//		"amount":        amount,
+//		"BridgeFeeRate": bridgeFeeRate,
+//		"bridgeFees":    bridgeFees,
+//	}
+//	log.Logger().WithFields(fields).Info("complete the calc ton to evm bridge fees")
+//	return bridgeFees
+//}
+
+func calcTONToEVMBridgeFees(amount, bridgeFeeRate decimal.Decimal) (bridgeFees decimal.Decimal) {
+	bridgeFees = amount.Mul(bridgeFeeRate).Add(TONToEVMBaseTxFee)
+
+	fields := map[string]interface{}{
+		"amount":        amount,
+		"BridgeFeeRate": bridgeFeeRate,
+		"bridgeFees":    bridgeFees,
+		"baseTxFee":     TONToEVMBaseTxFee,
+	}
+	log.Logger().WithFields(fields).Info("complete the calc ton to evm bridge fees")
+	return bridgeFees
+}
+
+func calcBitcoinToEVMBridgeFees(amount, bridgeFeeRate decimal.Decimal) (bridgeFees decimal.Decimal) {
+	bridgeFees = amount.Mul(bridgeFeeRate).Add(BitcoinToEVMBaseTxFee)
+
+	fields := map[string]interface{}{
+		"amount":        amount,
+		"BridgeFeeRate": bridgeFeeRate,
+		"bridgeFees":    bridgeFees,
+		"baseTxFee":     BitcoinToEVMBaseTxFee,
+	}
+	log.Logger().WithFields(fields).Info("complete the calc bitcoin to evm bridge fees")
+	return bridgeFees
+}
+
+func calcProtocolFees(amount, protocolFeeRate decimal.Decimal) (protocolFees decimal.Decimal) {
+	protocolFees = amount.Mul(protocolFeeRate)
+
+	fields := map[string]interface{}{
+		"amount":          amount,
+		"protocolFeeRate": protocolFeeRate,
+		"protocolFees":    protocolFees,
+	}
+	log.Logger().WithFields(fields).Info("complete the calc protocol fees")
+	return protocolFees
+}
+
+//func calcToTONBridgeAndProtocolFees(amount, BridgeFeeRate, protocolFeeRate decimal.Decimal) (bridgeFees, protocolFees decimal.Decimal) {
+//	bridgeFees = amount.Mul(BridgeFeeRate).Add(ToTONBaseTxFee)
+//	protocolFees = amount.Mul(protocolFeeRate)
+//
+//	fields := map[string]interface{}{
+//		"amount":          amount,
+//		"BridgeFeeRate":   BridgeFeeRate,
+//		"bridgeFees":      bridgeFees,
+//		"baseTxFee":       ToTONBaseTxFee,
+//		"protocolFees":    protocolFees,
+//		"protocolFeeRate": protocolFeeRate,
+//	}
+//	log.Logger().WithFields(fields).Info("complete the calc to ton bridge and protocol fees")
+//	return bridgeFees, protocolFees
+//}
+//
+//func calcToBitcoinBridgeAndProtocolFees(amount, BridgeFeeRate, protocolFeeRate decimal.Decimal) (bridgeFees, protocolFees decimal.Decimal) {
+//	feeRate := GetGlobalFeeRate()
+//	baseTxFee := BitcoinTxBytes.Mul(decimal.NewFromInt(feeRate)).
+//		Mul(decimal.NewFromFloat(BaseTxFeeMultiplier)).
+//		Div(decimal.NewFromUint64(constants.BTCDecimal))
+//	bridgeFees = amount.Mul(BridgeFeeRate).Sub(baseTxFee)
+//	protocolFees = amount.Mul(protocolFeeRate)
+//
+//	fields := map[string]interface{}{
+//		"amount":          amount,
+//		"BridgeFeeRate":   BridgeFeeRate,
+//		"bridgeFees":      bridgeFees,
+//		"btcFeeRate":      feeRate,
+//		"baseTxFee":       baseTxFee,
+//		"protocolFees":    protocolFees,
+//		"protocolFeeRate": protocolFeeRate,
+//	}
+//	log.Logger().WithFields(fields).Info("completed the calc to bitcoin bridge and protocol fees")
+//	return bridgeFees, protocolFees
+//}
+//
+//func calcTONToEVMBridgeAndProtocolFees(amount, BridgeFeeRate, protocolFeeRate decimal.Decimal) (bridgeFees, protocolFees decimal.Decimal) {
+//	bridgeFees = amount.Mul(BridgeFeeRate).Add(TONToEVMBaseTxFee)
+//	protocolFees = amount.Mul(protocolFeeRate)
+//
+//	fields := map[string]interface{}{
+//		"amount":          amount,
+//		"BridgeFeeRate":   BridgeFeeRate,
+//		"bridgeFees":      bridgeFees,
+//		"baseTxFee":       TONToEVMBaseTxFee,
+//		"protocolFees":    protocolFees,
+//		"protocolFeeRate": protocolFeeRate,
+//	}
+//	log.Logger().WithFields(fields).Info("complete the calc ton to evm bridge and protocol fees")
+//	return bridgeFees, protocolFees
+//}
+//
+//func calcBitcoinToEVMBridgeAndProtocolFees(amount, BridgeFeeRate, protocolFeeRate decimal.Decimal) (bridgeFees, protocolFees decimal.Decimal) {
+//	bridgeFees = amount.Mul(BridgeFeeRate).Add(BitcoinToEVMBaseTxFee)
+//	protocolFees = amount.Mul(protocolFeeRate)
+//
+//	fields := map[string]interface{}{
+//		"amount":          amount,
+//		"BridgeFeeRate":   BridgeFeeRate,
+//		"bridgeFees":      bridgeFees,
+//		"baseTxFee":       BitcoinToEVMBaseTxFee,
+//		"protocolFees":    protocolFees,
+//		"protocolFeeRate": protocolFeeRate,
+//	}
+//	log.Logger().WithFields(fields).Info("complete the calc bitcoin to evm bridge and protocol fees")
+//	return bridgeFees, protocolFees
+//}
 
 func calcBridgeAndProtocolFees1(amount, bridgeFeeRate, protocolFeeRate *big.Float) (bridgeFees, protocolFees, afterAmount *big.Float) {
 	bridgeFees = new(big.Float).Mul(amount, bridgeFeeRate)

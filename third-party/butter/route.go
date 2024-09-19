@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/mapprotocol/fe-backend/constants"
 	"github.com/mapprotocol/fe-backend/resource/log"
 	"github.com/mapprotocol/fe-backend/utils"
 	uhttp "github.com/mapprotocol/fe-backend/utils/http"
@@ -12,10 +11,11 @@ import (
 	"github.com/spf13/viper"
 	"math/big"
 	"strconv"
-	"strings"
 )
 
 const SuccessCode = 0
+
+const ProportionFee = 1
 
 const (
 	PathRoute    = "/route"
@@ -35,6 +35,9 @@ type RouteRequest struct {
 	Amount          string `json:"amount"`
 	Type            string `json:"type"`
 	Slippage        uint64 `json:"slippage"`
+	Referrer        string `json:"referrer"`
+	FeeType         string `json:"feeType"`
+	RateOrNativeFee string `json:"rateOrNativeFee"`
 }
 
 type RouteResponse struct {
@@ -118,13 +121,20 @@ func Init() {
 		panic("butter endpoint is empty")
 	}
 }
+
 func Route(request *RouteRequest) ([]*RouteResponseData, error) {
-	if request.FromChainID == request.ToChainID && strings.ToLower(request.TokenInAddress) == strings.ToLower(request.TokenOutAddress) {
-		return getLocalRoutes(request.TokenInAddress, request.Amount), nil
+	//if request.FromChainID == request.ToChainID && strings.ToLower(request.TokenInAddress) == strings.ToLower(request.TokenOutAddress) {
+	//	return getLocalRoutes(request.TokenInAddress, request.Amount), nil
+	//}
+
+	entr := ""
+	if utils.IsEmpty(request.Referrer) {
+		entr = entrance
 	}
 	params := fmt.Sprintf(
-		"fromChainId=%s&toChainId=%s&tokenInAddress=%s&tokenOutAddress=%s&amount=%s&type=%s&slippage=%d&entrance=%s",
-		request.FromChainID, request.ToChainID, request.TokenInAddress, request.TokenOutAddress, request.Amount, request.Type, request.Slippage, entrance,
+		"fromChainId=%s&toChainId=%s&tokenInAddress=%s&tokenOutAddress=%s&amount=%s&type=%s&slippage=%d&entrance=%s&referrer=%s&feeType=%d&rateOrNativeFee=%s",
+		request.FromChainID, request.ToChainID, request.TokenInAddress, request.TokenOutAddress, request.Amount,
+		request.Type, request.Slippage, entr, request.Referrer, ProportionFee, request.RateOrNativeFee,
 	)
 	url := fmt.Sprintf("%s%s?%s", endpoint, PathRoute, params)
 	log.Logger().Debugf("butter route url: %s", url)
@@ -159,7 +169,7 @@ func Route(request *RouteRequest) ([]*RouteResponseData, error) {
 		)
 	}
 	// For the route of the same chain exchange, butter only returns the data of src chain.
-	//So, the data of src chain is copied to dst chain here to be compatible with subsequent operations.
+	// So, the data of src chain is copied to dst chain here to be compatible with subsequent operations.
 	if request.FromChainID == request.ToChainID {
 		for _, data := range response.Data {
 			if data != nil {
@@ -220,77 +230,77 @@ func GetRouteAmountOut(hash string) (*big.Float, error) {
 	return amountOut, nil
 }
 
-func getLocalRoutes(tokenAddress, amount string) []*RouteResponseData {
-	token := struct {
-		Address  string `json:"address"`
-		Name     string `json:"name"`
-		Decimals int    `json:"decimals"`
-		Symbol   string `json:"symbol"`
-		Icon     string `json:"icon"`
-	}{
-		Address:  constants.USDTOfChainPool,
-		Name:     "Tether USD",
-		Decimals: constants.USDTDecimalNumberOfChainPool,
-		Symbol:   "USDT",
-		Icon:     "https://files.mapprotocol.io/bridge/usdt.png",
-	}
-
-	if strings.ToLower(tokenAddress) == strings.ToLower(constants.WBTCOfChainPool) {
-		token = struct {
-			Address  string `json:"address"`
-			Name     string `json:"name"`
-			Decimals int    `json:"decimals"`
-			Symbol   string `json:"symbol"`
-			Icon     string `json:"icon"`
-		}{
-			Address:  constants.WBTCOfChainPool,
-			Name:     "Bitcoin",
-			Decimals: constants.BTCDecimalNumberOfChainPool,
-			Symbol:   "BTC",
-			Icon:     "https://map-static-file.s3.amazonaws.com/mapSwap/merlin/0x0000000000000000000000000000000000000000.jpg",
-		}
-	}
-	chin := struct {
-		ChainId string `json:"chainId"`
-		TokenIn struct {
-			Address  string `json:"address"`
-			Name     string `json:"name"`
-			Decimals int    `json:"decimals"`
-			Symbol   string `json:"symbol"`
-			Icon     string `json:"icon"`
-		} `json:"tokenIn"`
-		TokenOut struct {
-			Address  string `json:"address"`
-			Name     string `json:"name"`
-			Decimals int    `json:"decimals"`
-			Symbol   string `json:"symbol"`
-			Icon     string `json:"icon"`
-		} `json:"tokenOut"`
-		TotalAmountIn  string `json:"totalAmountIn"`
-		TotalAmountOut string `json:"totalAmountOut"`
-		Bridge         string `json:"bridge"`
-	}{
-		ChainId:        constants.ChainIDOfChainPool,
-		TokenIn:        token,
-		TokenOut:       token,
-		TotalAmountIn:  amount,
-		TotalAmountOut: amount,
-		Bridge:         constants.ExchangeNameFlushExchange,
-	}
-
-	routes := []*RouteResponseData{
-		{
-			GasFee: struct {
-				Amount string `json:"amount"`
-				Symbol string `json:"symbol"`
-			}{
-				Amount: constants.LocalRouteGasFee,
-				Symbol: constants.NativeSymbolOfChainPool,
-			},
-			Hash:     constants.LocalRouteHash,
-			SrcChain: chin,
-			DstChain: chin,
-		},
-	}
-	return routes
-}
+//func getLocalRoutes(tokenAddress, amount string) []*RouteResponseData {
+//	token := struct {
+//		Address  string `json:"address"`
+//		Name     string `json:"name"`
+//		Decimals int    `json:"decimals"`
+//		Symbol   string `json:"symbol"`
+//		Icon     string `json:"icon"`
+//	}{
+//		Address:  constants.USDTOfChainPool,
+//		Name:     "Tether USD",
+//		Decimals: constants.USDTDecimalNumberOfChainPool,
+//		Symbol:   "USDT",
+//		Icon:     "https://files.mapprotocol.io/bridge/usdt.png",
+//	}
+//
+//	if strings.ToLower(tokenAddress) == strings.ToLower(constants.WBTCOfChainPool) {
+//		token = struct {
+//			Address  string `json:"address"`
+//			Name     string `json:"name"`
+//			Decimals int    `json:"decimals"`
+//			Symbol   string `json:"symbol"`
+//			Icon     string `json:"icon"`
+//		}{
+//			Address:  constants.WBTCOfChainPool,
+//			Name:     "Bitcoin",
+//			Decimals: constants.BTCDecimalNumberOfChainPool,
+//			Symbol:   "BTC",
+//			Icon:     "https://map-static-file.s3.amazonaws.com/mapSwap/merlin/0x0000000000000000000000000000000000000000.jpg",
+//		}
+//	}
+//	chin := struct {
+//		ChainId string `json:"chainId"`
+//		TokenIn struct {
+//			Address  string `json:"address"`
+//			Name     string `json:"name"`
+//			Decimals int    `json:"decimals"`
+//			Symbol   string `json:"symbol"`
+//			Icon     string `json:"icon"`
+//		} `json:"tokenIn"`
+//		TokenOut struct {
+//			Address  string `json:"address"`
+//			Name     string `json:"name"`
+//			Decimals int    `json:"decimals"`
+//			Symbol   string `json:"symbol"`
+//			Icon     string `json:"icon"`
+//		} `json:"tokenOut"`
+//		TotalAmountIn  string `json:"totalAmountIn"`
+//		TotalAmountOut string `json:"totalAmountOut"`
+//		Bridge         string `json:"bridge"`
+//	}{
+//		ChainId:        constants.ChainIDOfChainPool,
+//		TokenIn:        token,
+//		TokenOut:       token,
+//		TotalAmountIn:  amount,
+//		TotalAmountOut: amount,
+//		Bridge:         constants.ExchangeNameFlushExchange,
+//	}
+//
+//	routes := []*RouteResponseData{
+//		{
+//			GasFee: struct {
+//				Amount string `json:"amount"`
+//				Symbol string `json:"symbol"`
+//			}{
+//				Amount: constants.LocalRouteGasFee,
+//				Symbol: constants.NativeSymbolOfChainPool,
+//			},
+//			Hash:     constants.LocalRouteHash,
+//			SrcChain: chin,
+//			DstChain: chin,
+//		},
+//	}
+//	return routes
+//}
