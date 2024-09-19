@@ -153,6 +153,7 @@ func HandlerEvm2Sol() {
 		Status:   dao.OrderStatusTxConfirmed,
 	}
 	endpoint := getEndpoint()
+	fmt.Println("endpoint ---------------- ", endpoint)
 	client := rpc.New(endpoint)
 
 	endpointCfg := viper.GetStringMapString("endpoints")
