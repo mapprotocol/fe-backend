@@ -379,7 +379,7 @@ func FilterSol2Evm() {
 			toToken := common.BytesToAddress(convert2Bytes(toTokenStr[:20]))
 
 			receiverTokenStr := logData["receiver"].([]interface{})
-			receiver := common.BytesToAddress(convert2Bytes(receiverTokenStr))
+			receiver := common.BytesToAddress(convert2Bytes(receiverTokenStr[:20]))
 
 			//tokenAmountStr := logData["tokenAmount"].(string)
 			//tokenAmount, ok := big.NewInt(0).SetString(tokenAmountStr, 16)
