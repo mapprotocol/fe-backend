@@ -244,11 +244,13 @@ func HandlerEvm2Sol() {
 				continue
 			}
 
+			fmt.Println(" data ------------------------ 444 ", sig)
 			update := &dao.SolOrder{
 				Stage:     dao.OrderStag2,
 				Status:    dao.OrderStatusTxSent,
 				OutTxHash: sig.String(),
 			}
+			fmt.Println(" data ------------------------ 555 ", sig)
 			if err := dao.NewSolOrderWithID(o.ID).Updates(update); err != nil {
 				log.Logger().WithField("update", utils.JSON(update)).WithField("error", err.Error()).Error("failed to update sol order status")
 				alarm.Slack(context.Background(), "failed to update sol order status")
