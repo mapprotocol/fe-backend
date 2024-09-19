@@ -352,6 +352,20 @@ func FilterSol2Evm() {
 				continue
 			}
 
+			amountOutStr := logData["amountOut"].(string)
+			amountOut, ok := big.NewInt(0).SetString(amountOutStr, 16)
+			if !ok {
+				fields := map[string]interface{}{
+					"logID":        lg.Id,
+					"chainID":      chainID,
+					"amountOutStr": amountOutStr,
+				}
+				log.Logger().WithFields(fields).Error("parse amountOut failed")
+				alarm.Slack(context.Background(), "parse amountOut failed, str("+amountOutStr+")")
+				UpdateLogID(chainID, topic, lg.Id)
+				continue
+			}
+
 			orderIdStr := logData["orderId"].(string)
 			orderId := big.NewInt(0).SetBytes(common.Hex2Bytes(strings.TrimPrefix(orderIdStr, "ff")))
 
@@ -367,19 +381,19 @@ func FilterSol2Evm() {
 			receiverTokenStr := logData["receiver"].([]interface{})
 			receiver := common.BytesToAddress(convert2Bytes(receiverTokenStr))
 
-			tokenAmountStr := logData["tokenAmount"].(string)
-			tokenAmount, ok := big.NewInt(0).SetString(tokenAmountStr, 16)
-			if !ok {
-				fields := map[string]interface{}{
-					"logID":          lg.Id,
-					"chainID":        chainID,
-					"tokenAmountStr": tokenAmountStr,
-				}
-				log.Logger().WithFields(fields).Error("parse tokenAmount failed")
-				alarm.Slack(context.Background(), "parse tokenAmount failed, str("+tokenAmountStr+")")
-				UpdateLogID(chainID, topic, lg.Id)
-				continue
-			}
+			//tokenAmountStr := logData["tokenAmount"].(string)
+			//tokenAmount, ok := big.NewInt(0).SetString(tokenAmountStr, 16)
+			//if !ok {
+			//	fields := map[string]interface{}{
+			//		"logID":          lg.Id,
+			//		"chainID":        chainID,
+			//		"tokenAmountStr": tokenAmountStr,
+			//	}
+			//	log.Logger().WithFields(fields).Error("parse tokenAmount failed")
+			//	alarm.Slack(context.Background(), "parse tokenAmount failed, str("+tokenAmountStr+")")
+			//	UpdateLogID(chainID, topic, lg.Id)
+			//	continue
+			//}
 
 			afterBalanceStr := logData["afterBalance"].(string)
 			afterBalance, ok := big.NewInt(0).SetString(afterBalanceStr, 16)
@@ -390,7 +404,7 @@ func FilterSol2Evm() {
 					"afterBalanceStr": afterBalanceStr,
 				}
 				log.Logger().WithFields(fields).Error("parse tokenAmount failed")
-				alarm.Slack(context.Background(), "parse tokenAmount failed, str("+tokenAmountStr+")")
+				alarm.Slack(context.Background(), "parse tokenAmount failed, str("+afterBalanceStr+")")
 				UpdateLogID(chainID, topic, lg.Id)
 				continue
 			}
@@ -416,7 +430,7 @@ func FilterSol2Evm() {
 				DstChain:            toChain.String(),
 				SrcToken:            fromToken,
 				Sender:              from,
-				InAmount:            tokenAmount.String(),
+				InAmount:            amountOut.String(),
 				RelayToken:          params.USDTOfTON,
 				RelayAmount:         relayAmount.String(),
 				DstToken:            toToken.Hex(),
