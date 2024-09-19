@@ -104,7 +104,7 @@ func FilterEventToSol() {
 				continue
 			}
 
-			if onReceived.DstChain.String() == params.SolChainID {
+			if onReceived.DstChain.String() == params.SolChainID || onReceived.DstChain.String() == "1360104473493505" {
 				orderId := make([]byte, 0, 32)
 				for _, v := range onReceived.OrderId {
 					orderId = append(orderId, v)
@@ -116,7 +116,7 @@ func FilterEventToSol() {
 					InAmount:       onReceived.InAmount,
 					RelayToken:     params.USDTOfChainPool,
 					RelayAmount:    onReceived.ChainPoolTokenAmount.String(),
-					DstChain:       onReceived.DstChain.String(),
+					DstChain:       "197710212031", // onReceived.DstChain.String(),
 					DstToken:       string(onReceived.DstToken),
 					Receiver:       string(onReceived.Receiver),
 					Action:         dao.OrderActionFromEVM,
