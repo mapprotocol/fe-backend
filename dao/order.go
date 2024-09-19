@@ -129,3 +129,8 @@ func (o *BitcoinOrder) Find(ext *QueryExtra, pager Pager) (list []*BitcoinOrder,
 	err = tx.Find(&list).Error
 	return list, count, err
 }
+
+func (o *BitcoinOrder) GetOldest10ByID(id uint64, limit int) (list []*BitcoinOrder, err error) {
+	err = db.GetDB().Where(o).Where("id > ?", id).Limit(limit).Find(&list).Error
+	return list, err
+}

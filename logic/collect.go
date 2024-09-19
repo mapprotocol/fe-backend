@@ -486,7 +486,7 @@ func getWithdrawOrders(limit int, lastOrderID uint64, network *chaincfg.Params) 
 		Stage:  dao.OrderStag1,
 		Status: dao.OrderStatusTxConfirmed,
 	}
-	gotOrders, _, err := order.Find(nil, dao.Paginate(1, limit))
+	gotOrders, err := order.GetOldest10ByID(lastOrderID, limit)
 	if err != nil {
 		return nil, lastOrderID, err
 	}
@@ -517,7 +517,7 @@ func getWithdrawOrders(limit int, lastOrderID uint64, network *chaincfg.Params) 
 		})
 	}
 	if len(gotOrders) == 0 {
-		lastOrderID = 1
+		lastOrderID = 0
 	}
 
 	return orders, lastOrderID, nil
@@ -1042,7 +1042,7 @@ func RunBtcWithdraw(cfg *CollectCfg) error {
 	ticker := time.NewTicker(2 * time.Minute)
 	defer ticker.Stop()
 
-	maxOrderID := uint64(1)
+	maxOrderID := uint64(0)
 
 	for {
 		select {
