@@ -23,12 +23,15 @@ import (
 	"github.com/mapprotocol/fe-backend/third-party/butter"
 	"github.com/mapprotocol/fe-backend/third-party/filter"
 	"github.com/mapprotocol/fe-backend/third-party/tonrouter"
+	"github.com/mapprotocol/fe-backend/utils/alarm"
 	"github.com/mapprotocol/fe-backend/utils/tx"
 )
 
 func main() {
 	// init config
 	config.Init()
+
+	alarm.ValidateEnv()
 
 	tips := "Enter the chain pool manager password on the EVM chain: "
 	privateKey, err := GetWalletKey(tips, viper.GetStringMapString("chainPool")["keystore"])

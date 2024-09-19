@@ -57,7 +57,7 @@ func Slack(ctx context.Context, msg string) {
 	})
 	if err != nil {
 		params := map[string]interface{}{
-			"env":   Env,
+			"env":   env,
 			"msg":   msg,
 			"error": err.Error(),
 		}
