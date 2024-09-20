@@ -110,13 +110,14 @@ func FilterEventToSol() {
 					orderId = append(orderId, v)
 				}
 				order := &dao.SolOrder{
+					SrcHash:        lg.TxHash,
 					SrcChain:       onReceived.SrcChain.String(),
 					SrcToken:       common.BytesToAddress(onReceived.SrcToken).String(),
 					Sender:         "0x" + common.Bytes2Hex(onReceived.Sender),
 					InAmount:       onReceived.InAmount,
 					RelayToken:     params.USDTOfChainPool,
 					RelayAmount:    onReceived.ChainPoolTokenAmount.String(),
-					DstChain:       "197710212031", // onReceived.DstChain.String(),
+					DstChain:       onReceived.DstChain.String(), // onReceived.DstChain.String(),
 					DstToken:       string(onReceived.DstToken),
 					Receiver:       string(onReceived.Receiver),
 					Action:         dao.OrderActionFromEVM,
@@ -152,12 +153,10 @@ func HandlerEvm2Sol() {
 		DstChain: params.SolChainID,
 		Status:   dao.OrderStatusTxConfirmed,
 	}
-	endpoint := getEndpoint()
-	fmt.Println("endpoint ---------------- ", endpoint)
-	client := rpc.New(endpoint)
-
+	//endpoint := getEndpoint()
 	endpointCfg := viper.GetStringMapString("endpoints")
 	solCfg := viper.GetStringMapString("sol")
+	client := rpc.New(endpointCfg["solana"])
 	routerPri, err := solana.PrivateKeyFromBase58(solCfg["pri"])
 	if err != nil {
 		panic(err)
@@ -189,39 +188,37 @@ func HandlerEvm2Sol() {
 				id = o.ID + 1
 			}
 
+			log.Logger().Info("HandlerEvm2Sol srcHash =", o.SrcHash)
 			ele := o
 			data, err := requestSolButter(endpointCfg["butter"], routerPri.PublicKey().String(), ele)
 			if err != nil {
-				log.Logger().WithField("error", err.Error()).Error("failed to request sol swap")
-				alarm.Slack(context.Background(), "failed to request sol swap")
+				log.Logger().WithField("id", o.ID).WithField("error", err.Error()).Error("failed to request sol butter")
+				alarm.Slack(context.Background(), "failed to request sol butter")
 				time.Sleep(5 * time.Second)
 				continue
 			}
 
-			fmt.Println(" data ------------------------ ", data)
 			bbs, err := hex.DecodeString(data)
 			if err != nil {
-				log.Logger().WithField("error", err.Error()).Error("failed to hex data")
+				log.Logger().WithField("id", o.ID).WithField("error", err.Error()).Error("failed to hex data")
 				alarm.Slack(context.Background(), "failed to hex data")
 				time.Sleep(5 * time.Second)
 				continue
 			}
-			fmt.Println(" data ------------------------ 1111 ")
 			trx, err := solana.TransactionFromBytes(bbs)
 			if err != nil {
-				log.Logger().WithField("error", err.Error()).Error("failed to get trx")
+				log.Logger().WithField("id", o.ID).WithField("error", err.Error()).Error("failed to get trx")
 				alarm.Slack(context.Background(), "failed to get trx")
 				time.Sleep(5 * time.Second)
 				continue
 			}
 			resp, err := client.GetLatestBlockhash(context.Background(), rpc.CommitmentFinalized)
 			if err != nil {
-				log.Logger().WithField("error", err.Error()).Error("failed to getLatestBlockHash")
+				log.Logger().WithField("id", o.ID).WithField("error", err.Error()).Error("failed to getLatestBlockHash")
 				alarm.Slack(context.Background(), "failed to getLatestBlockHash")
 				time.Sleep(5 * time.Second)
 				continue
 			}
-			fmt.Println(" data ------------------------ 222 ")
 			trx.Message.RecentBlockhash = resp.Value.Blockhash
 			// sign
 			_, err = trx.Sign(func(key solana.PublicKey) *solana.PrivateKey {
@@ -231,12 +228,11 @@ func HandlerEvm2Sol() {
 				return nil
 			})
 			if err != nil {
-				log.Logger().WithField("error", err.Error()).Error("failed to sign trx")
+				log.Logger().WithField("id", o.ID).WithField("error", err.Error()).Error("failed to sign trx")
 				alarm.Slack(context.Background(), "failed to sign trx")
 				time.Sleep(5 * time.Second)
 				continue
 			}
-			fmt.Println(" data ------------------------ 333 ")
 			sig, err := client.SendTransaction(context.TODO(), trx)
 			if err != nil {
 				log.Logger().WithField("error", err.Error()).Error("failed to send trx")
@@ -245,15 +241,13 @@ func HandlerEvm2Sol() {
 				continue
 			}
 
-			fmt.Println(" data ------------------------ 444 ", sig)
 			update := &dao.SolOrder{
 				Stage:     dao.OrderStag2,
 				Status:    dao.OrderStatusTxSent,
 				OutTxHash: sig.String(),
 			}
-			fmt.Println(" data ------------------------ 555 ", sig)
 			if err := dao.NewSolOrderWithID(o.ID).Updates(update); err != nil {
-				log.Logger().WithField("update", utils.JSON(update)).WithField("error", err.Error()).Error("failed to update sol order status")
+				log.Logger().WithField("id", o.ID).WithField("update", utils.JSON(update)).WithField("error", err.Error()).Error("failed to update sol order status")
 				alarm.Slack(context.Background(), "failed to update sol order status")
 				time.Sleep(5 * time.Second)
 				continue
@@ -387,20 +381,6 @@ func FilterSol2Evm() {
 
 			receiverTokenStr := logData["receiver"].([]interface{})
 			receiver := common.BytesToAddress(convert2Bytes(receiverTokenStr[:20]))
-
-			//tokenAmountStr := logData["tokenAmount"].(string)
-			//tokenAmount, ok := big.NewInt(0).SetString(tokenAmountStr, 16)
-			//if !ok {
-			//	fields := map[string]interface{}{
-			//		"logID":          lg.Id,
-			//		"chainID":        chainID,
-			//		"tokenAmountStr": tokenAmountStr,
-			//	}
-			//	log.Logger().WithFields(fields).Error("parse tokenAmount failed")
-			//	alarm.Slack(context.Background(), "parse tokenAmount failed, str("+tokenAmountStr+")")
-			//	UpdateLogID(chainID, topic, lg.Id)
-			//	continue
-			//}
 
 			afterBalanceStr := logData["afterBalance"].(string)
 			afterBalance, ok := big.NewInt(0).SetString(afterBalanceStr, 16)
@@ -776,7 +756,7 @@ func requestSolButter(host, router string, param *dao.SolOrder) (string, error) 
 		log.Logger().WithField("err", err).Error("failed to readAll body")
 		return "", err
 	}
-	fmt.Println("requestSolButter data ", string(body))
+	//fmt.Println("requestSolButter data ", string(body))
 	data := SolButterData{}
 	err = json.Unmarshal(body, &data)
 	if err != nil {
@@ -786,7 +766,59 @@ func requestSolButter(host, router string, param *dao.SolOrder) (string, error) 
 	if data.Errno != 0 {
 		return "", fmt.Errorf("code %d, mess:%s", data.Errno, data.Message)
 	}
+
+	if data.Data[0].Error.Response.Errno != 0 {
+		if data.Data[0].Error.Response.Message == "Invalid min amount out" {
+			swapData, err := requestRouteAndSwap(param)
+			if err != nil {
+				return "", fmt.Errorf("invalid min amount out failed to requestRouteAndSwap, err:%vv", err)
+			}
+			min, ok := big.NewFloat(0).SetString(swapData.Data[0].Route.MinAmountOut.Amount)
+			if !ok {
+				return "", fmt.Errorf("invalid min amount out, swapData MinAmountOut not float64")
+			}
+			slippage, err := convertSol(swapData.Data[0].Route.MinAmountOut.Symbol, min)
+			if err != nil {
+				return "", fmt.Errorf("invalid min amount out, swapData MinAmountOut convert failed, err:%v", err)
+			}
+			fmt.Println("slippage ---------------------- ", slippage)
+			//time.Sleep(time.Minute * 10)
+			param.Slippage = slippage
+			return requestSolButter(host, router, param)
+		}
+		return "", fmt.Errorf("code %d, mess:%s", data.Data[0].Error.Response.Errno, data.Data[0].Error.Response.Message)
+	}
+
 	return data.Data[0].TxParam[0].Data, nil
+}
+
+func convertSol(symbol string, data *big.Float) (uint64, error) {
+	switch strings.ToLower(symbol) {
+	case "sol":
+		data = data.Mul(data, big.NewFloat(1e9))
+	}
+	ret, _ := data.Int64()
+	return uint64(ret), nil
+}
+
+// amount=10&slippage=300&receiver=FjgdFp1zt8A2fttq71fprwjbnJvRYEg2VLoQaLxTdFgR&from=0xa8EE0cf2Af6fE245090801d36E69281BC6610F29&referrer=0xa8EE0cf2Af6fE245090801d36E69281BC6610F29&rateOrNativeFee=50&feeType=1
+func requestRouteAndSwap(param *dao.SolOrder) (*butter.RouterAndSwapResponse, error) {
+	before, _ := big.NewFloat(0).SetString(param.RelayAmount)
+	amount := before.Quo(before, big.NewFloat(params.USDTDecimalOfEthereum)).String()
+	request := &butter.RouterAndSwapRequest{
+		FromChainID:     params.ChainIDOfMaticPool,
+		ToChainID:       param.DstChain,
+		Amount:          amount, // decimal
+		TokenInAddress:  params.USDTOfChainPool,
+		TokenOutAddress: param.DstToken,
+		Type:            SwapType,
+		Slippage:        300,
+		From:            param.Sender,
+		Receiver:        param.Receiver,
+		Referrer:        sender,
+		RateOrNativeFee: "50",
+	}
+	return butter.RouteAndSwapSol(request)
 }
 
 type SolButterData struct {
@@ -856,5 +888,14 @@ type SolButterData struct {
 			Value   string `json:"value"`
 			Method  string `json:"method"`
 		} `json:"txParam"`
+		Error struct {
+			Response struct {
+				Errno   int    `json:"errno"`
+				Message string `json:"message"`
+			} `json:"response"`
+			Status  int    `json:"status"`
+			Message string `json:"message"`
+			Name    string `json:"name"`
+		} `json:"error"`
 	} `json:"data"`
 }

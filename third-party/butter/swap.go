@@ -31,6 +31,8 @@ type RouterAndSwapRequest struct {
 	Slippage        uint64 `json:"slippage"`
 	From            string `json:"from"`
 	Receiver        string `json:"receiver"`
+	Referrer        string `json:"referrer"`
+	RateOrNativeFee string `json:"rateOrNativeFee"`
 }
 
 type RouterRequest struct {
@@ -60,6 +62,12 @@ type RouterAndSwapResponse struct {
 	Errno   int    `json:"errno"`
 	Message string `json:"message"`
 	Data    []struct {
+		Route struct {
+			MinAmountOut struct {
+				Amount string `json:"amount"`
+				Symbol string `json:"symbol"`
+			} `json:"minAmountOut"`
+		}
 		TxParam struct {
 			Errno   int       `json:"errno"`
 			Message string    `json:"message"`
@@ -207,6 +215,48 @@ func RouteAndSwap(req *RouterAndSwapRequest) (*TxData, error) {
 		)
 	}
 	return response.Data[0].TxParam.Data[0], nil
+}
+
+func RouteAndSwapSol(req *RouterAndSwapRequest) (*RouterAndSwapResponse, error) {
+	params := fmt.Sprintf(
+		"fromChainId=%s&toChainId=%s&amount=%s&tokenInAddress=%s&tokenOutAddress=%s&type=%s&slippage=%d&from=%s&receiver=%s",
+		req.FromChainID, req.ToChainID, req.Amount, req.TokenInAddress, req.TokenOutAddress, req.Type, req.Slippage, req.From, req.Receiver,
+	)
+	if req.Referrer != "" {
+		params = fmt.Sprintf("%s&referrer=%s", params, req.Referrer)
+	}
+	if req.RateOrNativeFee != "" {
+		params = fmt.Sprintf("%s&rateOrNativeFee=%s", params, req.RateOrNativeFee)
+	}
+	url := fmt.Sprintf("%s%s?%s", Domain, PathRouteAndSwap, params)
+	//fmt.Println("url ------------ ", url)
+	log.Logger().Debug(fmt.Sprintf("route and swap url: %s", url))
+	ret, err := uhttp.Get(url, nil, nil)
+	if err != nil {
+		return nil, reqerror.NewExternalRequestError(
+			url,
+			reqerror.WithError(err),
+		)
+	}
+	response := RouterAndSwapResponse{}
+	if err := json.Unmarshal(ret, &response); err != nil {
+		return nil, err
+	}
+	if response.Errno != SuccessCode {
+		return nil, reqerror.NewExternalRequestError(
+			url,
+			reqerror.WithCode(strconv.Itoa(response.Errno)),
+			reqerror.WithMessage(response.Message),
+		)
+	}
+	if response.Data[0].TxParam.Errno != SuccessCode {
+		return nil, reqerror.NewExternalRequestError(
+			url,
+			reqerror.WithCode(strconv.Itoa(response.Errno)),
+			reqerror.WithMessage(response.Message),
+		)
+	}
+	return &response, nil
 }
 
 func Route(req *RouterRequest) (*RouteData, error) {

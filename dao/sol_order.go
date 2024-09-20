@@ -10,6 +10,7 @@ const TableNameSolOrder = "sol_order"
 
 type SolOrder struct {
 	ID             uint64    `gorm:"column:id;type:bigint(20);primaryKey;autoIncrement:true" json:"id"`
+	SrcHash        string    `gorm:"column:src_hash;type:varchar(255)" json:"src_hash"`
 	SrcChain       string    `gorm:"column:src_chain;type:varchar(255)" json:"src_chain"`
 	SrcToken       string    `gorm:"column:src_token;type:varchar(255)" json:"src_token"`
 	Sender         string    `gorm:"column:sender;type:varchar(255)" json:"sender"`
