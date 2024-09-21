@@ -180,7 +180,8 @@ func HandlerEvm2Sol() {
 		length := len(orders)
 		if length == 0 {
 			time.Sleep(10 * time.Second)
-			break
+			log.Logger().Info("HandlerEvm2Sol is running, wait new transaction")
+			continue
 		}
 
 		for i, o := range orders {
