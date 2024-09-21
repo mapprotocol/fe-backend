@@ -418,7 +418,7 @@ func FilterSol2Evm() {
 				SrcToken:            fromToken,
 				Sender:              from,
 				InAmount:            amountOut.String(),
-				RelayToken:          params.USDTOfTON,
+				RelayToken:          params.USDCOfSOL,
 				RelayAmount:         relayAmount.String(),
 				DstToken:            toToken.Hex(),
 				Receiver:            receiver.Hex(),
@@ -516,6 +516,7 @@ func HandleSol2EvmButter() {
 					continue
 				}
 
+				fmt.Println("order ------------------- ", "0xff"+common.Bytes2Hex(big.NewInt(0).SetUint64(o.OrderIDFromContract).Bytes()))
 				// step2: 请求 evmCrossInSwap接口，获取交易信息
 				swapReq := butter.EvmCrossInSwapRequest{
 					Hash:         data.Data[0].Hash,
@@ -600,7 +601,7 @@ func HandleSol2EvmButter() {
 
 func HandleSol2EvmFinish() {
 	order := dao.Order{
-		SrcChain: params.TONChainID,
+		SrcChain: params.SolChainID,
 		Action:   dao.OrderActionToEVM,
 		Stage:    dao.OrderStag2,
 		Status:   dao.OrderStatusTxSent,
@@ -636,16 +637,16 @@ func HandleSol2EvmFinish() {
 				if isMultiChainPool && o.SrcChain == params.ChainIDOfEthereum {
 					chainInfo, err = dao.NewChainPoolWithChainID(params.ChainIDOfEthereum).First()
 					if err != nil {
-						log.Logger().WithField("chainID", params.ChainIDOfChainPool).WithField("error", err.Error()).Error("failed to get chain info")
+						log.Logger().WithField("chainID", params.ChainIDOfMaticPool).WithField("error", err.Error()).Error("failed to get chain info")
 						alarm.Slack(context.Background(), "failed to get chain info")
 						time.Sleep(5 * time.Second)
 						continue
 
 					}
 				} else {
-					chainInfo, err = dao.NewChainPoolWithChainID(params.ChainIDOfChainPool).First()
+					chainInfo, err = dao.NewChainPoolWithChainID(params.ChainIDOfMaticPool).First()
 					if err != nil {
-						log.Logger().WithField("chainID", params.ChainIDOfChainPool).WithField("error", err.Error()).Error("failed to get chain info")
+						log.Logger().WithField("chainID", params.ChainIDOfMaticPool).WithField("error", err.Error()).Error("failed to get chain info")
 						alarm.Slack(context.Background(), "failed to get chain info")
 						time.Sleep(5 * time.Second)
 						continue
