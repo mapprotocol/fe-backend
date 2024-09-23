@@ -1,7 +1,7 @@
 package params
 
 const (
-	SolChainID = "197710212031"
+	SolChainID = "1360108768460801"
 )
 
 const (

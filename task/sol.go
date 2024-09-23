@@ -476,7 +476,7 @@ func HandleSol2EvmButter() {
 
 			length := len(orders)
 			if length == 0 {
-				log.Logger().WithField("time", time.Now()).Info("not found confirmed status order from ton to evm")
+				log.Logger().Info("HandleSol2EvmButter is running")
 				time.Sleep(10 * time.Second)
 				break
 			}
