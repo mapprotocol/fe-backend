@@ -564,7 +564,7 @@ func GetEVMToBitcoinRoute(req *entity.RouteRequest, amount decimal.Decimal, feeR
 		protocolFees = calcProtocolFees(amount, decimal.NewFromFloat(float64(feeRatio)/10000.0)).StringFixedBank(8)
 	}
 
-	bitcoinRoute := GetBitcoinLocalRoutes(amountDecimal.StringFixedBank(8))
+	bitcoinRoute := GetBitcoinLocalRoutes(amountDecimal.Sub(bridgeFees).StringFixedBank(8))
 	ret = make([]*entity.RouteResponse, 0, len(butterRoutes))
 	in := bitcoinRoute.SrcChain.Route[0].Path[0].TokenIn
 	tonTokenIn = entity.Token{
