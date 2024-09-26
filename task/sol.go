@@ -422,6 +422,7 @@ func FilterSol2Evm() {
 				Action:              dao.OrderActionToEVM,
 				Stage:               dao.OrderStag1,
 				Status:              dao.OrderStatusTxConfirmed,
+				InTxHash:            lg.TxHash,
 				MinAmountOut:        minAmountOut.String(),
 			}
 
