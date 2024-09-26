@@ -162,7 +162,7 @@ func OrderDetailByOrderID(c *gin.Context) {
 			resp.Error(c, code)
 			return
 		}
-	} else if req.ChainID == constants.TONChainID {
+	} else if req.ChainID == constants.TONChainID || req.ChainID == constants.SOLChainID {
 		ret, code = logic.OrderDetailByOrderID(req.OrderID)
 		if code != resp.CodeSuccess {
 			resp.Error(c, code)

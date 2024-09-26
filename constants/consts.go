@@ -27,6 +27,7 @@ const (
 
 const (
 	TONChainID      = "1360104473493505"
+	SOLChainID      = "1360108768460801"
 	BTCChainID      = "313230561203979757" // common.BytesToAddress([]byte("BTCChainID")).Big().String()[:18]
 	BTCTokenAddress = "0x0000000000000000000000000000000000000000"
 )
