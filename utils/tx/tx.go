@@ -27,6 +27,21 @@ var (
 	feRouterABI abi.ABI
 )
 
+// DeliverParam represents a deliver function parameter.
+// Solidity: function deliverAndSwap((bytes32,address,address,uint256,uint256,uint256,uint256,address,bytes,bytes) param) payable returns()
+type DeliverParam struct {
+	OrderId     [32]byte
+	Receiver    common.Address
+	Token       common.Address
+	Amount      *big.Int
+	FromChain   *big.Int
+	ToChain     *big.Int
+	Fee         *big.Int
+	FeeReceiver common.Address
+	From        []byte
+	ButterData  []byte
+}
+
 func init() {
 	var err error
 	feRouterABI, err = abi.JSON(strings.NewReader(params.FeRouterABI))
@@ -65,7 +80,7 @@ func (t *Transactor) Deliver(orderID [32]byte, token common.Address, amount *big
 	return txHash, nil
 }
 
-func (t *Transactor) DeliverAndSwap(orderID [32]byte, initiator common.Address, token common.Address, amount *big.Int, swapData []byte, bridgeData []byte, feeData []byte, fee *big.Int, feeReceiver common.Address, value *big.Int) (common.Hash, error) {
+func (t *Transactor) DeliverAndSwap(deliverParam *DeliverParam, value *big.Int) (common.Hash, error) {
 	var txHash common.Hash
 
 	for i := 0; i < RetryTimes; i++ {
@@ -74,9 +89,9 @@ func (t *Transactor) DeliverAndSwap(orderID [32]byte, initiator common.Address, 
 			return common.Hash{}, err
 		}
 
-		input, err := pack(feRouterABI, "deliverAndSwap", orderID, initiator, token, amount, swapData, bridgeData, feeData, fee, feeReceiver)
+		input, err := pack(feRouterABI, "deliverAndSwap0", deliverParam)
 		if err != nil {
-			log.Logger().Error("failed to pack deliver and swap params")
+			log.Logger().WithField("error", err).Error("failed to pack deliver and swap params")
 			return common.Hash{}, err
 		}
 		//opts.GasPrice = gasPrice

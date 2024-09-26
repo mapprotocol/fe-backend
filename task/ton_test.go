@@ -313,7 +313,7 @@ func TestNewSeedWithPassword(t *testing.T) {
 
 func TestSendTransaction(t *testing.T) {
 	words := "cushion bean assault oven hybrid account lunch festival valid soap history grant horn good decline tourist shadow very eye language person venture term shove"
-	password := "J%A7k7sGXe4i58G#fN"
+	password := "1234"
 	tonclient.Init(words, password)
 
 	log.Println("wallet address:", tonclient.Wallet().WalletAddress())

@@ -13,7 +13,8 @@ import (
 const SuccessCode = 0
 
 const (
-	PathBridgeSwap = "/v2/bridger/swap"
+	PathBridgeSwap   = "/v2/bridger/swap"
+	PathBridgeStatus = "/v2/bridger/status"
 )
 
 var Domain string
@@ -23,6 +24,14 @@ type BridgeSwapResponse struct {
 	Message string `json:"message"`
 	Data    struct {
 		TxParams *TxParams `json:"txParams"`
+	} `json:"data"`
+}
+
+type BridgeStatusResponse struct {
+	Errno   int    `json:"errno"`
+	Message string `json:"message"`
+	Data    *struct {
+		Amount string `json:"amount"`
 	} `json:"data"`
 }
 
@@ -70,4 +79,32 @@ func BridgeSwap(req *BridgeSwapRequest) (*TxParams, error) {
 		)
 	}
 	return response.Data.TxParams, nil
+}
+
+func BridgeStatus(orderID uint64) (string, error) {
+	params := fmt.Sprintf("orderId=%d", orderID)
+	url := fmt.Sprintf("%s%s?%s", Domain, PathBridgeStatus, params)
+	log.Logger().Debug(fmt.Sprintf("bridge status url: %s", url))
+	ret, err := uhttp.Get(url, nil, nil)
+	if err != nil {
+		return "0", reqerror.NewExternalRequestError(
+			url,
+			reqerror.WithError(err),
+		)
+	}
+	response := BridgeStatusResponse{}
+	if err := json.Unmarshal(ret, &response); err != nil {
+		return "0", err
+	}
+	if response.Errno != SuccessCode {
+		return "0", reqerror.NewExternalRequestError(
+			url,
+			reqerror.WithCode(strconv.Itoa(response.Errno)),
+			reqerror.WithMessage(response.Message),
+		)
+	}
+	if response.Data == nil {
+		return "0", nil // todo
+	}
+	return response.Data.Amount, nil
 }

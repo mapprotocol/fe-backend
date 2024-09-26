@@ -1,7 +1,9 @@
 package utils
 
 import (
+	"encoding/base64"
 	"encoding/binary"
+	"encoding/hex"
 	"encoding/json"
 	"strings"
 )
@@ -34,4 +36,12 @@ func TrimHexPrefix(s string) string {
 		return s[2:]
 	}
 	return s
+}
+
+func Base64ToHex(base64Str string) (string, error) {
+	decodedBytes, err := base64.StdEncoding.DecodeString(base64Str)
+	if err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(decodedBytes), nil
 }

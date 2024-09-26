@@ -129,13 +129,12 @@ func (o *Order) Find(ext *QueryExtra, pager Pager) (list []*Order, count int64, 
 	return list, count, err
 }
 
-func (o *Order) GetOldest10ByStatus(id uint64, action, stage, status uint8) (list []*Order, err error) {
-	err = db.GetDB().Where(o).Where("id >= ?", id).Where("action = ?", action).
-		Where("stage = ?", stage).Where("status = ?", status).Limit(OldestLimit).Find(&list).Error
+func (o *Order) GetOldest10ByID(id uint64) (list []*Order, err error) {
+	err = db.GetDB().Where(o).Where("id >= ?", id).Order("id asc").Limit(OldestLimit).Find(&list).Error
 	return list, err
 }
 
-func (o *Order) GetOldest10ByID(id uint64) (list []*Order, err error) {
-	err = db.GetDB().Where(o).Where("id >= ?", id).Limit(OldestLimit).Find(&list).Error
-	return list, err
-}
+//func (o *Order) GetOldest10NoOutAmountByID(id uint64) (list []*Order, err error) {
+//	err = db.GetDB().Where(o).Where("id >= ?", id).Where("out_amount = ?", "").Order("id asc").Limit(OldestLimit).Find(&list).Error
+//	return list, err
+//}

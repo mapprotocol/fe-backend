@@ -345,6 +345,18 @@ func HandlePendingOrdersOfFirstStageFromTONToEVM() {
 				srcTokenStr = params.NativeOfTON
 			}
 
+			inTxHash, err := utils.Base64ToHex(lg.TxHash)
+			if err != nil {
+				inTxHash = lg.TxHash
+				fields := map[string]interface{}{
+					"logID":   lg.Id,
+					"chainID": chainID,
+					"topic":   topic,
+					"txHash":  lg.TxHash,
+					"error":   err.Error(),
+				}
+				log.Logger().WithFields(fields).Error("failed to convert tx hash to hex")
+			}
 			//_, afterAmount := deductFees(new(big.Float).SetUint64(relayAmount), FeeRate)
 			bridgeFees, afterAmount := deductTONToEVMBridgeFees(new(big.Int).SetUint64(relayAmount), big.NewInt(BridgeFeeRate))
 			//afterAmountFloat := new(big.Float).Quo(new(big.Float).SetInt(afterAmount), big.NewFloat(params.USDTDecimalOfTON))
@@ -355,6 +367,7 @@ func HandlePendingOrdersOfFirstStageFromTONToEVM() {
 
 			//inAmountFloat := new(big.Float).Quo(new(big.Float).SetUint64(inAmount), big.NewFloat(params.InAmountDecimalOfTON))
 			inAmountFloat := decimal.NewFromUint64(inAmount).Div(decimal.NewFromFloat(params.InAmountDecimalOfTON))
+
 			order := &dao.Order{
 				OrderIDFromContract: orderID,
 				SrcChain:            strconv.FormatUint(srcChain, 10),
@@ -362,6 +375,7 @@ func HandlePendingOrdersOfFirstStageFromTONToEVM() {
 				Sender:              sender.String(),
 				//InAmount:            inAmountFloat.Text('f', params.USDTDecimalNumberOfTON),
 				InAmount:       inAmountFloat.StringFixedBank(params.USDTDecimalNumberOfTON),
+				InTxHash:       inTxHash,
 				BridgeFee:      bridgeFees.Uint64(),
 				RelayToken:     params.USDTOfChainPool,
 				RelayAmountInt: afterAmountWithFixedDecimal.Uint64(),
@@ -512,41 +526,67 @@ func HandleConfirmedOrdersOfFirstStageFromTONToEVM() {
 				//amountInt := relayAmount.BigInt()
 
 				txHash := common.Hash{}
-				orderID := utils.Uint64ToByte32(o.OrderIDFromContract)
-				relayAmountBigInt := convertDecimal(new(big.Int).SetUint64(o.RelayAmountInt), params.FixedDecimalNumber, uint64(usdtDecimalNumber))
-				if o.DstChain == chainIDOfChainPool && strings.ToLower(o.DstToken) == strings.ToLower(usdt) {
-					//if params.WBTCDecimalNumberOfChainPool > params.FixedDecimalNumber {
-					//	exp := new(big.Int).Exp(big.NewInt(10), new(big.Int).SetUint64(params.WBTCDecimalNumberOfChainPool-params.FixedDecimalNumber), nil)
-					//	amountInt = new(big.Int).Mul(amountInt, exp)
-					//} else if params.WBTCDecimalNumberOfChainPool < params.FixedDecimalNumber {
-					//	exp := new(big.Int).Exp(big.NewInt(10), new(big.Int).SetUint64(params.WBTCDecimalNumberOfChainPool-params.FixedDecimalNumber), nil)
-					//	amountInt = new(big.Int).Div(amountInt, exp)
-					//}
+				value := big.NewInt(0)
+				srcChain, ok := new(big.Int).SetString(o.SrcChain, 10)
+				if !ok {
+					log.Logger().WithField("srcChain", o.SrcChain).Error("failed to parse src chain to big int")
+					alarm.Slack(context.Background(), "failed to parse src chain to big int")
+					continue
+				}
 
-					update := &dao.Order{
-						Stage:  dao.OrderStag2,
-						Status: dao.OrderStatusTxPrepareSend,
-					}
-					if err := dao.NewOrderWithID(o.ID).Updates(update); err != nil {
-						fields := map[string]interface{}{
-							"orderId": o.ID,
-							"update":  utils.JSON(update),
-							"error":   err,
-						}
-						log.Logger().WithFields(fields).WithField("error", err.Error()).Error("failed to update order status")
-						alarm.Slack(context.Background(), "failed to update order status")
-						time.Sleep(5 * time.Second)
-						continue
-					}
+				dstChain, ok := new(big.Int).SetString(o.DstChain, 10)
+				if !ok {
+					log.Logger().WithField("dstChain", o.DstChain).Error("failed to parse dst chain to big int")
+					alarm.Slack(context.Background(), "failed to parse dst chain to big int")
+					continue
+				}
 
-					txHash, err = deliver(transactor, common.HexToAddress(usdt), orderID, relayAmountBigInt, common.HexToAddress(o.Receiver), Big0, EmptyAddress)
-					if err != nil {
-						log.Logger().WithField("error", err.Error()).Error("failed to send deliver transaction")
-						alarm.Slack(context.Background(), "failed to send deliver transaction")
-						time.Sleep(5 * time.Second)
-						continue
-					}
-				} else {
+				deliverParam := &tx.DeliverParam{
+					OrderId:     utils.Uint64ToByte32(o.OrderIDFromContract),
+					Receiver:    common.HexToAddress(o.Receiver),
+					Token:       common.HexToAddress(usdt),
+					Amount:      convertDecimal(new(big.Int).SetUint64(o.RelayAmountInt), params.FixedDecimalNumber, uint64(usdtDecimalNumber)),
+					FromChain:   srcChain,
+					ToChain:     dstChain,
+					Fee:         Big0,
+					FeeReceiver: EmptyAddress,
+					From:        []byte(o.Sender),
+					//ButterData:  []byte{},
+				}
+				//if o.DstChain == chainIDOfChainPool && strings.ToLower(o.DstToken) == strings.ToLower(usdt) {
+				//	//if params.WBTCDecimalNumberOfChainPool > params.FixedDecimalNumber {
+				//	//	exp := new(big.Int).Exp(big.NewInt(10), new(big.Int).SetUint64(params.WBTCDecimalNumberOfChainPool-params.FixedDecimalNumber), nil)
+				//	//	amountInt = new(big.Int).Mul(amountInt, exp)
+				//	//} else if params.WBTCDecimalNumberOfChainPool < params.FixedDecimalNumber {
+				//	//	exp := new(big.Int).Exp(big.NewInt(10), new(big.Int).SetUint64(params.WBTCDecimalNumberOfChainPool-params.FixedDecimalNumber), nil)
+				//	//	amountInt = new(big.Int).Div(amountInt, exp)
+				//	//}
+				//
+				//	update := &dao.Order{
+				//		Stage:  dao.OrderStag2,
+				//		Status: dao.OrderStatusTxPrepareSend,
+				//	}
+				//	if err := dao.NewOrderWithID(o.ID).Updates(update); err != nil {
+				//		fields := map[string]interface{}{
+				//			"orderId": o.ID,
+				//			"update":  utils.JSON(update),
+				//			"error":   err,
+				//		}
+				//		log.Logger().WithFields(fields).WithField("error", err.Error()).Error("failed to update order status")
+				//		alarm.Slack(context.Background(), "failed to update order status")
+				//		time.Sleep(5 * time.Second)
+				//		continue
+				//	}
+				//
+				//	//txHash, err = deliver(transactor, common.HexToAddress(usdt), orderID, relayAmountBigInt, common.HexToAddress(o.Receiver), Big0, EmptyAddress)
+				//	//if err != nil {
+				//	//	log.Logger().WithField("error", err.Error()).Error("failed to send deliver transaction")
+				//	//	alarm.Slack(context.Background(), "failed to send deliver transaction")
+				//	//	time.Sleep(5 * time.Second)
+				//	//	continue
+				//	//}
+				//}
+				if o.DstChain != chainIDOfChainPool || strings.ToLower(o.DstToken) != strings.ToLower(usdt) {
 					//relayAmountStr := strconv.FormatFloat(float64(o.RelayAmountInt)/params.FixedDecimalNumber, 'f', params.USDTDecimalNumberOfChainPool, 64)
 					//relayAmountStr := decimal.NewFromUint64(o.RelayAmountInt).Div(decimal.NewFromUint64(params.FixedDecimal)).StringFixedBank(params.USDTDecimalNumberOfChainPool)
 
@@ -589,39 +629,72 @@ func HandleConfirmedOrdersOfFirstStageFromTONToEVM() {
 						continue
 					}
 
-					value, ok := new(big.Int).SetString(utils.TrimHexPrefix(data.Value), 16)
+					butterData, err := EncodeButterData(Initiator, common.HexToAddress(o.DstToken), decodeData.SwapData, decodeData.BridgeData, decodeData.FeeData)
+					if err != nil {
+						log.Logger().WithField("error", err.Error()).Error("failed to encode butter data")
+						alarm.Slack(context.Background(), "failed to encode butter data")
+						continue
+					}
+
+					v, ok := new(big.Int).SetString(utils.TrimHexPrefix(data.Value), 16)
 					if !ok {
 						log.Logger().WithField("value", utils.TrimHexPrefix(data.Value)).Error("failed to parse string to big int")
 						alarm.Slack(context.Background(), "failed to parse string to big int")
 						continue
 					}
+					value = v
+					deliverParam.ButterData = butterData
 
-					update := &dao.Order{
-						Stage:  dao.OrderStag2,
-						Status: dao.OrderStatusTxPrepareSend,
-					}
-					if err := dao.NewOrderWithID(o.ID).Updates(update); err != nil {
-						fields := map[string]interface{}{
-							"orderId": o.ID,
-							"update":  utils.JSON(update),
-							"error":   err,
-						}
-						log.Logger().WithFields(fields).Error("failed to update order status")
-						alarm.Slack(context.Background(), "failed to update order status")
-						time.Sleep(5 * time.Second)
-						continue
-					}
-
-					txHash, err = deliverAndSwap(transactor, common.HexToAddress(usdt), orderID, relayAmountBigInt, decodeData, Big0, EmptyAddress, value)
-					if err != nil {
-						log.Logger().WithField("error", err.Error()).Error("failed to send deliver and swap transaction")
-						alarm.Slack(context.Background(), "failed to send deliver and swap transaction")
-						time.Sleep(5 * time.Second)
-						continue
-					}
+					//update := &dao.Order{
+					//	Stage:  dao.OrderStag2,
+					//	Status: dao.OrderStatusTxPrepareSend,
+					//}
+					//if err := dao.NewOrderWithID(o.ID).Updates(update); err != nil {
+					//	fields := map[string]interface{}{
+					//		"orderId": o.ID,
+					//		"update":  utils.JSON(update),
+					//		"error":   err,
+					//	}
+					//	log.Logger().WithFields(fields).Error("failed to update order status")
+					//	alarm.Slack(context.Background(), "failed to update order status")
+					//	time.Sleep(5 * time.Second)
+					//	continue
+					//}
+					//
+					//txHash, err = deliverAndSwap(transactor, common.HexToAddress(usdt), orderID, relayAmountBigInt, decodeData, Big0, EmptyAddress, value)
+					//if err != nil {
+					//	log.Logger().WithField("error", err.Error()).Error("failed to send deliver and swap transaction")
+					//	alarm.Slack(context.Background(), "failed to send deliver and swap transaction")
+					//	time.Sleep(5 * time.Second)
+					//	continue
+					//}
 				}
 
 				update := &dao.Order{
+					Stage:  dao.OrderStag2,
+					Status: dao.OrderStatusTxPrepareSend,
+				}
+				if err := dao.NewOrderWithID(o.ID).Updates(update); err != nil {
+					fields := map[string]interface{}{
+						"orderId": o.ID,
+						"update":  utils.JSON(update),
+						"error":   err,
+					}
+					log.Logger().WithFields(fields).WithField("error", err.Error()).Error("failed to update order status")
+					alarm.Slack(context.Background(), "failed to update order status")
+					time.Sleep(5 * time.Second)
+					continue
+				}
+
+				txHash, err = deliverAndSwap(transactor, deliverParam, value)
+				if err != nil {
+					log.Logger().WithField("error", err.Error()).Error("failed to send deliver and swap transaction")
+					alarm.Slack(context.Background(), "failed to send deliver and swap transaction")
+					time.Sleep(5 * time.Second)
+					continue
+				}
+
+				update = &dao.Order{
 					Stage:     dao.OrderStag2,
 					Status:    dao.OrderStatusTxSent,
 					OutTxHash: txHash.String(),
@@ -1151,40 +1224,105 @@ func HandlePendingOrdersOfSecondSStageFromEVMToTON() {
 	}
 }
 
-func deliver(transactor *tx.Transactor, token common.Address, orderID [32]byte, amount *big.Int, receiver common.Address, fee *big.Int, feeReceiver common.Address) (txHash common.Hash, err error) {
-	fields := map[string]interface{}{
-		"orderID":     hex.EncodeToString(orderID[:]),
-		"token":       token,
-		"amount":      amount,
-		"receiver":    receiver,
-		"fee":         fee,
-		"feeReceiver": feeReceiver,
-	}
-	txHash, err = transactor.Deliver(orderID, token, amount, receiver, fee, feeReceiver)
-	if err != nil {
-		fields["error"] = err.Error()
-		log.Logger().WithFields(fields).Error("failed to send deliver transaction")
-		return txHash, err
-	}
-	fields["hash"] = txHash.Hex()
-	log.Logger().WithFields(fields).Info("completed send deliver transaction")
-	return txHash, nil
-}
+//func HandleOutAmountFromEVMToTON() {
+//	order := dao.Order{
+//		DstChain: params.TONChainID,
+//		Action:   dao.OrderActionFromEVM,
+//		Stage:    dao.OrderStag2,
+//		Status:   dao.OrderStatusTxConfirmed,
+//	}
+//	for {
+//		for id := uint64(1); ; {
+//			orders, err := order.GetOldest10NoOutAmountByID(id)
+//			if err != nil {
+//				fields := map[string]interface{}{
+//					"id":    id,
+//					"order": utils.JSON(order),
+//					"error": err.Error(),
+//				}
+//
+//				log.Logger().WithFields(fields).Error("failed to get confirmed status order of first stage from evm to ton")
+//				alarm.Slack(context.Background(), "failed to get confirmed status order from evm to ton")
+//				time.Sleep(5 * time.Second)
+//				continue
+//			}
+//
+//			length := len(orders)
+//			if length == 0 {
+//				log.Logger().Info("not found confirmed status order order of first stage from evm to ton", "time", time.Now())
+//				time.Sleep(10 * time.Second)
+//				break
+//			}
+//
+//			for i, o := range orders {
+//				if i == length-1 {
+//					id = o.ID + 1
+//				}
+//
+//				outAmount, err := tonrouter.BridgeStatus(o.OrderIDFromContract)
+//				if err != nil {
+//					log.Logger().WithField("orderIDFromContract", o.OrderIDFromContract).WithField("error", err.Error()).Error("failed to request ton bridge status")
+//					alarm.Slack(context.Background(), "failed to request ton bridge status")
+//					time.Sleep(5 * time.Second)
+//					continue
+//				}
+//
+//				update := &dao.Order{
+//					OutAmount: outAmount,
+//				}
+//				if err := dao.NewOrderWithID(o.ID).Updates(update); err != nil {
+//					fields := map[string]interface{}{
+//						"id":     o.ID,
+//						"update": utils.JSON(update),
+//						"error":  err.Error(),
+//					}
+//					log.Logger().WithFields(fields).Error("failed to update order status")
+//					alarm.Slack(context.Background(), "failed to update order status")
+//					time.Sleep(5 * time.Second)
+//					continue
+//				}
+//			}
+//			time.Sleep(10 * time.Second)
+//		}
+//	}
+//}
 
-func deliverAndSwap(transactor *tx.Transactor, token common.Address, orderID [32]byte, amount *big.Int, params *SwapAndBridgeFunctionParams, fee *big.Int, feeReceiver common.Address, value *big.Int) (txHash common.Hash, err error) {
+//func deliver(transactor *tx.Transactor, token common.Address, orderID [32]byte, amount *big.Int, receiver common.Address, fee *big.Int, feeReceiver common.Address) (txHash common.Hash, err error) {
+//	fields := map[string]interface{}{
+//		"orderID":     hex.EncodeToString(orderID[:]),
+//		"token":       token,
+//		"amount":      amount,
+//		"receiver":    receiver,
+//		"fee":         fee,
+//		"feeReceiver": feeReceiver,
+//	}
+//	txHash, err = transactor.Deliver(orderID, token, amount, receiver, fee, feeReceiver)
+//	if err != nil {
+//		fields["error"] = err.Error()
+//		log.Logger().WithFields(fields).Error("failed to send deliver transaction")
+//		return txHash, err
+//	}
+//	fields["hash"] = txHash.Hex()
+//	log.Logger().WithFields(fields).Info("completed send deliver transaction")
+//	return txHash, nil
+//}
+
+func deliverAndSwap(transactor *tx.Transactor, deliverParam *tx.DeliverParam, value *big.Int) (txHash common.Hash, err error) {
 	fields := map[string]interface{}{
-		"orderID":     hex.EncodeToString(orderID[:]),
-		"initiator":   Initiator,
-		"token":       token,
-		"amount":      amount,
-		"swapData":    hex.EncodeToString(params.SwapData),
-		"bridgeData":  hex.EncodeToString(params.BridgeData),
-		"feeData":     hex.EncodeToString(params.FeeData),
-		"fee":         fee,
-		"feeReceiver": feeReceiver,
+		"orderID":     utils.BytesToUint64(deliverParam.OrderId[:]),
+		"receiver":    deliverParam.Receiver,
+		"token":       deliverParam.Token,
+		"amount":      deliverParam.Amount,
+		"fromChain":   deliverParam.FromChain,
+		"toChain":     deliverParam.ToChain,
+		"fee":         deliverParam.Fee,
+		"feeReceiver": deliverParam.FeeReceiver,
+		"from":        hex.EncodeToString(deliverParam.From),
+		"butterData":  hex.EncodeToString(deliverParam.ButterData),
 		"value":       value,
 	}
-	txHash, err = transactor.DeliverAndSwap(orderID, Initiator, token, amount, params.SwapData, params.BridgeData, params.FeeData, fee, feeReceiver, value)
+
+	txHash, err = transactor.DeliverAndSwap(deliverParam, value)
 	if err != nil {
 		fields["error"] = err.Error()
 		log.Logger().WithFields(fields).Error("failed to send deliver and swap transaction")

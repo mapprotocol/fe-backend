@@ -197,3 +197,44 @@ func TestDecimal(t *testing.T) {
 	t.Log("===== f4: ", decimal.NewFromFloat(f4).StringFixed(8))
 	t.Log("===== f4: ", decimal.NewFromFloat(f4).String())
 }
+
+func TestBase64ToHex(t *testing.T) {
+	type args struct {
+		base64Str string
+	}
+	tests := []struct {
+		name    string
+		args    args
+		want    string
+		wantErr bool
+	}{
+		{
+			name: "t-1",
+			args: args{
+				base64Str: "qD2s/oD4Qt2QS3JXsRMb9A95/y6KLXKRu9Yhg+RD504=",
+			},
+			want:    "a83dacfe80f842dd904b7257b1131bf40f79ff2e8a2d7291bbd62183e443e74e",
+			wantErr: false,
+		},
+		{
+			name: "t-1",
+			args: args{
+				base64Str: "yPVVUz6qd0nZZMzifAgNggXzWpRxBgvuSuGol4cp/tw=",
+			},
+			want:    "c8f555533eaa7749d964cce27c080d8205f35a9471060bee4ae1a8978729fedc",
+			wantErr: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := Base64ToHex(tt.args.base64Str)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Base64ToHex() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if got != tt.want {
+				t.Errorf("Base64ToHex() got = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
