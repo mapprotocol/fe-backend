@@ -3,6 +3,7 @@ package utils
 import (
 	"fmt"
 	"github.com/shopspring/decimal"
+	"math"
 	"math/big"
 	"reflect"
 	"testing"
@@ -234,6 +235,114 @@ func TestBase64ToHex(t *testing.T) {
 			}
 			if got != tt.want {
 				t.Errorf("Base64ToHex() got = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestUint64ToByte32(t *testing.T) {
+	type args struct {
+		num uint64
+	}
+	tests := []struct {
+		name string
+		args args
+		want [32]byte
+	}{
+		{
+			name: "t-1",
+			args: args{
+				num: 0,
+			},
+			want: [32]byte{0},
+		},
+		{
+			name: "t-2",
+			args: args{
+				num: 1,
+			},
+			want: [32]byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1},
+		},
+		{
+			name: "t-3",
+			args: args{
+				num: math.MaxUint64 - 1,
+			},
+			want: [32]byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 255, 255, 255, 255, 255, 255, 255, 254},
+		},
+		{
+			name: "t-4",
+			args: args{
+				num: math.MaxUint32,
+			},
+			want: [32]byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 255, 255, 255, 255},
+		},
+		{
+			name: "t-5",
+			args: args{
+				num: math.MaxUint32 - 10,
+			},
+			want: [32]byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 255, 255, 255, 245},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := Uint64ToByte32(tt.args.num); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("Uint64ToByte32() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestBytesToUint64(t *testing.T) {
+	type args struct {
+		bs []byte
+	}
+	tests := []struct {
+		name string
+		args args
+		want uint64
+	}{
+		{
+			name: "t-1",
+			args: args{
+				bs: []byte{0},
+			},
+			want: 0,
+		},
+		{
+			name: "t-2",
+			args: args{
+				bs: []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1},
+			},
+			want: 1,
+		},
+		{
+			name: "t-3",
+			args: args{
+				bs: []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 255, 255, 255, 255, 255, 255, 255, 254},
+			},
+			want: math.MaxUint64 - 1,
+		},
+		{
+			name: "t-4",
+			args: args{
+				bs: []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 255, 255, 255, 255},
+			},
+			want: math.MaxUint32,
+		},
+		{
+			name: "t-5",
+			args: args{
+				bs: []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 255, 255, 255, 245},
+			},
+			want: math.MaxUint32 - 10,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := BytesToUint64(tt.args.bs); got != tt.want {
+				t.Errorf("BytesToUint64() = %v, want %v", got, tt.want)
 			}
 		})
 	}

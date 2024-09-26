@@ -2,10 +2,12 @@ package utils
 
 import (
 	"encoding/base64"
-	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
+	"math/big"
 	"strings"
+
+	"github.com/ethereum/go-ethereum/common"
 )
 
 func IsEmpty(s string) bool {
@@ -22,13 +24,11 @@ func JSON(v interface{}) string {
 }
 
 func Uint64ToByte32(num uint64) [32]byte {
-	var result [32]byte
-	binary.BigEndian.PutUint64(result[:], num)
-	return result
+	return [32]byte(common.LeftPadBytes(new(big.Int).SetUint64(num).Bytes(), 32))
 }
 
-func BytesToUint64(b []byte) uint64 {
-	return binary.BigEndian.Uint64(b)
+func BytesToUint64(bs []byte) uint64 {
+	return new(big.Int).SetBytes(bs).Uint64()
 }
 
 func TrimHexPrefix(s string) string {
