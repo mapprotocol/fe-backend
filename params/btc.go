@@ -11,17 +11,17 @@ const (
 
 // todo move to chain_pool.go
 const (
-	WBTCOfChainPool = "0x1bfd67037b42cf73acf2047067bd4f2c47d9bfd6"
+	WBTCOfChainPool = "0x7130d2A12B9BCbFAe4f2634d864A1Ee1Ce3Ead9c"
 	WBTCOfEthereum  = "0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599"
 )
 
 const (
-	WBTCDecimalOfChainPool uint64 = 1e8
+	WBTCDecimalOfChainPool uint64 = 1e18
 	WBTCDecimalOfEthereum  uint64 = 1e8
 )
 
 const (
 	BTCDecimalNumber             = 8
-	WBTCDecimalNumberOfChainPool = 8
+	WBTCDecimalNumberOfChainPool = 18
 	WBTCDecimalNumberOfEthereum  = 8
 )

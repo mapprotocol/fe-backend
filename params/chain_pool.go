@@ -1,17 +1,17 @@
 package params
 
 const (
-	USDTDecimalOfChainPool uint64 = 1e6
+	USDTDecimalOfChainPool uint64 = 1e18
 	USDTDecimalOfEthereum  uint64 = 1e6
 )
 
 const (
-	USDTDecimalNumberOfChainPool = 6
+	USDTDecimalNumberOfChainPool = 18
 	USDTDecimalNumberOfEthereum  = 6
 )
 
 const (
-	ChainIDOfChainPool = "137"
+	ChainIDOfChainPool = "56"
 	ChainIDOfEthereum  = "1"
 )
 
@@ -21,7 +21,7 @@ const (
 )
 
 const (
-	USDTOfChainPool = "0xc2132d05d31c914a87c6611c10748aeb04b58e8f"
+	USDTOfChainPool = "0x55d398326f99059fF775485246999027B3197955"
 	USDTOfEthereum  = "0xdac17f958d2ee523a2206206994597c13d831ec7"
 )
 
