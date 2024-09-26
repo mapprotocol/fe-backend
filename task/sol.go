@@ -28,10 +28,6 @@ import (
 	"github.com/spf13/viper"
 )
 
-const (
-	MaticChainId = 137
-)
-
 func FilterEventToSol() {
 	chainID := params.ChainIDOfSolChainPool
 	topic := params.OnReceivedTopic
@@ -735,12 +731,12 @@ func convert2Bytes(data []interface{}) []byte {
 
 func requestSolButter(host, router string, param *dao.SolOrder) (string, error) {
 	orderIdHex := big.NewInt(0).SetUint64(param.BridgeId)
-	url := fmt.Sprintf("%s/solanaCrossIn?fromChainId=%s&chainPoolChain=%d&"+
+	url := fmt.Sprintf("%s/solanaCrossIn?fromChainId=%s&chainPoolChain=%s&"+
 		"chainPoolTokenAddress=%s&chainPoolTokenAmount=%s&"+
 		"tokenOutAddress=%s&fromChainTokenInAddress=%s&"+
 		"fromChainTokenAmount=%s&slippage=%d&"+
 		"router=%s&minAmountOut=%d&from=%s&orderIdHex=%s&receiver=%s",
-		host, param.SrcChain, MaticChainId,
+		host, param.SrcChain, params.ChainIDOfSolChainPool,
 		param.ChainPoolToken, param.RelayAmount,
 		param.DstToken, param.SrcToken,
 		param.InAmount, 100,
