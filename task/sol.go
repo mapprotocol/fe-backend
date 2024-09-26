@@ -127,7 +127,6 @@ func FilterEventToSol() {
 				if err := order.Create(); err != nil {
 					log.Logger().WithField("order", utils.JSON(order)).WithField("error", err).Error("failed to create order")
 					alarm.Slack(context.Background(), "failed to update bitcoin order status")
-					UpdateLogID(chainID, topic, lg.Id)
 					continue
 				}
 			} else {
@@ -237,12 +236,12 @@ func HandlerEvm2Sol() {
 				continue
 			}
 
-			update := &dao.SolOrder{
+			update := &dao.Order{
 				Stage:     dao.OrderStag2,
 				Status:    dao.OrderStatusTxSent,
 				OutTxHash: sig.String(),
 			}
-			if err := dao.NewSolOrderWithID(o.ID).Updates(update); err != nil {
+			if err := dao.NewOrderWithID(o.ID).Updates(update); err != nil {
 				log.Logger().WithField("id", o.ID).WithField("update", utils.JSON(update)).WithField("error", err.Error()).Error("failed to update sol order status")
 				alarm.Slack(context.Background(), "failed to update sol order status")
 				time.Sleep(5 * time.Second)
