@@ -33,14 +33,14 @@ const (
 )
 
 func FilterEventToSol() {
-	chainID := params.ChainIDOfMaticPool
+	chainID := params.ChainIDOfSolChainPool
 	topic := params.OnReceivedTopic
 	filterLog := dao.NewFilterLog(chainID, topic)
 	for {
 		gotLog, err := filterLog.First()
 		if err != nil {
 			fields := map[string]interface{}{
-				"chainID": params.ChainIDOfMaticPool,
+				"chainID": params.ChainIDOfSolChainPool,
 				"topic":   params.OnReceivedTopic,
 				"error":   err.Error(),
 			}
@@ -50,7 +50,7 @@ func FilterEventToSol() {
 			continue
 		}
 
-		logs, err := filter.GetLogs(gotLog.LatestLogID, params.ChainIDOfMaticPool, params.OnReceivedTopic, uint8(20))
+		logs, err := filter.GetLogs(gotLog.LatestLogID, params.ChainIDOfSolChainPool, params.OnReceivedTopic, uint8(20))
 		if err != nil {
 			fields := map[string]interface{}{
 				"id":      gotLog.LatestLogID,
@@ -78,7 +78,7 @@ func FilterEventToSol() {
 			if err != nil {
 				fields := map[string]interface{}{
 					"id":      lg.Id,
-					"chainID": params.ChainIDOfChainPool,
+					"chainID": params.ChainIDOfSolChainPool,
 					"topic":   params.OnReceivedTopic,
 					"logData": lg.LogData,
 					"error":   err.Error(),
@@ -93,7 +93,7 @@ func FilterEventToSol() {
 			if err != nil {
 				fields := map[string]interface{}{
 					"id":      lg.Id,
-					"chainID": params.ChainIDOfChainPool,
+					"chainID": params.ChainIDOfSolChainPool,
 					"topic":   params.OnReceivedTopic,
 					"logData": lg.LogData,
 					"error":   err.Error(),
@@ -141,7 +141,7 @@ func FilterEventToSol() {
 				continue
 			}
 
-			UpdateLogID(params.ChainIDOfMaticPool, params.OnReceivedTopic, lg.Id)
+			UpdateLogID(params.ChainIDOfSolChainPool, params.OnReceivedTopic, lg.Id)
 			time.Sleep(time.Second * 5)
 		}
 		time.Sleep(time.Second * 5)
@@ -487,11 +487,11 @@ func HandleSol2EvmButter() {
 				}
 
 				decimal := params.USDTDecimalOfEthereum
-				chainIDOfChainPool := params.ChainIDOfMaticPool
+				chainIDOfChainPool := params.ChainIDOfSolChainPool
 				chainInfo := &dao.ChainPool{}
-				chainInfo, err = dao.NewChainPoolWithChainID(params.ChainIDOfMaticPool).First()
+				chainInfo, err = dao.NewChainPoolWithChainID(params.ChainIDOfSolChainPool).First()
 				if err != nil {
-					log.Logger().WithField("chainID", params.ChainIDOfMaticPool).WithField("error", err.Error()).Error("failed to get chain info")
+					log.Logger().WithField("chainID", params.ChainIDOfSolChainPool).WithField("error", err.Error()).Error("failed to get chain info")
 					alarm.Slack(context.Background(), "failed to get chain info")
 					time.Sleep(5 * time.Second)
 					continue
@@ -638,16 +638,16 @@ func HandleSol2EvmFinish() {
 				if isMultiChainPool && o.SrcChain == params.ChainIDOfEthereum {
 					chainInfo, err = dao.NewChainPoolWithChainID(params.ChainIDOfEthereum).First()
 					if err != nil {
-						log.Logger().WithField("chainID", params.ChainIDOfMaticPool).WithField("error", err.Error()).Error("failed to get chain info")
+						log.Logger().WithField("chainID", params.ChainIDOfSolChainPool).WithField("error", err.Error()).Error("failed to get chain info")
 						alarm.Slack(context.Background(), "failed to get chain info")
 						time.Sleep(5 * time.Second)
 						continue
 
 					}
 				} else {
-					chainInfo, err = dao.NewChainPoolWithChainID(params.ChainIDOfMaticPool).First()
+					chainInfo, err = dao.NewChainPoolWithChainID(params.ChainIDOfSolChainPool).First()
 					if err != nil {
-						log.Logger().WithField("chainID", params.ChainIDOfMaticPool).WithField("error", err.Error()).Error("failed to get chain info")
+						log.Logger().WithField("chainID", params.ChainIDOfSolChainPool).WithField("error", err.Error()).Error("failed to get chain info")
 						alarm.Slack(context.Background(), "failed to get chain info")
 						time.Sleep(5 * time.Second)
 						continue
@@ -808,7 +808,7 @@ func requestRouteAndSwap(param *dao.SolOrder) (*butter.RouterAndSwapResponse, er
 	before, _ := big.NewFloat(0).SetString(param.RelayAmount)
 	amount := before.Quo(before, big.NewFloat(params.USDTDecimalOfEthereum)).String()
 	request := &butter.RouterAndSwapRequest{
-		FromChainID:     params.ChainIDOfMaticPool,
+		FromChainID:     params.ChainIDOfSolChainPool,
 		ToChainID:       param.DstChain,
 		Amount:          amount, // decimal
 		TokenInAddress:  params.USDTOfChainPool,
