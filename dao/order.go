@@ -59,6 +59,8 @@ type Order struct {
 	Status              uint8     `gorm:"column:status;type:int(11)" json:"status"`
 	Slippage            uint64    `gorm:"column:slippage;type:bigint(20)" json:"slippage"`
 	MinAmountOut        string    `gorm:"column:min_amount_out;type:bigint(20)" json:"min_amount_out"`
+	BridgeId            uint64    `gorm:"column:bridge_id;type:bigint(20)" json:"bridge_id"`
+	OrderId             string    `gorm:"column:order_id;type:varchar(255)" json:"order_id"`
 	CreatedAt           time.Time `gorm:"column:created_at;type:datetime" json:"created_at"`
 	UpdatedAt           time.Time `gorm:"column:updated_at;type:datetime" json:"updated_at"`
 }

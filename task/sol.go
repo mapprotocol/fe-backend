@@ -105,24 +105,23 @@ func FilterEventToSol() {
 				for _, v := range onReceived.OrderId {
 					orderId = append(orderId, v)
 				}
-				order := &dao.SolOrder{
-					SrcHash:        lg.TxHash,
-					SrcChain:       onReceived.SrcChain.String(),
-					SrcToken:       common.BytesToAddress(onReceived.SrcToken).String(),
-					Sender:         "0x" + common.Bytes2Hex(onReceived.Sender),
-					InAmount:       onReceived.InAmount,
-					RelayToken:     params.USDTOfChainPool,
-					RelayAmount:    onReceived.ChainPoolTokenAmount.String(),
-					DstChain:       onReceived.DstChain.String(), // onReceived.DstChain.String(),
-					DstToken:       string(onReceived.DstToken),
-					Receiver:       string(onReceived.Receiver),
-					Action:         dao.OrderActionFromEVM,
-					Stage:          dao.OrderStag1,
-					Status:         dao.OrderStatusTxConfirmed,
-					Slippage:       onReceived.Slippage,
-					OrderId:        "0x" + common.Bytes2Hex(orderId),
-					ChainPoolToken: onReceived.ChainPoolToken.Hex(),
-					BridgeId:       onReceived.BridgeId,
+				order := &dao.Order{
+					InTxHash:    lg.TxHash,
+					SrcChain:    onReceived.SrcChain.String(),
+					SrcToken:    common.BytesToAddress(onReceived.SrcToken).String(),
+					Sender:      "0x" + common.Bytes2Hex(onReceived.Sender),
+					InAmount:    onReceived.InAmount,
+					RelayToken:  onReceived.ChainPoolToken.Hex(),
+					RelayAmount: onReceived.ChainPoolTokenAmount.String(),
+					DstChain:    onReceived.DstChain.String(),
+					DstToken:    string(onReceived.DstToken),
+					Receiver:    string(onReceived.Receiver),
+					Action:      dao.OrderActionFromEVM,
+					Stage:       dao.OrderStag1,
+					Status:      dao.OrderStatusTxConfirmed,
+					Slippage:    onReceived.Slippage,
+					OrderId:     "0x" + common.Bytes2Hex(orderId),
+					BridgeId:    onReceived.BridgeId,
 				}
 				if err := order.Create(); err != nil {
 					log.Logger().WithField("order", utils.JSON(order)).WithField("error", err).Error("failed to create order")
@@ -145,11 +144,10 @@ func FilterEventToSol() {
 }
 
 func HandlerEvm2Sol() {
-	order := dao.SolOrder{
+	order := dao.Order{
 		DstChain: params.SolChainID,
 		Status:   dao.OrderStatusTxConfirmed,
 	}
-	//endpoint := getEndpoint()
 	endpointCfg := viper.GetStringMapString("endpoints")
 	solCfg := viper.GetStringMapString("sol")
 	client := rpc.New(endpointCfg["solana"])
@@ -185,7 +183,7 @@ func HandlerEvm2Sol() {
 				id = o.ID + 1
 			}
 
-			log.Logger().Info("HandlerEvm2Sol srcHash =", o.SrcHash)
+			log.Logger().Info("HandlerEvm2Sol srcHash =", o.InTxHash)
 			ele := o
 			data, err := requestSolButter(endpointCfg["butter"], routerPri.PublicKey().String(), ele)
 			if err != nil {
@@ -730,7 +728,7 @@ func convert2Bytes(data []interface{}) []byte {
 	return ret
 }
 
-func requestSolButter(host, router string, param *dao.SolOrder) (string, error) {
+func requestSolButter(host, router string, param *dao.Order) (string, error) {
 	orderIdHex := big.NewInt(0).SetUint64(param.BridgeId)
 	url := fmt.Sprintf("%s/solanaCrossIn?fromChainId=%s&chainPoolChain=%s&"+
 		"chainPoolTokenAddress=%s&chainPoolTokenAmount=%s&"+
@@ -738,7 +736,7 @@ func requestSolButter(host, router string, param *dao.SolOrder) (string, error) 
 		"fromChainTokenAmount=%s&slippage=%d&"+
 		"router=%s&minAmountOut=%d&from=%s&orderIdHex=%s&receiver=%s",
 		host, param.SrcChain, params.ChainIDOfSolChainPool,
-		param.ChainPoolToken, param.RelayAmount,
+		param.RelayToken, param.RelayAmount,
 		param.DstToken, param.SrcToken,
 		param.InAmount, 100,
 		router, param.Slippage, param.Sender, "0x"+common.Bytes2Hex(orderIdHex.Bytes()), param.Receiver,
@@ -801,7 +799,7 @@ func convertSol(symbol string, data *big.Float) (uint64, error) {
 }
 
 // amount=10&slippage=300&receiver=FjgdFp1zt8A2fttq71fprwjbnJvRYEg2VLoQaLxTdFgR&from=0xa8EE0cf2Af6fE245090801d36E69281BC6610F29&referrer=0xa8EE0cf2Af6fE245090801d36E69281BC6610F29&rateOrNativeFee=50&feeType=1
-func requestRouteAndSwap(param *dao.SolOrder) (*butter.RouterAndSwapResponse, error) {
+func requestRouteAndSwap(param *dao.Order) (*butter.RouterAndSwapResponse, error) {
 	before, _ := big.NewFloat(0).SetString(param.RelayAmount)
 	amount := before.Quo(before, big.NewFloat(params.USDTDecimalOfEthereum)).String()
 	request := &butter.RouterAndSwapRequest{
