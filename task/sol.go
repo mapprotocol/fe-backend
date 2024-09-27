@@ -363,7 +363,8 @@ func FilterSol2Evm() {
 			}
 
 			orderIdStr := logData["orderId"].(string)
-			orderId := big.NewInt(0).SetBytes(common.Hex2Bytes(strings.TrimPrefix(orderIdStr, "ff")))
+			bys := common.Hex2Bytes(orderIdStr)
+			orderId := big.NewInt(0).SetBytes(bys)
 
 			fromStr := logData["from"].([]interface{})
 			from := base58.Encode(convert2Bytes(fromStr))
@@ -407,7 +408,7 @@ func FilterSol2Evm() {
 			relayAmount := big.NewInt(0).Sub(afterBalance, swapTokenOutBeforeBalance)
 
 			order := &dao.Order{
-				OrderIDFromContract: uint64(orderId.Int64()),
+				OrderIDFromContract: orderId.Uint64(),
 				SrcChain:            srcChain.String(),
 				DstChain:            toChain.String(),
 				SrcToken:            fromToken,
@@ -512,7 +513,7 @@ func HandleSol2EvmButter() {
 					continue
 				}
 
-				fmt.Println("order ------------------- ", "0xff"+common.Bytes2Hex(big.NewInt(0).SetUint64(o.OrderIDFromContract).Bytes()))
+				fmt.Println("order ------------------- ", "0x"+common.Bytes2Hex(big.NewInt(0).SetUint64(o.OrderIDFromContract).Bytes()))
 				// step2: 请求 evmCrossInSwap接口，获取交易信息
 				swapReq := butter.EvmCrossInSwapRequest{
 					Hash:         data.Data[0].Hash,
@@ -521,7 +522,7 @@ func HandleSol2EvmButter() {
 					Router:       viper.GetStringMapString("chainPool")["sender"],
 					Receiver:     o.Receiver,
 					MinAmountOut: o.MinAmountOut,
-					OrderIdHex:   "0xff" + common.Bytes2Hex(big.NewInt(0).SetUint64(o.OrderIDFromContract).Bytes()), // orderId处理
+					OrderIdHex:   "0x" + common.Bytes2Hex(big.NewInt(0).SetUint64(o.OrderIDFromContract).Bytes()), // orderId处理
 					Fee:          "0",
 					FeeReceiver:  "0x0000000000000000000000000000000000000000",
 				}
