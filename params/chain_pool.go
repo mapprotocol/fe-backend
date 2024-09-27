@@ -25,4 +25,5 @@ const (
 	USDTOfEthereum  = "0xdac17f958d2ee523a2206206994597c13d831ec7"
 )
 
+const FixedDecimal = 1e8
 const FixedDecimalNumber = 8

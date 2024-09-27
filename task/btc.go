@@ -56,9 +56,9 @@ var (
 
 var globalFeeRate int64 = 20
 
-var ToTONBaseTxFee = new(big.Int).SetUint64(uint64(params.USDTDecimalOfTON * 1.5)) // 1.5 USDT
-var TONToEVMBaseTxFee = new(big.Int).SetUint64(params.USDTDecimalOfChainPool)      // 1 USDT
-var BitcoinToEVMBaseTxFee = new(big.Int).SetUint64(700 * BaseTxFeeMultiplier)      // 0.0000105 WBTC
+var ToTONBaseTxFee = new(big.Int).SetUint64(uint64(params.FixedDecimal * 1.5)) // 1.5 USDT(FixedDecimal)
+var TONToEVMBaseTxFee = new(big.Int).SetUint64(params.FixedDecimal)            // 1 USDT(FixedDecimal)
+var BitcoinToEVMBaseTxFee = new(big.Int).SetUint64(700 * BaseTxFeeMultiplier)  // 0.0000105 WBTC(FixedDecimal)
 var BitcoinTxBytes = new(big.Int).SetUint64(200)
 
 func InitMempoolClient(network string) {
@@ -145,10 +145,11 @@ func HandlePendingOrdersOfFirstStageFromBTCToEVM() {
 				//inAmount := new(big.Float).Quo(new(big.Float).SetInt64(value), big.NewFloat(params.BTCDecimal))
 				inAmount := decimal.NewFromInt(value).Div(decimal.NewFromFloat(params.BTCDecimal))
 
-				bridgeFees, afterAmount := deductBitcoinToEVMBridgeFees(new(big.Int).SetInt64(value), big.NewInt(BridgeFeeRate))
+				wrapFixedValue := convertDecimal(new(big.Int).SetInt64(value), params.BTCDecimalNumber, params.FixedDecimalNumber)
+				bridgeFees, afterAmount := deductBitcoinToEVMBridgeFees(wrapFixedValue, big.NewInt(BridgeFeeRate))
 				//afterAmountFloat := new(big.Float).Quo(new(big.Float).SetInt(afterAmount), big.NewFloat(params.BTCDecimal))
 				//afterAmountFloat := decimal.NewFromBigInt(afterAmount, 0).Div(decimal.NewFromFloat(params.BTCDecimal))
-				afterAmountWithFixedDecimal := convertDecimal(afterAmount, params.BTCDecimalNumber, params.FixedDecimalNumber)
+				//afterAmountWithFixedDecimal := convertDecimal(afterAmount, params.BTCDecimalNumber, params.FixedDecimalNumber)
 
 				update := &dao.BitcoinOrder{
 					//InAmount:    inAmount.Text('f', params.BTCDecimalNumber),
@@ -157,7 +158,7 @@ func HandlePendingOrdersOfFirstStageFromBTCToEVM() {
 					InTxHash:       utxo[0].Outpoint.Hash.String(),
 					BridgeFee:      bridgeFees.Uint64(),
 					RelayToken:     params.WBTCOfChainPool,
-					RelayAmountInt: afterAmountWithFixedDecimal.Uint64(),
+					RelayAmountInt: afterAmount.Uint64(),
 					Status:         dao.OrderStatusTxConfirmed,
 				}
 				if err := dao.NewBitcoinOrderWithID(o.ID).Updates(update); err != nil {
@@ -207,13 +208,13 @@ func HandleConfirmedOrdersOfFirstStageFromBTCToEVM() {
 				}
 
 				wbtc := params.WBTCOfChainPool
-				wbtcDecimal := params.WBTCDecimalOfChainPool
+				//wbtcDecimal := params.WBTCDecimalOfChainPool
 				wbtcDecimalNumber := params.WBTCDecimalNumberOfChainPool
 				chainIDOfChainPool := params.ChainIDOfChainPool
 				chainInfo := &dao.ChainPool{}
 				if isMultiChainPool && o.SrcChain == params.ChainIDOfEthereum {
 					wbtc = params.WBTCOfEthereum
-					wbtcDecimal = params.WBTCDecimalOfEthereum
+					//wbtcDecimal = params.WBTCDecimalOfEthereum
 					wbtcDecimalNumber = params.WBTCDecimalNumberOfEthereum
 					chainIDOfChainPool = params.ChainIDOfEthereum
 					chainInfo, err = dao.NewChainPoolWithChainID(params.ChainIDOfEthereum).First()
@@ -302,8 +303,7 @@ func HandleConfirmedOrdersOfFirstStageFromBTCToEVM() {
 
 				txHash := common.Hash{}
 				value := big.NewInt(0)
-				fee := calcProtocolFees(new(big.Int).SetUint64(o.InAmountSat), o.FeeRatio, wbtcDecimal)
-				fee = convertDecimal(fee, uint64(wbtcDecimalNumber), params.FixedDecimalNumber)
+				fee := calcProtocolFees(new(big.Int).SetUint64(o.InAmountSat), o.FeeRatio)
 				srcChain, ok := new(big.Int).SetString(o.SrcChain, 10)
 				if !ok {
 					log.Logger().WithField("srcChain", o.SrcChain).Error("failed to parse src chain to big int")
@@ -325,7 +325,7 @@ func HandleConfirmedOrdersOfFirstStageFromBTCToEVM() {
 					Amount:      convertDecimal(new(big.Int).SetUint64(o.RelayAmountInt), params.FixedDecimalNumber, uint64(wbtcDecimalNumber)),
 					FromChain:   srcChain,
 					ToChain:     dstChain,
-					Fee:         fee,
+					Fee:         convertDecimal(fee, params.BTCDecimalNumber, uint64(wbtcDecimalNumber)),
 					FeeReceiver: common.HexToAddress(o.FeeCollector),
 					From:        []byte(o.Sender),
 					//ButterData:  []byte{},
@@ -358,7 +358,8 @@ func HandleConfirmedOrdersOfFirstStageFromBTCToEVM() {
 					//relayAmountStr := unwrapFixedDecimal(relayAmount).StringFixedBank(params.WBTCDecimalNumberOfChainPool)
 					//relayAmount, err := decimal.NewFromString(relayAmountStr)
 
-					relayAmount := new(big.Int).Sub(new(big.Int).SetUint64(o.RelayAmountInt), fee)
+					warpFixedDecimalFee := convertDecimal(fee, params.BTCDecimalNumber, params.FixedDecimalNumber)
+					relayAmount := new(big.Int).Sub(new(big.Int).SetUint64(o.RelayAmountInt), warpFixedDecimalFee)
 					relayAmountStr := unwrapFixedDecimal(decimal.NewFromBigInt(relayAmount, 0)).String()
 
 					//relayAmount, err := decimal.NewFromString(relayAmountStr)
@@ -650,13 +651,14 @@ func HandlePendingOrdersOfFirstStageFromEVM() {
 			}
 
 			if onReceived.DstChain.String() == params.TONChainID {
-				bridgeFees, afterAmount := deductToTONBridgeFees(onReceived.ChainPoolTokenAmount, big.NewInt(BridgeFeeRate))
+				warpFixedDecimalAmount := convertDecimal(onReceived.ChainPoolTokenAmount, params.USDTDecimalNumberOfChainPool, params.FixedDecimalNumber)
+				bridgeFees, afterAmount := deductToTONBridgeFees(warpFixedDecimalAmount, big.NewInt(BridgeFeeRate))
 				//afterAmountFloat := new(big.Float).Quo(new(big.Float).SetInt(afterAmount), big.NewFloat(float64(params.USDTDecimalOfChainPool)))
 
 				//afterAmountFloat := decimal.NewFromBigInt(afterAmount, 0).Div(decimal.NewFromUint64(params.USDTDecimalOfChainPool)) // todo * 100
 				//afterAmount := new(big.Int).Div(afterAmount, new(big.Int).SetUint64(params.USDTDecimalOfChainPool))
 
-				afterAmountWithFixedDecimal := convertDecimal(afterAmount, params.USDTDecimalNumberOfChainPool, params.FixedDecimalNumber)
+				//afterAmountWithFixedDecimal := convertDecimal(afterAmount, params.USDTDecimalNumberOfChainPool, params.FixedDecimalNumber)
 
 				order := &dao.Order{
 					OrderIDFromContract: onReceived.BridgeId,
@@ -667,7 +669,7 @@ func HandlePendingOrdersOfFirstStageFromEVM() {
 					BridgeFee:           bridgeFees.Uint64(),
 					RelayToken:          params.USDTOfChainPool,
 					//RelayAmountInt:         wrapFixedDecimal(afterAmountFloat),
-					RelayAmountInt: afterAmountWithFixedDecimal.Uint64(),
+					RelayAmountInt: afterAmount.Uint64(),
 					DstChain:       onReceived.DstChain.String(),
 					DstToken:       string(onReceived.DstToken),
 					Receiver:       string(onReceived.Receiver),
@@ -683,13 +685,14 @@ func HandlePendingOrdersOfFirstStageFromEVM() {
 					continue
 				}
 			} else if onReceived.DstChain.String() == params.BTCChainID {
-				bridgeFees, afterAmount := deductToBitcoinBridgeFees(onReceived.ChainPoolTokenAmount, big.NewInt(BridgeFeeRate))
+				warpFixedDecimalAmount := convertDecimal(onReceived.ChainPoolTokenAmount, params.WBTCDecimalNumberOfChainPool, params.FixedDecimalNumber)
+				bridgeFees, afterAmount := deductToBitcoinBridgeFees(warpFixedDecimalAmount, big.NewInt(BridgeFeeRate))
 				//afterAmountFloat := new(big.Float).Quo(new(big.Float).SetInt(afterAmount), big.NewFloat(params.WBTCDecimalOfChainPool))
 
 				//afterAmountFloat := decimal.NewFromBigInt(afterAmount, 0).Div(decimal.NewFromUint64(params.WBTCDecimalOfChainPool))
 				//afterAmount := new(big.Int).Div(afterAmount, new(big.Int).SetUint64(params.WBTCDecimalOfChainPool))
 
-				afterAmountWithFixedDecimal := convertDecimal(afterAmount, params.WBTCDecimalNumberOfChainPool, params.FixedDecimalNumber)
+				//afterAmountWithFixedDecimal := convertDecimal(afterAmount, params.WBTCDecimalNumberOfChainPool, params.FixedDecimalNumber)
 
 				order := &dao.BitcoinOrder{
 					SrcChain:   onReceived.SrcChain.String(),
@@ -699,7 +702,7 @@ func HandlePendingOrdersOfFirstStageFromEVM() {
 					BridgeFee:  bridgeFees.Uint64(),
 					RelayToken: params.WBTCOfChainPool,
 					//RelayAmountInt: wrapFixedDecimal(afterAmountFloat), // todo multi chain pool
-					RelayAmountInt: afterAmountWithFixedDecimal.Uint64(),
+					RelayAmountInt: afterAmount.Uint64(),
 					DstChain:       onReceived.DstChain.String(),
 					DstToken:       string(onReceived.DstToken),
 					Receiver:       string(onReceived.Receiver),
@@ -884,17 +887,16 @@ func deductBitcoinToEVMBridgeFees(amount, bridgeFeeRate *big.Int) (bridgeFees, a
 	return bridgeFees, afterAmount
 }
 
-func calcProtocolFees(inAmountSat *big.Int, feeRatio uint64, wbtcDecimal uint64) *big.Int {
+func calcProtocolFees(inAmountSat *big.Int, feeRatio uint64) *big.Int {
+	if inAmountSat.Cmp(big.NewInt(0)) == 0 {
+		return big.NewInt(0)
+	}
 	if feeRatio == 0 {
 		return big.NewInt(0)
 	}
 
 	fee := new(big.Int).Mul(inAmountSat, new(big.Int).SetUint64(feeRatio))
 	fee = new(big.Int).Div(fee, big.NewInt(10000))
-	if wbtcDecimal != params.BTCDecimal {
-		fee = new(big.Int).Mul(fee, new(big.Int).SetUint64(wbtcDecimal))
-		fee = new(big.Int).Div(fee, new(big.Int).SetUint64(params.BTCDecimal))
-	}
 	return fee
 }
 

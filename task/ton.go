@@ -358,12 +358,13 @@ func HandlePendingOrdersOfFirstStageFromTONToEVM() {
 				log.Logger().WithFields(fields).Error("failed to convert tx hash to hex")
 			}
 			//_, afterAmount := deductFees(new(big.Float).SetUint64(relayAmount), FeeRate)
-			bridgeFees, afterAmount := deductTONToEVMBridgeFees(new(big.Int).SetUint64(relayAmount), big.NewInt(BridgeFeeRate))
+			wrapFixedRelayAmount := convertDecimal(new(big.Int).SetUint64(relayAmount), params.USDTDecimalNumberOfTON, params.FixedDecimalNumber)
+			bridgeFees, afterAmount := deductTONToEVMBridgeFees(wrapFixedRelayAmount, big.NewInt(BridgeFeeRate))
 			//afterAmountFloat := new(big.Float).Quo(new(big.Float).SetInt(afterAmount), big.NewFloat(params.USDTDecimalOfTON))
 
 			//afterAmountFloat := decimal.NewFromBigInt(afterAmount, 0).Div(decimal.NewFromFloat(params.USDTDecimalOfTON))
 
-			afterAmountWithFixedDecimal := convertDecimal(afterAmount, params.USDTDecimalNumberOfTON, params.FixedDecimalNumber) // todo * 100
+			//afterAmountWithFixedDecimal := convertDecimal(afterAmount, params.USDTDecimalNumberOfTON, params.FixedDecimalNumber) // todo * 100
 
 			//inAmountFloat := new(big.Float).Quo(new(big.Float).SetUint64(inAmount), big.NewFloat(params.InAmountDecimalOfTON))
 			inAmountFloat := decimal.NewFromUint64(inAmount).Div(decimal.NewFromFloat(params.InAmountDecimalOfTON))
@@ -378,7 +379,7 @@ func HandlePendingOrdersOfFirstStageFromTONToEVM() {
 				InTxHash:       inTxHash,
 				BridgeFee:      bridgeFees.Uint64(),
 				RelayToken:     params.USDTOfChainPool,
-				RelayAmountInt: afterAmountWithFixedDecimal.Uint64(),
+				RelayAmountInt: afterAmount.Uint64(),
 				DstChain:       strconv.FormatUint(dstChain, 10),
 				DstToken:       common.BytesToAddress(dstToken.Bytes()).String(),
 				Receiver:       common.BytesToAddress(receiver.Bytes()).String(),
