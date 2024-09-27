@@ -407,13 +407,16 @@ func FilterSol2Evm() {
 			}
 			relayAmount := big.NewInt(0).Sub(afterBalance, swapTokenOutBeforeBalance)
 
+			decimal := params.USDTDecimalOfEthereum
+			before, _ := big.NewFloat(0).SetString(amountOut.String())
+			amount := before.Quo(before, big.NewFloat(decimal)).String()
 			order := &dao.Order{
 				OrderIDFromContract: orderId.Uint64(),
 				SrcChain:            srcChain.String(),
 				DstChain:            toChain.String(),
 				SrcToken:            fromToken,
 				Sender:              from,
-				InAmount:            amountOut.String(),
+				InAmount:            amount,
 				RelayToken:          params.USDCOfSOL,
 				RelayAmount:         relayAmount.String(),
 				DstToken:            toToken.Hex(),
@@ -482,7 +485,6 @@ func HandleSol2EvmButter() {
 					id = o.ID + 1
 				}
 
-				decimal := params.USDTDecimalOfEthereum
 				chainIDOfChainPool := params.ChainIDOfSolChainPool
 				chainInfo := &dao.ChainPool{}
 				chainInfo, err = dao.NewChainPoolWithChainID(params.ChainIDOfSolChainPool).First()
@@ -493,13 +495,11 @@ func HandleSol2EvmButter() {
 					continue
 				}
 
-				before, _ := big.NewFloat(0).SetString(o.InAmount)
-				amount := before.Quo(before, big.NewFloat(decimal)).String()
 				// step1: 请求 route 接口，获取路由
 				req := butter.RouterRequest{
 					FromChainID:     chainIDOfChainPool,
 					ToChainID:       o.DstChain,
-					Amount:          amount, // 处理精度
+					Amount:          o.InAmount, // 处理精度
 					TokenInAddress:  chainInfo.USDTContract,
 					TokenOutAddress: o.DstToken,
 					Type:            SwapType,
