@@ -135,7 +135,7 @@ type RouteData struct {
 				AmountOut string        `json:"amountOut"`
 				DexName   string        `json:"dexName"`
 				Path      []interface{} `json:"path"`
-				Extra     string        `json:"extra"`
+				Extra     interface{}   `json:"extra"`
 			} `json:"route"`
 			Bridge string `json:"bridge"`
 		} `json:"srcChain"`
