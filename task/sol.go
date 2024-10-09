@@ -100,6 +100,10 @@ func FilterEventToSol() {
 				continue
 			}
 
+			fmt.Println("onReceived.SrcChain.String() ============ ", onReceived.SrcChain.String())
+			fmt.Println("string(onReceived.Sender) ============ ", string(onReceived.Sender))
+			fmt.Println("string(onReceived.Sender) ============ ", string(onReceived.SrcToken))
+			fmt.Println("string(onReceived.Sender) ============ ", string(onReceived.Receiver))
 			if onReceived.DstChain.String() == params.SolChainID {
 				orderId := make([]byte, 0, 32)
 				for _, v := range onReceived.OrderId {
@@ -109,8 +113,8 @@ func FilterEventToSol() {
 					OrderIDFromContract: onReceived.BridgeId,
 					InTxHash:            lg.TxHash,
 					SrcChain:            onReceived.SrcChain.String(),
-					SrcToken:            common.BytesToAddress(onReceived.SrcToken).String(),
-					Sender:              "0x" + common.Bytes2Hex(onReceived.Sender),
+					SrcToken:            string(onReceived.SrcToken),
+					Sender:              string(onReceived.Sender),
 					InAmount:            onReceived.InAmount,
 					RelayToken:          onReceived.ChainPoolToken.Hex(),
 					RelayAmount:         onReceived.ChainPoolTokenAmount.String(),
@@ -802,7 +806,7 @@ func convertSol(symbol string, data *big.Float) (uint64, error) {
 // amount=10&slippage=300&receiver=FjgdFp1zt8A2fttq71fprwjbnJvRYEg2VLoQaLxTdFgR&from=0xa8EE0cf2Af6fE245090801d36E69281BC6610F29&referrer=0xa8EE0cf2Af6fE245090801d36E69281BC6610F29&rateOrNativeFee=50&feeType=1
 func requestRouteAndSwap(param *dao.Order) (*butter.RouterAndSwapResponse, error) {
 	before, _ := big.NewFloat(0).SetString(param.RelayAmount)
-	amount := before.Quo(before, big.NewFloat(params.USDTDecimalOfEthereum)).String()
+	amount := before.Quo(before, big.NewFloat(params.USDTDecimalOfChainPool)).String()
 	request := &butter.RouterAndSwapRequest{
 		FromChainID:     params.ChainIDOfSolChainPool,
 		ToChainID:       param.DstChain,
