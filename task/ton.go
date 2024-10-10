@@ -373,7 +373,7 @@ func HandlePendingOrdersOfFirstStageFromTONToEVM() {
 				OrderIDFromContract: orderID,
 				SrcChain:            strconv.FormatUint(srcChain, 10),
 				SrcToken:            srcTokenStr,
-				Sender:              sender.String(),
+				Sender:              sender.Bounce(false).String(),
 				//InAmount:            inAmountFloat.Text('f', params.USDTDecimalNumberOfTON),
 				InAmount:       inAmountFloat.StringFixedBank(params.USDTDecimalNumberOfTON),
 				InTxHash:       inTxHash,
