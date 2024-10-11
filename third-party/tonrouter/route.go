@@ -75,11 +75,11 @@ type RouteData struct {
 	ProtocolFee struct {
 		Amount string `json:"amount"`
 		Symbol string `json:"symbol"`
-	} `json:"gasFee"`
+	} `json:"protocolFee"`
 	GasFee struct {
 		Amount string `json:"amount"`
 		Symbol string `json:"symbol"`
-	} `json:"protocolFee"`
+	} `json:"gasFee"`
 	MinAmountOut struct {
 		Amount string `json:"amount"`
 		Symbol string `json:"symbol"`
