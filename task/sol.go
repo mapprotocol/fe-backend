@@ -517,7 +517,7 @@ func HandleSol2EvmButter() {
 					continue
 				}
 
-				fmt.Println("order ------------------- ", "0x"+common.Bytes2Hex(big.NewInt(0).SetUint64(o.OrderIDFromContract).Bytes()), "id", order.ID)
+				fmt.Println("order ------------------- ", "0x"+common.Bytes2Hex(big.NewInt(0).SetUint64(o.OrderIDFromContract).Bytes()), "id", o.ID)
 				// step2: 请求 evmCrossInSwap接口，获取交易信息
 				swapReq := butter.EvmCrossInSwapRequest{
 					Hash:         data.Data[0].Hash,
