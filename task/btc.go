@@ -56,7 +56,8 @@ var (
 
 var globalFeeRate int64 = 20
 
-var ToTONBaseTxFee = new(big.Int).SetUint64(uint64(params.FixedDecimal * 1.5)) // 1.5 USDT(FixedDecimal)
+var ToTONBaseTxFee = new(big.Int).SetUint64(uint64(params.FixedDecimal * 0.5)) // 0.5 USDT(FixedDecimal)
+var ToTONSwapBaseTxFee = new(big.Int).SetUint64(uint64(params.FixedDecimal))   // 1 USDT(FixedDecimal)
 var TONToEVMBaseTxFee = new(big.Int).SetUint64(params.FixedDecimal)            // 1 USDT(FixedDecimal)
 var BitcoinToEVMBaseTxFee = new(big.Int).SetUint64(700 * BaseTxFeeMultiplier)  // 0.0000105 WBTC(FixedDecimal)
 var BitcoinTxBytes = new(big.Int).SetUint64(200)
@@ -652,7 +653,8 @@ func HandlePendingOrdersOfFirstStageFromEVM() {
 
 			if onReceived.DstChain.String() == params.TONChainID {
 				warpFixedDecimalAmount := convertDecimal(onReceived.ChainPoolTokenAmount, params.USDTDecimalNumberOfChainPool, params.FixedDecimalNumber)
-				bridgeFees, afterAmount := deductToTONBridgeFees(warpFixedDecimalAmount, big.NewInt(BridgeFeeRate))
+				swap := strings.ToLower(string(onReceived.DstToken)) != strings.ToLower(params.USDTOfTON)
+				bridgeFees, afterAmount := deductToTONBridgeFees(warpFixedDecimalAmount, big.NewInt(BridgeFeeRate), swap)
 				//afterAmountFloat := new(big.Float).Quo(new(big.Float).SetInt(afterAmount), big.NewFloat(float64(params.USDTDecimalOfChainPool)))
 
 				//afterAmountFloat := decimal.NewFromBigInt(afterAmount, 0).Div(decimal.NewFromUint64(params.USDTDecimalOfChainPool)) // todo * 100
@@ -811,10 +813,14 @@ func deductFees(amount, feeRate *big.Int) (feeAmount, afterAmount *big.Int) {
 	return feeAmount, afterAmount
 }
 
-func deductToTONBridgeFees(amount, bridgeFeeRate *big.Int) (bridgeFees, afterAmount *big.Int) {
+func deductToTONBridgeFees(amount, bridgeFeeRate *big.Int, swap bool) (bridgeFees, afterAmount *big.Int) {
+	baseTxFee := ToTONBaseTxFee
+	if swap {
+		baseTxFee = ToTONSwapBaseTxFee
+	}
 	bridgeFees = new(big.Int).Mul(amount, bridgeFeeRate)
 	bridgeFees = new(big.Int).Div(bridgeFees, big.NewInt(BridgeFeeRateDenominator))
-	bridgeFees = new(big.Int).Add(bridgeFees, ToTONBaseTxFee)
+	bridgeFees = new(big.Int).Add(bridgeFees, baseTxFee)
 
 	afterAmount = new(big.Int).Sub(amount, bridgeFees)
 
@@ -823,7 +829,7 @@ func deductToTONBridgeFees(amount, bridgeFeeRate *big.Int) (bridgeFees, afterAmo
 		"afterAmount":   afterAmount,
 		"bridgeFees":    bridgeFees,
 		"bridgeFeeRate": bridgeFeeRate,
-		"baseTxFee":     ToTONBaseTxFee,
+		"baseTxFee":     baseTxFee,
 	}
 	log.Logger().WithFields(fields).Info("completed the deduction to ton bridge fees")
 	return bridgeFees, afterAmount

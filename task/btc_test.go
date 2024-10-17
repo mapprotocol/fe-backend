@@ -148,6 +148,7 @@ func Test_deductToTONBridgeFees(t *testing.T) {
 	type args struct {
 		amount        *big.Int
 		bridgeFeeRate *big.Int
+		swap          bool
 	}
 	tests := []struct {
 		name            string
@@ -199,7 +200,7 @@ func Test_deductToTONBridgeFees(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			gotBridgeFees, gotAfterAmount := deductToTONBridgeFees(tt.args.amount, tt.args.bridgeFeeRate)
+			gotBridgeFees, gotAfterAmount := deductToTONBridgeFees(tt.args.amount, tt.args.bridgeFeeRate, tt.args.swap)
 			if !reflect.DeepEqual(gotBridgeFees, tt.wantBridgeFees) {
 				t.Errorf("deductToTonBridgeFees() gotBridgeFees = %v, want %v", gotBridgeFees, tt.wantBridgeFees)
 			}
