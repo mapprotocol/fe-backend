@@ -16,6 +16,7 @@ import (
 	"github.com/mapprotocol/fe-backend/utils/reqerror"
 	"github.com/shopspring/decimal"
 	"math/big"
+	"strings"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
@@ -32,7 +33,8 @@ var BridgeFeeRate = decimal.NewFromFloat(30.0 / 10000.0) // 30/10000
 
 const BaseTxFeeMultiplier = 1.5
 
-var ToTONBaseTxFee = decimal.NewFromFloat(1 * BaseTxFeeMultiplier)               // unit: USDT
+var ToTONBaseTxFee = decimal.NewFromFloat(0.5)                                   // unit: USDT
+var ToTONSwapBaseTxFee = decimal.NewFromFloat(1)                                 // unit: USDT
 var TONToEVMBaseTxFee = decimal.NewFromFloat(1)                                  // unit: USDT
 var BitcoinToEVMBaseTxFee = decimal.NewFromFloat(0.000007 * BaseTxFeeMultiplier) // unit: WBTC
 var BitcoinTxBytes = decimal.NewFromFloat(200)
@@ -255,7 +257,9 @@ func GetEVMToTONRoute(req *entity.RouteRequest, amount decimal.Decimal, feeRatio
 		log.Logger().WithFields(params).Error("failed to parse token amount out to decimal")
 		return ret, "", resp.CodeInternalServerError
 	}
-	bridgeFees := calcToTONBridgeFees(bridgeAmountIn, BridgeFeeRate)
+
+	swap := strings.ToLower(req.TokenOutAddress) != strings.ToLower(constants.USDTOfTON)
+	bridgeFees := calcToTONBridgeFees(bridgeAmountIn, BridgeFeeRate, swap)
 	if bridgeAmountIn.Compare(bridgeFees) != 1 {
 		return ret, "", resp.CodeAmountTooFew
 	}
@@ -1308,14 +1312,18 @@ func calcBridgeAndProtocolFees(amount, bridgeFeeRate, protocolFeeRate decimal.De
 	return bridgeFees.String(), protocolFees.String(), afterAmount.String()
 }
 
-func calcToTONBridgeFees(amount, bridgeFeeRate decimal.Decimal) (bridgeFees decimal.Decimal) {
-	bridgeFees = amount.Mul(bridgeFeeRate).Add(ToTONBaseTxFee)
+func calcToTONBridgeFees(amount, bridgeFeeRate decimal.Decimal, swap bool) (bridgeFees decimal.Decimal) {
+	baseFee := ToTONBaseTxFee
+	if swap {
+		baseFee = ToTONSwapBaseTxFee
+	}
+	bridgeFees = amount.Mul(bridgeFeeRate).Add(baseFee)
 
 	fields := map[string]interface{}{
 		"amount":        amount,
 		"BridgeFeeRate": bridgeFeeRate,
 		"bridgeFees":    bridgeFees,
-		"baseTxFee":     ToTONBaseTxFee,
+		"baseTxFee":     baseFee,
 	}
 	log.Logger().WithFields(fields).Info("complete the calc to ton bridge fees")
 	return bridgeFees
