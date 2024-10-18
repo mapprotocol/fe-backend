@@ -134,7 +134,7 @@ func (o *Order) GetOldest10ByID(id uint64) (list []*Order, err error) {
 	return list, err
 }
 
-//func (o *Order) GetOldest10NoOutAmountByID(id uint64) (list []*Order, err error) {
-//	err = db.GetDB().Where(o).Where("id >= ?", id).Where("out_amount = ?", "").Order("id asc").Limit(OldestLimit).Find(&list).Error
-//	return list, err
-//}
+func (o *Order) GetOldest10NoOutAmountByID(id uint64) (list []*Order, err error) {
+	err = db.GetDB().Where(o).Where("id >= ?", id).Where("out_amount = ?", "").Order("id asc").Limit(OldestLimit).Find(&list).Error
+	return list, err
+}

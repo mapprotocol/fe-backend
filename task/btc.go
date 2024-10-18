@@ -3,7 +3,6 @@ package task
 import (
 	"context"
 	"encoding/hex"
-	"fmt"
 	"github.com/mapprotocol/fe-backend/third-party/filter"
 	"github.com/shopspring/decimal"
 	blog "log"
@@ -720,12 +719,13 @@ func HandlePendingOrdersOfFirstStageFromEVM() {
 					UpdateLogID(chainID, topic, lg.Id)
 					continue
 				}
-			} else {
-				log.Logger().WithField("dstChain", onReceived.DstChain.String()).Error("unsupported dst chain")
-				alarm.Slack(context.Background(), fmt.Sprintf("unsupported dst chain: %s", onReceived.DstChain.String()))
-				UpdateLogID(chainID, topic, lg.Id)
-				continue
 			}
+			//else {
+			//	log.Logger().WithField("dstChain", onReceived.DstChain.String()).Error("unsupported dst chain")
+			//	alarm.Slack(context.Background(), fmt.Sprintf("unsupported dst chain: %s", onReceived.DstChain.String()))
+			//	UpdateLogID(chainID, topic, lg.Id)
+			//	continue
+			//}
 
 			UpdateLogID(params.ChainIDOfChainPool, params.OnReceivedTopic, lg.Id)
 		}

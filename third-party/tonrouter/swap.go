@@ -28,11 +28,9 @@ type BridgeSwapResponse struct {
 }
 
 type BridgeStatusResponse struct {
-	Errno   int    `json:"errno"`
-	Message string `json:"message"`
-	Data    *struct {
-		Amount string `json:"amount"`
-	} `json:"data"`
+	Errno   int     `json:"errno"`
+	Message string  `json:"message"`
+	Data    *Status `json:"data"`
 }
 
 type TxParams struct {
@@ -47,6 +45,14 @@ type BridgeSwapRequest struct {
 	TokenOutAddress string `json:"tokenOutAddress"`
 	Receiver        string `json:"receiver"`
 	OrderID         uint64 `json:"orderId"`
+}
+
+type Status struct {
+	Status    string `json:"status"`
+	Hash      string `json:"hash"`
+	Symbol    string `json:"symbol"`
+	AmountIn  string `json:"amountIn"`
+	AmountOut string `json:"amountOut"`
 }
 
 func Init() {
@@ -81,30 +87,35 @@ func BridgeSwap(req *BridgeSwapRequest) (*TxParams, error) {
 	return response.Data.TxParams, nil
 }
 
-func BridgeStatus(orderID uint64) (string, error) {
+func BridgeStatus(orderID uint64) (*Status, error) {
 	params := fmt.Sprintf("orderId=%d", orderID)
 	url := fmt.Sprintf("%s%s?%s", Domain, PathBridgeStatus, params)
 	log.Logger().Debug(fmt.Sprintf("bridge status url: %s", url))
 	ret, err := uhttp.Get(url, nil, nil)
 	if err != nil {
-		return "0", reqerror.NewExternalRequestError(
+		return nil, reqerror.NewExternalRequestError(
 			url,
 			reqerror.WithError(err),
 		)
 	}
 	response := BridgeStatusResponse{}
 	if err := json.Unmarshal(ret, &response); err != nil {
-		return "0", err
+		return nil, err
 	}
 	if response.Errno != SuccessCode {
-		return "0", reqerror.NewExternalRequestError(
+		return nil, reqerror.NewExternalRequestError(
 			url,
 			reqerror.WithCode(strconv.Itoa(response.Errno)),
 			reqerror.WithMessage(response.Message),
 		)
 	}
 	if response.Data == nil {
-		return "0", nil // todo
+		return nil, reqerror.NewExternalRequestError(
+			url,
+			reqerror.WithCode(strconv.Itoa(response.Errno)),
+			reqerror.WithMessage(response.Message),
+			reqerror.WithError(fmt.Errorf("data is nil")),
+		)
 	}
-	return response.Data.Amount, nil
+	return response.Data, nil
 }

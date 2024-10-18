@@ -1018,9 +1018,8 @@ func HandleConfirmedOrdersOfFirstStageFromEVMToTON() {
 					continue
 				}
 
-				// todo no blocking mode
 				// send transaction to chain pool on ton
-				t, _, err := tonclient.Wallet().SendWaitTransaction(context.Background(), &wallet.Message{
+				err = tonclient.Wallet().Send(context.Background(), &wallet.Message{
 					Mode: wallet.PayGasSeparately, // pay fees separately (from balance, not from amount)
 					InternalMessage: &tlb.InternalMessage{
 						Bounce:  true, // return amount in case of processing error
@@ -1028,7 +1027,7 @@ func HandleConfirmedOrdersOfFirstStageFromEVMToTON() {
 						Amount:  amount,
 						Body:    body,
 					},
-				})
+				}, false)
 				if err != nil {
 					fields := map[string]interface{}{
 						"id":      o.ID,
@@ -1042,12 +1041,11 @@ func HandleConfirmedOrdersOfFirstStageFromEVMToTON() {
 					continue
 				}
 
-				log.Logger().Info("transaction sent, confirmed at block, hash:", hex.EncodeToString(t.Hash))
+				log.Logger().Info("transaction sent to ton, order id:", o.ID)
 
 				update = &dao.Order{
-					Stage:     dao.OrderStag2,
-					Status:    dao.OrderStatusTxSent,
-					OutTxHash: hex.EncodeToString(t.Hash),
+					Stage:  dao.OrderStag2,
+					Status: dao.OrderStatusTxSent,
 				}
 				if err := dao.NewOrderWithID(o.ID).Updates(update); err != nil {
 					fields := map[string]interface{}{
@@ -1225,68 +1223,74 @@ func HandlePendingOrdersOfSecondSStageFromEVMToTON() {
 	}
 }
 
-//func HandleOutAmountFromEVMToTON() {
-//	order := dao.Order{
-//		DstChain: params.TONChainID,
-//		Action:   dao.OrderActionFromEVM,
-//		Stage:    dao.OrderStag2,
-//		Status:   dao.OrderStatusTxConfirmed,
-//	}
-//	for {
-//		for id := uint64(1); ; {
-//			orders, err := order.GetOldest10NoOutAmountByID(id)
-//			if err != nil {
-//				fields := map[string]interface{}{
-//					"id":    id,
-//					"order": utils.JSON(order),
-//					"error": err.Error(),
-//				}
-//
-//				log.Logger().WithFields(fields).Error("failed to get confirmed status order of first stage from evm to ton")
-//				alarm.Slack(context.Background(), "failed to get confirmed status order from evm to ton")
-//				time.Sleep(5 * time.Second)
-//				continue
-//			}
-//
-//			length := len(orders)
-//			if length == 0 {
-//				log.Logger().Info("not found confirmed status order order of first stage from evm to ton", "time", time.Now())
-//				time.Sleep(10 * time.Second)
-//				break
-//			}
-//
-//			for i, o := range orders {
-//				if i == length-1 {
-//					id = o.ID + 1
-//				}
-//
-//				outAmount, err := tonrouter.BridgeStatus(o.OrderIDFromContract)
-//				if err != nil {
-//					log.Logger().WithField("orderIDFromContract", o.OrderIDFromContract).WithField("error", err.Error()).Error("failed to request ton bridge status")
-//					alarm.Slack(context.Background(), "failed to request ton bridge status")
-//					time.Sleep(5 * time.Second)
-//					continue
-//				}
-//
-//				update := &dao.Order{
-//					OutAmount: outAmount,
-//				}
-//				if err := dao.NewOrderWithID(o.ID).Updates(update); err != nil {
-//					fields := map[string]interface{}{
-//						"id":     o.ID,
-//						"update": utils.JSON(update),
-//						"error":  err.Error(),
-//					}
-//					log.Logger().WithFields(fields).Error("failed to update order status")
-//					alarm.Slack(context.Background(), "failed to update order status")
-//					time.Sleep(5 * time.Second)
-//					continue
-//				}
-//			}
-//			time.Sleep(10 * time.Second)
-//		}
-//	}
-//}
+func HandleOutAmountFromEVMToTON() {
+	order := dao.Order{
+		DstChain: params.TONChainID,
+		Action:   dao.OrderActionFromEVM,
+		Stage:    dao.OrderStag2,
+		Status:   dao.OrderStatusTxConfirmed,
+	}
+	for {
+		for id := uint64(1); ; {
+			orders, err := order.GetOldest10NoOutAmountByID(id)
+			if err != nil {
+				fields := map[string]interface{}{
+					"id":    id,
+					"order": utils.JSON(order),
+					"error": err.Error(),
+				}
+
+				log.Logger().WithFields(fields).Error("failed to get have not out amount order from evm to ton")
+				alarm.Slack(context.Background(), "failed to get have not out amount order from evm to ton")
+				time.Sleep(5 * time.Second)
+				continue
+			}
+
+			length := len(orders)
+			if length == 0 {
+				log.Logger().Info("not found have not out amount order from evm to ton", "time", time.Now())
+				time.Sleep(10 * time.Second)
+				break
+			}
+
+			for i, o := range orders {
+				if i == length-1 {
+					id = o.ID + 1
+				}
+
+				resp, err := tonrouter.BridgeStatus(o.OrderIDFromContract)
+				if err != nil {
+					fields := map[string]interface{}{
+						"id":                  id,
+						"orderIDFromContract": o.OrderIDFromContract,
+						"error":               err.Error(),
+					}
+					log.Logger().WithFields(fields).Error("failed to request ton bridge status")
+					alarm.Slack(context.Background(), "failed to request ton bridge status")
+					time.Sleep(5 * time.Second)
+					continue
+				}
+
+				update := &dao.Order{
+					OutAmount: resp.AmountOut,
+					OutTxHash: resp.Hash,
+				}
+				if err := dao.NewOrderWithID(o.ID).Updates(update); err != nil {
+					fields := map[string]interface{}{
+						"id":     o.ID,
+						"update": utils.JSON(update),
+						"error":  err.Error(),
+					}
+					log.Logger().WithFields(fields).Error("failed to update order")
+					alarm.Slack(context.Background(), "failed to update order")
+					time.Sleep(5 * time.Second)
+					continue
+				}
+			}
+			time.Sleep(10 * time.Second)
+		}
+	}
+}
 
 //func deliver(transactor *tx.Transactor, token common.Address, orderID [32]byte, amount *big.Int, receiver common.Address, fee *big.Int, feeReceiver common.Address) (txHash common.Hash, err error) {
 //	fields := map[string]interface{}{

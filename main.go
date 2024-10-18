@@ -205,6 +205,19 @@ func runTONTask() {
 
 		task.HandlePendingOrdersOfSecondSStageFromEVMToTON()
 	}()
+
+	go func() {
+		defer func() {
+			stack := string(debug.Stack())
+			log.Logger().WithField("stack", stack).Error("failed to HandleOutAmountFromEVMToTON")
+
+			if r := recover(); r != nil {
+				log.Logger().WithField("error", r).Error("failed to recover HandleOutAmountFromEVMToTON")
+			}
+		}()
+
+		task.HandleOutAmountFromEVMToTON()
+	}()
 }
 
 func getPassphrase(tips string) (string, error) {
