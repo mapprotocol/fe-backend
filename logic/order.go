@@ -8,6 +8,7 @@ import (
 	"github.com/btcsuite/btcd/btcutil"
 	"github.com/btcsuite/btcd/chaincfg"
 	"github.com/btcsuite/btcd/txscript"
+	"github.com/mapprotocol/fe-backend/constants"
 	"github.com/mapprotocol/fe-backend/third-party/mempool"
 	"gorm.io/gorm"
 	blog "log"
@@ -273,21 +274,31 @@ func OrderDetailByOrderID(orderID uint64) (ret *entity.OrderDetailByOrderIDRespo
 		return nil, resp.CodeOrderNotFound
 	}
 
+	bridgeToken := constants.USDTOfChainPool
+	bridgeSymbol := constants.USDTSymbol
+	if order.SrcChain == constants.SOLChainID || order.DstChain == constants.SOLChainID {
+		bridgeToken = constants.USDCOfChainPool
+		bridgeSymbol = constants.USDCSymbol
+	}
+
 	return &entity.OrderDetailByOrderIDResponse{
-		SrcChain:  order.SrcChain,
-		SrcToken:  order.SrcToken,
-		Sender:    order.Sender,
-		InAmount:  order.InAmount,
-		InTxHash:  order.InTxHash,
-		DstChain:  order.DstChain,
-		DstToken:  order.DstToken,
-		Receiver:  order.Receiver,
-		OutAmount: order.OutAmount,
-		OutTxHash: order.OutTxHash,
-		Action:    order.Action,
-		Stage:     order.Stage,
-		Status:    order.Status,
-		CreatedAt: order.CreatedAt.Unix(),
+		SrcChain:     order.SrcChain,
+		SrcToken:     order.SrcToken,
+		Sender:       order.Sender,
+		InAmount:     order.InAmount,
+		InTxHash:     order.InTxHash,
+		BridgeToken:  bridgeToken,
+		BridgeSymbol: bridgeSymbol,
+		BridgeFee:    order.BridgeFee,
+		DstChain:     order.DstChain,
+		DstToken:     order.DstToken,
+		Receiver:     order.Receiver,
+		OutAmount:    order.OutAmount,
+		OutTxHash:    order.OutTxHash,
+		Action:       order.Action,
+		Stage:        order.Stage,
+		Status:       order.Status,
+		CreatedAt:    order.CreatedAt.Unix(),
 	}, resp.CodeSuccess
 }
 
@@ -302,20 +313,23 @@ func BitcoinOrderDetailByOrderID(orderID uint64) (ret *entity.OrderDetailByOrder
 	}
 
 	return &entity.OrderDetailByOrderIDResponse{
-		SrcChain:  order.SrcChain,
-		SrcToken:  order.SrcToken,
-		Sender:    order.Sender,
-		InAmount:  order.InAmount,
-		InTxHash:  order.InTxHash,
-		DstChain:  order.DstChain,
-		DstToken:  order.DstToken,
-		Receiver:  order.Receiver,
-		OutAmount: order.OutAmount,
-		OutTxHash: order.OutTxHash,
-		Action:    order.Action,
-		Stage:     order.Stage,
-		Status:    order.Status,
-		CreatedAt: order.CreatedAt.Unix(),
+		SrcChain:     order.SrcChain,
+		SrcToken:     order.SrcToken,
+		Sender:       order.Sender,
+		InAmount:     order.InAmount,
+		InTxHash:     order.InTxHash,
+		BridgeToken:  constants.WBTCOfChainPool,
+		BridgeSymbol: constants.WBTCSymbol,
+		BridgeFee:    order.BridgeFee,
+		DstChain:     order.DstChain,
+		DstToken:     order.DstToken,
+		Receiver:     order.Receiver,
+		OutAmount:    order.OutAmount,
+		OutTxHash:    order.OutTxHash,
+		Action:       order.Action,
+		Stage:        order.Stage,
+		Status:       order.Status,
+		CreatedAt:    order.CreatedAt.Unix(),
 	}, resp.CodeSuccess
 }
 

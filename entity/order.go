@@ -74,18 +74,21 @@ type OrderDetailResponse struct {
 }
 
 type OrderDetailByOrderIDResponse struct {
-	SrcChain  string `json:"srcChain"`
-	SrcToken  string `json:"srcToken"`
-	Sender    string `json:"sender"`
-	InAmount  string `json:"inAmount"`
-	InTxHash  string `json:"inTxHash"`
-	DstChain  string `json:"dstChain"`
-	DstToken  string `json:"dstToken"`
-	Receiver  string `json:"receiver"`
-	OutAmount string `json:"outAmount"`
-	OutTxHash string `json:"outTxHash"`
-	Action    uint8  `json:"action"`
-	Stage     uint8  `json:"stage"`
-	Status    uint8  `json:"status"`
-	CreatedAt int64  `json:"createdAt"`
+	SrcChain     string `json:"srcChain"`
+	SrcToken     string `json:"srcToken"`
+	Sender       string `json:"sender"`
+	InAmount     string `json:"inAmount"`
+	InTxHash     string `json:"inTxHash"`
+	BridgeToken  string `json:"bridgeToken"`
+	BridgeSymbol string `json:"bridgeSymbol"`
+	BridgeFee    uint64 `json:"bridgeFee"`
+	DstChain     string `json:"dstChain"`
+	DstToken     string `json:"dstToken"`
+	Receiver     string `json:"receiver"`
+	OutAmount    string `json:"outAmount"`
+	OutTxHash    string `json:"outTxHash"`
+	Action       uint8  `json:"action"`
+	Stage        uint8  `json:"stage"`
+	Status       uint8  `json:"status"`
+	CreatedAt    int64  `json:"createdAt"`
 }

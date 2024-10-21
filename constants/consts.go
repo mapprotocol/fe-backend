@@ -45,6 +45,11 @@ const (
 const USDTSymbol = "USDT"
 const WBTCSymbol = "BTCB"
 
+const (
+	USDCSymbol      = "USDC"
+	USDCOfChainPool = "0x8AC76a51cc950d9822D68b83fe1Ad97B32Cd580d"
+)
+
 // LocalRouteBitcoinHash is the hash of local route for bitcoin chain
 // This route indicates that the transaction was sent from Bitcoin
 const LocalRouteBitcoinHash = "0x0000000000000000000000000000000000000000000000313230561203979757"
